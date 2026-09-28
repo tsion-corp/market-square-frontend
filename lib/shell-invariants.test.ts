@@ -391,6 +391,50 @@ describe("the friends deck is node 844:18440's, on Home and on /pals", () => {
   const layout = stripComments(read("lib/deck-layout.ts"));
   const card = stripComments(read("components/layout/pal-card.tsx"));
 
+  /*
+    A CARD BEHIND THE FRONT ONE IS A PICTURE, NOT A TARGET.
+
+    The back cards were `aria-hidden` and fully tappable — hidden from anyone
+    navigating by structure, live to everyone navigating by touch. The buttons
+    on them were already `disabled`; the card FACE, the biggest target on
+    screen, was a plain `<Link>` carrying `tabIndex={-1}` alone, which governs
+    the tab order and nothing else. Tapping the blurred card at either edge of
+    the fan opened that person.
+  */
+  it("takes no pointer on any card but the front one", () => {
+    assert.match(
+      deck,
+      /!front && "pointer-events-none"/,
+      "a back card must refuse pointers, not just hide from a screen reader",
+    );
+    assert.match(
+      card,
+      /!interactive && "pointer-events-none"/,
+      "the card face is the largest target and must go inert with the card",
+    );
+    assert.match(card, /aria-disabled=\{interactive \? undefined : true\}/);
+    assert.doesNotMatch(
+      card,
+      /tabIndex=\{interactive \? undefined : -1\}\s*\n\s*className="absolute block overflow-hidden"/,
+      "tabIndex alone was the bug: it never refused a tap",
+    );
+  });
+
+  /*
+    BOTH SIDES BLUR, and that is a DEPARTURE from the file, asked for after
+    looking at it running: the design softens only the next card so who is
+    next stays a surprise, and the asymmetry read as a rendering fault. The
+    card behind you is somebody already shown, so it gives nothing away.
+  */
+  it("blurs the card on each side, not only the one ahead", () => {
+    assert.match(deck, /Math\.abs\(slot\) === 1 && "blur-\[7px\]"/);
+    assert.doesNotMatch(
+      deck,
+      /slot === 1 && "blur-\[7px\]"/,
+      "blurring only the next card leaves the fan lopsided",
+    );
+  });
+
   it("DIMS the two cards behind by the node's own opacity — 0.39 and 0.30", () => {
     // The file draws depth here with layer opacity on the whole back card,
     // photo and controls included; the front card alone is at full strength.
@@ -5166,17 +5210,69 @@ describe("A house has its own page, the way a person does", () => {
       here" and "nobody is in here" are different things.
     */
     /*
-      ONE ROSTER, TWO SOURCES, and the house read wins. It carries a capped
-      roster for a PUBLIC house — including to a signed-out stranger, the state
-      the design is built around — while the members route is bearerAuth and
-      serves a member of a PRIVATE house, which the house read deliberately
-      will not. Neither is asked to cover the other's case, and an empty array
-      is never read as "no members": a private house answers [] to everyone
-      outside it, and `memberCount` stays the truth.
+      ONE ROSTER, TWO SOURCES, AND THE MEMBERS ROUTE NOW WINS.
+
+      This asserted the opposite — that the house read won — and the house read
+      is the source that cannot carry a follow edge. Its roster is
+      `.map(toSummary)` with no follow hydration, while `listMembers` calls
+      `hydrateFollowState`, so a tile built from the house read renders
+      "Follow" over somebody the reader already follows. It is also capped at
+      four, a constant written for the inbox's avatar stack.
+
+      So the route is preferred wherever it can answer, and the capped roster
+      is the fallback for the one state the route cannot serve at all — a
+      SIGNED-OUT or non-member reader of a public house, which is the state the
+      design is drawn in. An empty array is still never read as "no members":
+      a private house answers [] to everyone outside it and `memberCount`
+      stays the truth.
     */
     assert.match(screen, /const fromHouse = house\.data\?\.members \?\? \[\];/);
-    assert.match(screen, /fromHouse\.length > 0\s*\n?\s*\?/);
+    assert.match(
+      screen,
+      /fromRoute\.length > 0 \? fromRoute : fromHouse\.map/,
+      "the members route must be preferred — it is the only source carrying isFollowing",
+    );
+    assert.match(
+      screen,
+      /viewerIsMember \|\| fromHouse\.length === 0/,
+      "the route must be asked for a member, not only when the capped roster is empty",
+    );
     assert.match(screen, /roster\.length > 0 && \(/);
+    /*
+      VIEW ALL IS GATED ON THE SERVICE'S TOTAL, NOT ON THE LIST WE HOLD.
+
+      It was `roster.length > 12` against a roster the service caps at four, so
+      on a 246-member house the control could never appear. `memberCount` is
+      not capped, and it is the only number that can answer "is there more than
+      this row shows".
+    */
+    assert.match(screen, /const memberTotal = house\.data\?\.memberCount \?\? null;/);
+    assert.match(screen, /hiddenMembers > 0 && \(/);
+    assert.doesNotMatch(
+      screen,
+      /roster\.length > 12/,
+      "gating View all on the held list hides it behind the service's own cap",
+    );
+    /*
+      The badges are the file's exported nodes, not hand-drawn look-alikes, and
+      the wink disc is WHITE 20% with a white face — the follow badge's solid
+      white and accent glyph is a different badge's colouring.
+    */
+    const tile = stripComments(read("components/layout/house-member-tile.tsx"));
+    for (const glyph of ["wink-face", "profile-tick", "profile-add"]) {
+      assert.match(
+        tile,
+        new RegExp(`icons/house-members/\\$\\{name\\}|${glyph}`),
+        `${glyph} must be the exported node`,
+      );
+    }
+    assert.doesNotMatch(tile, /<circle\s/u, "the glyphs must not be hand-drawn SVG again");
+    assert.match(tile, /bg-white\/20/, "the wink disc is white at 20%, not solid white");
+    assert.doesNotMatch(
+      tile,
+      /shadow-\[0_2px_8px/,
+      "effects is empty on both badge frames — the drop shadow was invented",
+    );
     /*
       The three fields the service is adding are parsed ahead of it, all
       optional, so each section appears the moment its field does and the
@@ -5902,5 +5998,126 @@ describe("A count tap shows what the count is counting", () => {
       "a control's behaviour must not depend on whether another element got laid out"
     );
     assert.match(body, /setReplyOpen\(true\)/, "an empty post still offers the field");
+  });
+});
+
+/*
+  READING A NOTIFICATION IS SOMETHING YOU DO, NOT SOMETHING ARRIVING DOES.
+
+  The page marked EVERYTHING read on mount — `markRead.mutate(undefined)`,
+  where undefined means all of them — so a reader who glanced at the top of the
+  list lost every row below the fold they had never seen, and the badge then
+  said nothing was waiting. ogazboiz: "i also see the one that i've not
+  actually read i've not actually clicked, just the way normal notification
+  actually works".
+*/
+describe("Notifications are read by opening them, not by opening the list", () => {
+  const page = stripComments(read("features/notifications/components/notifications-page.tsx"));
+
+  it("never clears the list as a side effect of arriving at it", () => {
+    assert.doesNotMatch(
+      page,
+      /useEffect\([^)]*markRead/s,
+      "mark-on-mount is the bug: being on screen is not being read",
+    );
+    assert.doesNotMatch(
+      page,
+      /acknowledged\.current/,
+      "the once-per-arrival guard went with the effect it guarded",
+    );
+  });
+
+  /*
+    With the bulk effect gone the ordinary act has to do the work, and it did
+    NOT before — the row's `<Link>` navigated and acknowledged nothing. The
+    effect was covering for it.
+  */
+  it("marks the row the reader actually opened", () => {
+    assert.match(
+      page,
+      /<Link\s+href=\{href\}[\s\S]*?onClick=\{\(\) => \{\s*if \(unread\) onMarkRead\(item\.id\);/,
+      "tapping a notification must clear that one",
+    );
+    // The per-row dot and the friends-card path keep acknowledging as before.
+    assert.equal((page.match(/if \(unread\) onMarkRead\(item\.id\);/g) ?? []).length, 2);
+  });
+
+  /*
+    Clearing everything is a real thing to want — it is just not something
+    navigation should do on somebody's behalf. Without an explicit control the
+    badge would have become unclearable, which is its own bug.
+  */
+  /*
+    THE COUNT AND THE ACTION MUST HAVE THE SAME SCOPE.
+
+    Raised by the backend against this very control: if the label counted the
+    TAB while the call cleared EVERYTHING, "Mark all read (3)" would take 40 —
+    the hazard the mount effect committed silently, moved into a button that
+    states a number.
+
+    Checked on their side rather than trusted: `listForUser` filters the list
+    by `kindsInGroup(group)` and computes `unreadCount(userId)` with NO group
+    argument, and `markRead(userId, ids?)` clears everything when ids are
+    omitted. Both global, so they agree and the number is the disclosure.
+
+    This pins the client half — that the label reads the SAME `unread` value
+    the global action is gated on, and never a per-tab figure derived here.
+  */
+  it("counts what it will actually clear", () => {
+    assert.match(
+      page,
+      /const unread = notifications\.data\?\.pages\[0\]\?\.unreadCount \?\? 0;/,
+      "the label's number is the service's global count, not one derived per tab",
+    );
+    assert.match(page, /if \(unread > 0\) markRead\.mutate\(undefined\);/);
+    assert.doesNotMatch(
+      page,
+      /items\.filter\([^)]*readAt[^)]*\)\.length/,
+      "a count derived from the loaded page would describe the tab and clear everything",
+    );
+    // And it says so outright rather than leaving a filtered reader to infer
+    // the scope from a label that does not match the rows under it.
+    assert.match(page, /not only the ones in this filter/);
+  });
+
+  it("offers the bulk action as a control, with its count", () => {
+    assert.match(page, /const markAllRead = \(\) => \{/);
+    assert.match(page, /Mark all read \(\{unread\}\)/);
+    assert.match(page, /\{authenticated && unread > 0 && \(/, "no control when there is nothing to clear");
+  });
+});
+
+/*
+  A GROUP MESSAGE IS NOT A DIRECT MESSAGE.
+
+  Both are recorded as `kind: 'message'` carrying only an actor, so the row
+  said "Ada sent you a message" for a room of forty people. "You" is the claim
+  that nobody else saw it, and answering a group as though it were private is a
+  real way to be embarrassed by an interface. The field is parsed ahead of the
+  service, so this reads no worse today and better on their deploy alone.
+*/
+describe("A message notification says which kind of conversation it came from", () => {
+  const page = stripComments(read("features/notifications/components/notifications-page.tsx"));
+  const types = stripComments(read("features/notifications/lib/types.ts"));
+
+  it("parses the conversation ahead of the backend, all optional", () => {
+    assert.match(types, /conversation: z/);
+    assert.match(types, /kind: z\.enum\(\["direct", "group"\]\)/);
+    assert.match(types, /\.default\(null\)\s*\n?\s*\.catch\(null\)/);
+  });
+
+  it("names the group, and still speaks when it cannot", () => {
+    assert.match(page, /item\.conversation\?\.kind === "group" \? "New group message" : "New message"/);
+    assert.match(page, /\$\{who\} messaged \$\{item\.conversation\.title\}\./);
+    assert.match(page, /\$\{who\} sent a message to a group you are in\./);
+    assert.match(page, /\$\{who\} sent you a message\./, "the direct sentence is unchanged");
+  });
+
+  /*
+    An unknown kind must NOT fall back to "direct": that is the claim that
+    nobody else saw it, and saying nothing beats saying the wrong one.
+  */
+  it("never guesses direct", () => {
+    assert.doesNotMatch(page, /conversation\?\.kind === "direct"/);
   });
 });

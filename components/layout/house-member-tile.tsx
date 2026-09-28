@@ -6,7 +6,7 @@ import { useWink, useFollow, useIsFollowing } from "@/features/profile";
 import { useGate } from "@/hooks/use-gate";
 import { useMe } from "@/hooks/use-me";
 import { profileHref } from "@/lib/profile-href";
-import { sq } from "@/lib/square-path";
+import { asset, sq } from "@/lib/square-path";
 import { cn } from "@/lib/cn";
 import type { Profile } from "@/lib/api/schemas";
 
@@ -85,13 +85,25 @@ export function HouseMemberTile({ profile }: { profile: Profile }) {
                 gate(() => wink.send());
               }}
               className={cn(
-                "grid size-6 place-items-center rounded-full bg-white text-[#7E3BEB] shadow-[0_2px_8px_rgba(0,0,0,0.25)] transition-opacity",
+                /*
+                  `Button` — a 24 disc at WHITE 20%, with a WHITE face.
+
+                  It was a solid white disc with the face in the accent, which
+                  is the follow badge's colouring, not this one's. The file
+                  gives the two badges different treatments on purpose: the
+                  wink sits ON the photo and is meant to read as glass, while
+                  the follow badge is a solid control beside it.
+
+                  No shadow: `effects` is EMPTY on both badge frames. The
+                  drop shadow here was invented.
+                */
+                "grid size-6 place-items-center rounded-full bg-white/20 transition-opacity",
                 wink.winked || wink.unavailable || wink.isPending
                   ? "cursor-not-allowed opacity-60"
                   : "ws-press hover:opacity-90"
               )}
             >
-              <IconWinkFace />
+              <GlyphFromFigma name="wink-face" size={16} />
             </button>
 
             <button
@@ -105,13 +117,13 @@ export function HouseMemberTile({ profile }: { profile: Profile }) {
                 gate(() => follow.mutate(!isFollowing));
               }}
               className={cn(
-                "ws-press grid size-6 place-items-center rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.25)] transition-opacity hover:opacity-90 disabled:opacity-60",
+                "ws-press grid size-6 place-items-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-60",
                 // The file draws both states: filled accent to ask, white with
                 // the accent tick once it is done.
                 isFollowing ? "bg-white text-[#7E3BEB]" : "bg-[#7E3BEB] text-white"
               )}
             >
-              {isFollowing ? <IconProfileTick /> : <IconProfileAdd />}
+              <GlyphFromFigma name={isFollowing ? "profile-tick" : "profile-add"} size={14} />
             </button>
           </div>
         )}
@@ -127,37 +139,36 @@ export function HouseMemberTile({ profile }: { profile: Profile }) {
   );
 }
 
-/** `Component 14` — a winking face: two eyes, one of them closed, and a smile. */
-function IconWinkFace() {
-  return (
-    <svg aria-hidden viewBox="0 0 16 16" className="size-4" fill="none">
-      <circle cx="8" cy="8" r="7.2" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="5.6" cy="6.6" r="0.95" fill="currentColor" />
-      {/* The wink: a closed eye is a line, not a dot. */}
-      <path d="M8.9 6.6h2.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M5.2 9.9a3.4 3.4 0 0 0 5.6 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
+/*
+  THE EXACT EXPORTED NODES, not look-alikes.
 
-/** `vuesax/outline/profile-add`. */
-function IconProfileAdd() {
-  return (
-    <svg aria-hidden viewBox="0 0 14 14" className="size-3.5" fill="none">
-      <circle cx="5.8" cy="4.3" r="2.3" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M1.7 11.8c0-2 1.8-3.2 4.1-3.2.8 0 1.6.15 2.2.45" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M11 8.4v3.8M9.1 10.3h3.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
+  These three glyphs were hand-drawn inline SVGs — a circle, two dots and an
+  arc standing in for `Component 14`, and two guesses at vuesax's
+  `profile-add` / `profile-tick`. Close enough to pass a glance and wrong in
+  every curve. They are now the file's own exports, and each carries the
+  colour the design gives it: `profile-tick` in #7E3BEB for the followed
+  state, `profile-add` and the wink face in white.
 
-/** `vuesax/outline/profile-tick` — the same person, answered. */
-function IconProfileTick() {
+  Rendered at the node's own size inside the 24 disc rather than stretched to
+  fill it: 16 for the face, 14 for the follow glyphs, which is what the file
+  draws.
+*/
+function GlyphFromFigma({
+  name,
+  size,
+}: {
+  name: "wink-face" | "profile-tick" | "profile-add";
+  size: 14 | 16;
+}) {
   return (
-    <svg aria-hidden viewBox="0 0 14 14" className="size-3.5" fill="none">
-      <circle cx="5.8" cy="4.3" r="2.3" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M1.7 11.8c0-2 1.8-3.2 4.1-3.2.8 0 1.6.15 2.2.45" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="m9.2 10.5 1.4 1.4 2.5-2.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={asset(`/icons/house-members/${name}.svg`)}
+      alt=""
+      aria-hidden
+      width={size}
+      height={size}
+      style={{ width: size, height: size }}
+    />
   );
 }

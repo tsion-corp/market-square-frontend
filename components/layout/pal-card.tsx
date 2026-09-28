@@ -263,10 +263,31 @@ export function PalCard({
         )}
       </button>
 
+      {/*
+        A CARD BEHIND THE FRONT ONE IS A PICTURE, AND A PICTURE IS NOT A LINK.
+
+        This carried `tabIndex={-1}` alone, which takes a back card out of the
+        TAB ORDER and does nothing whatever to a tap. So the blurred card at
+        the left of the fan — one the reader can barely see and has not chosen
+        — opened that person's profile when touched, on both sides. ogazboiz
+        hit it from either edge.
+
+        The buttons beside it were already right: they take `disabled`, which
+        really does refuse a pointer. Only the card FACE, which is the largest
+        target on screen, was left live.
+
+        `aria-disabled` rather than dropping the href: the destination is still
+        what this card is about once it comes forward, and the deck re-renders
+        the same element rather than swapping it.
+      */}
       <Link
         href={profileHref(profile)} prefetch={false}
         tabIndex={interactive ? undefined : -1}
-        className="absolute block overflow-hidden"
+        aria-disabled={interactive ? undefined : true}
+        onClick={(event) => {
+          if (!interactive) event.preventDefault();
+        }}
+        className={cn("absolute block overflow-hidden", !interactive && "pointer-events-none")}
         style={{
           left: base.photo.left,
           top: base.photo.top,
