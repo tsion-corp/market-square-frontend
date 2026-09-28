@@ -6189,3 +6189,41 @@ describe("Nothing wraps PostText in a paragraph", () => {
     });
   }
 });
+
+/*
+  THE BALANCE IS THE ONE NUMBER ON THE EARNINGS CARD, AND IT WAS THE THING CUT.
+
+  The file draws 432:25745 as a single 741-wide row: an 80 image, a 131 button
+  and 48 of padding — about 275 before a word. Built literally, a 390 phone left
+  roughly 99px for the text, so "Available balance" wrapped onto two lines and
+  the 32px figure truncated to "0..". Reported on device.
+
+  A desktop frame's row is not a layout; it is that row AT 741.
+*/
+describe("The earnings balance card fits a phone", () => {
+  const card = stripComments(read("components/layout/profile-earnings.tsx"));
+
+  it("stacks below sm and is the file's row from sm", () => {
+    assert.match(
+      card,
+      /ws-kash-card flex flex-col gap-4 rounded-\[20px\] px-5 py-4 sm:flex-row sm:items-center sm:px-6/,
+      "the card must stack before it squeezes the balance",
+    );
+    assert.doesNotMatch(
+      card,
+      /ws-kash-card flex items-center gap-4/,
+      "one unconditional row is what cut the figure",
+    );
+  });
+
+  it("gives the button its own line on a phone, the node's pill from sm", () => {
+    assert.match(card, /h-\[34px\] w-full shrink-0 items-center justify-center/);
+    assert.match(card, /sm:w-auto sm:justify-start/);
+  });
+
+  it("spends less of a phone on gutters than a 741 column does", () => {
+    assert.match(card, /flex flex-col gap-6 px-4 py-6 sm:px-8/, "32 either side is a wide column's gutter");
+    // The art is decoration and the balance is not, so the art gives up width.
+    assert.match(card, /h-16 w-16 shrink-0 object-contain sm:h-20 sm:w-20/);
+  });
+});

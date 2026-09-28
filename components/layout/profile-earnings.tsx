@@ -233,18 +233,43 @@ export function ProfileEarnings() {
   const engineDown = !account.wallet || account.isError;
 
   return (
-    <div className="flex flex-col gap-6 px-8 py-6">
-      {/* 432:25745 — 741x112 at a 20 radius on the gold ramp. */}
-      <div className="ws-kash-card flex items-center gap-4 rounded-[20px] px-6 py-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={asset("/gifts/kash-balance-art.png")}
-          alt=""
-          aria-hidden
-          className="h-20 w-20 shrink-0 object-contain"
-        />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="text-[16px] font-medium leading-6 text-white">Available balance</p>
+    /*
+      The file's 32 gutter is a 741-wide column's gutter. On a 390 phone it
+      spends 64 of the screen before the card starts, which is most of what the
+      balance was short of. 16 below `sm` — the platform's own touch gutter —
+      and the file's 32 from there.
+    */
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-8">
+      {/*
+        432:25745 — 741x112 at a 20 radius on the gold ramp.
+
+        THE FILE'S ROW IS A DESKTOP ROW, AND 741 IS WHY IT FITS.
+
+        Built as one flex line it held an 80 image, a 131 button and 48 of
+        padding — about 275 before a word is drawn. On a 390 phone that leaves
+        roughly 99px for the text, so "Available balance" wrapped onto two
+        lines and the 32px figure beside it truncated to "0..". A balance is
+        the one number on this card and it was the thing that got cut.
+
+        So the row STACKS below `sm`: the art and the figure keep their line,
+        and the button takes its own full-width one beneath. From `sm` it is
+        the file's single row again, unchanged — the art and text are nested
+        in their own flex with the same gap, so the three-part spacing the
+        node draws is preserved rather than re-derived.
+      */}
+      <div className="ws-kash-card flex flex-col gap-4 rounded-[20px] px-5 py-4 sm:flex-row sm:items-center sm:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={asset("/gifts/kash-balance-art.png")}
+            alt=""
+            aria-hidden
+            // 64 on a phone, the file's 80 from `sm`: the art is decoration
+            // and the balance is not, so the art gives up the width.
+            className="h-16 w-16 shrink-0 object-contain sm:h-20 sm:w-20"
+          />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="text-[16px] font-medium leading-6 text-white">Available balance</p>
           {/*
             `#6C2B09` — dark type on the gold, which is the only place in the
             app that inverts. The file sets Clash Display here; this repo does
@@ -255,9 +280,10 @@ export function ProfileEarnings() {
             on a balance that has simply not loaded is a claim about somebody's
             money that the client cannot make.
           */}
-          <p className="ws-display truncate text-[32px] leading-[37.5px] !text-[#6C2B09]">
-            {engineDown || balance === null ? "—" : formatKash(balance)}
-          </p>
+            <p className="ws-display truncate text-[32px] leading-[37.5px] !text-[#6C2B09]">
+              {engineDown || balance === null ? "—" : formatKash(balance)}
+            </p>
+          </div>
         </div>
 
         {/*
@@ -282,7 +308,10 @@ export function ProfileEarnings() {
         <button
           type="button"
           onClick={() => setBuyOpen(true)}
-          className="ws-press flex h-[34px] shrink-0 items-center gap-2 rounded-[30px] border-[3px] border-white/20 bg-[#F5F5F5] px-4 text-[13px] font-semibold leading-5 text-[#0A0A0A] shadow-[0_2px_10px_rgba(120,80,0,0.25)] transition-opacity hover:opacity-90"
+          // Full width on its own line below `sm` — a 131px pill squeezed
+          // beside the figure is what pushed the balance out in the first
+          // place. From `sm` it is the node's own 131x34 pill again.
+          className="ws-press flex h-[34px] w-full shrink-0 items-center justify-center gap-2 rounded-[30px] border-[3px] border-white/20 bg-[#F5F5F5] px-4 text-[13px] font-semibold leading-5 text-[#0A0A0A] shadow-[0_2px_10px_rgba(120,80,0,0.25)] transition-opacity hover:opacity-90 sm:w-auto sm:justify-start"
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- the node's own export */}
           <img src={asset("/gifts/wallet-add.svg")} alt="" aria-hidden className="h-4 w-4 shrink-0" />
