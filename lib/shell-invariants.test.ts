@@ -6121,3 +6121,71 @@ describe("A message notification says which kind of conversation it came from", 
     assert.doesNotMatch(page, /conversation\?\.kind === "direct"/);
   });
 });
+
+/*
+  A PICKER IS A PANEL. THE CALLER OWNS WHETHER IT IS ON SCREEN.
+
+  `EmojiPicker` renders the panel and nothing else — no trigger, no open state.
+  The feed composer rendered it UNCONDITIONALLY, so a 240px `fixed` panel sat
+  over the post box from the moment the sheet opened and a phone could not see
+  the field it was typing into. It hid above the toolbar on desktop, which is
+  why it shipped.
+
+  The room's composer had it right all along, so this pins the shape rather
+  than the markup: every caller gates the panel, and both dismiss it.
+*/
+describe("Every emoji picker has a trigger", () => {
+  const composer = stripComments(read("features/feed/components/composer.tsx"));
+  const chat = stripComments(read("features/streams/components/chat-panel.tsx"));
+
+  it("is never mounted unconditionally in the feed composer", () => {
+    assert.match(composer, /\{emojiOpen && \(\s*<EmojiPicker/);
+    /*
+      ONE mount, and the assertion above already proves that one is gated. A
+      negative regex over the whole file matched the fix itself — the same
+      over-broad shape that has bitten this suite before — so the precise
+      claim is the count.
+    */
+    assert.equal(
+      (composer.match(/<EmojiPicker\b/g) ?? []).length,
+      1,
+      "a second mount would not be covered by the guard above",
+    );
+    assert.match(composer, /aria-expanded=\{emojiOpen\}/, "the trigger states its own state");
+  });
+
+  it("closes on click-away, Escape and after a pick", () => {
+    for (const source of [composer, chat]) {
+      assert.match(source, /if \(event\.key === "Escape"\) setEmojiOpen\(false\);/);
+      assert.match(source, /document\.addEventListener\("pointerdown", onDown\)/);
+    }
+    // Only the composer types INTO a field the panel covers on a phone.
+    assert.match(composer, /setEmojiOpen\(false\);\s*\n\s*window\.requestAnimationFrame/);
+  });
+});
+
+/*
+  `PostText` RENDERS ITS OWN BLOCK ELEMENT, so nothing may wrap it in a <p>.
+
+  Two surfaces did, and both were hydration errors: "In HTML, <p> cannot be a
+  descendant of <p>". The house one was worse than invalid — a browser closes
+  the outer paragraph at the inner one, so `line-clamp-6` landed on an EMPTY
+  element and the description was never clamped at all, leaving a "Read more"
+  button with nothing to reveal.
+*/
+describe("Nothing wraps PostText in a paragraph", () => {
+  for (const file of [
+    "features/profile/components/profile-page.tsx",
+    "components/layout/house-profile-screen.tsx",
+  ]) {
+    it(`${file} gives it a block container, not a <p>`, () => {
+      const source = stripComments(read(file));
+      for (const match of source.matchAll(/<PostText/g)) {
+        const before = source.slice(0, match.index);
+        const opened = (before.match(/<p[\s>]/g) ?? []).length;
+        const closed = (before.match(/<\/p>/g) ?? []).length;
+        assert.equal(opened, closed, `PostText sits inside an unclosed <p> in ${file}`);
+      }
+    });
+  }
+});

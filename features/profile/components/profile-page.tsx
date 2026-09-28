@@ -608,25 +608,46 @@ export function ProfilePage({
           way it is the person's own words or the absence of them, never a
           placeholder pretending to be either.
         */}
-        <p
-          className={
-            data.bio
-              // `whitespace-pre-line`: the bio has ALWAYS stored the newlines
-              // somebody typed — `building @square\n\ndone` was sitting in the
-              // payload while the page printed it as one line. The breaks were
-              // never lost, only unprinted.
-              ? "whitespace-pre-line text-[15px] font-normal leading-5 text-white"
-              : "text-[15px] font-normal leading-5 text-white/50"
-          }
-        >
-          {/*
+        {/*
+          NO WRAPPER AROUND `PostText` — it renders its OWN block element.
+
+          This was a `<p>` around a component that returns a `<p>`, which is
+          invalid markup and a hydration error on every profile with a bio:
+          "In HTML, <p> cannot be a descendant of <p>". The browser closes the
+          outer paragraph at the inner one, so the tree the server sent and the
+          tree the browser built disagree.
+
+          `PostText` already takes the class and already switches its own tag —
+          a `<div>` when the text has blocks in it, a `<p>` when it is one
+          paragraph — so the wrapper was doing nothing the component was not
+          doing better. The empty state keeps a `<p>` of its own: it is a
+          sentence, and there is no renderer involved.
+
+          `whitespace-pre-line` still wins over the component's own `pre-wrap`
+          through `cn`, so the newlines somebody typed still print.
+        */}
+        {data.bio ? (
+          /*
             Drawn by the SAME renderer as a post's body and a DM's, so an
             @handle in a bio is a link to that person exactly as it is
             everywhere else — one component rather than a third written for
-            this surface. Plain text until `bioMentions` carries anybody.
-          */}
-          {data.bio ? <PostText text={data.bio} mentions={data.bioMentions} /> : "Bio not updated"}
-        </p>
+            this surface.
+          */
+          <PostText
+            text={data.bio}
+            mentions={data.bioMentions}
+            className="whitespace-pre-line text-[15px] font-normal leading-5 text-white"
+          />
+        ) : (
+          /*
+            THE FILE PRINTS A LINE WHEN THERE IS NO BIO — "Bio not updated" at
+            50% white, where a written one is the same size in full white.
+            Empty is a state worth showing on your OWN profile, because it is a
+            thing to go and fix; on somebody else's it is just a fact about
+            them.
+          */
+          <p className="text-[15px] font-normal leading-5 text-white/50">Bio not updated</p>
+        )}
 
         {/*
           468:35601 — the count at Geist 600 15/20 in `#F7F9F9`, its label at
