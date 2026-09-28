@@ -6047,6 +6047,39 @@ describe("Notifications are read by opening them, not by opening the list", () =
     navigation should do on somebody's behalf. Without an explicit control the
     badge would have become unclearable, which is its own bug.
   */
+  /*
+    THE COUNT AND THE ACTION MUST HAVE THE SAME SCOPE.
+
+    Raised by the backend against this very control: if the label counted the
+    TAB while the call cleared EVERYTHING, "Mark all read (3)" would take 40 —
+    the hazard the mount effect committed silently, moved into a button that
+    states a number.
+
+    Checked on their side rather than trusted: `listForUser` filters the list
+    by `kindsInGroup(group)` and computes `unreadCount(userId)` with NO group
+    argument, and `markRead(userId, ids?)` clears everything when ids are
+    omitted. Both global, so they agree and the number is the disclosure.
+
+    This pins the client half — that the label reads the SAME `unread` value
+    the global action is gated on, and never a per-tab figure derived here.
+  */
+  it("counts what it will actually clear", () => {
+    assert.match(
+      page,
+      /const unread = notifications\.data\?\.pages\[0\]\?\.unreadCount \?\? 0;/,
+      "the label's number is the service's global count, not one derived per tab",
+    );
+    assert.match(page, /if \(unread > 0\) markRead\.mutate\(undefined\);/);
+    assert.doesNotMatch(
+      page,
+      /items\.filter\([^)]*readAt[^)]*\)\.length/,
+      "a count derived from the loaded page would describe the tab and clear everything",
+    );
+    // And it says so outright rather than leaving a filtered reader to infer
+    // the scope from a label that does not match the rows under it.
+    assert.match(page, /not only the ones in this filter/);
+  });
+
   it("offers the bulk action as a control, with its count", () => {
     assert.match(page, /const markAllRead = \(\) => \{/);
     assert.match(page, /Mark all read \(\{unread\}\)/);

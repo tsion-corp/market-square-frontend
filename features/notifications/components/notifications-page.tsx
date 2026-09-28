@@ -527,6 +527,27 @@ export function NotificationsPage({
             type="button"
             onClick={markAllRead}
             disabled={markRead.isPending}
+            /*
+              THE COUNT AND THE ACTION HAVE THE SAME SCOPE, and that is the
+              whole safety of this control.
+
+              `unreadCount` is GLOBAL — the service computes it with no group
+              argument while filtering the list beside it — and
+              `markRead(undefined)` is global too. So on a filtered tab the
+              button reads "Mark all read (40)" above three visible rows, and
+              it really does clear 40. The number IS the disclosure.
+
+              The failure to avoid is the two drifting apart: a per-tab count
+              on a global action would promise three and take forty, which is
+              the hazard the mount effect committed silently. The title says
+              the scope outright so a reader who has filtered does not have to
+              infer it from the mismatch.
+            */
+            title={
+              group
+                ? `Clears all ${unread} unread notifications, not only the ones in this filter`
+                : `Clears all ${unread} unread notifications`
+            }
             className="ws-press ml-auto shrink-0 rounded-full px-3 py-1.5 text-[13px] leading-5 text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
           >
             Mark all read ({unread})
