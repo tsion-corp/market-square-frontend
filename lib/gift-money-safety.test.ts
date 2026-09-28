@@ -136,3 +136,50 @@ test("the comparison is in base units, so 0.5 and 0.50 are the same money", () =
     "string inequality would reject 0.5 against 0.50"
   );
 });
+
+/*
+  A PAID TRANSFER MUST BE REPORTED BEFORE ANYTHING THAT CAN THROW.
+
+  `send` returns only once the userOperation receipt is in hand, so by the time
+  it resolves the money HAS moved. The flow then waited for a confirmation and
+  reported afterwards — so a dropped connection, a closed tab, a slow RPC or a
+  phone locking in between left the service with a tip whose `txHash` is NULL,
+  permanently. The transfer is on-chain, kash reconciles it, and nothing can
+  ever match it to a tip that has no hash.
+
+  The held payment in sessionStorage was the only recovery, and it only works
+  if the SAME browser retries within the hour. Nobody retries a gift that
+  looked like it worked.
+
+  Reporting first is free: the service treats the hash as a CLAIM and settles
+  nothing until kash observes the transfer independently.
+*/
+const source = readFileSync("features/tips/hooks/use-tips.ts", "utf8");
+const signing = source.slice(source.indexOf("txHash = await send("));
+
+test("reports before it waits for the receipt", () => {
+  const report = signing.indexOf("reportTipTransfer(target, created.tip.tipId, txHash)");
+  const wait = signing.indexOf("await waitForReceipt(txHash");
+  assert.ok(report > -1 && wait > -1, "both steps must still exist");
+  assert.ok(report < wait, "a report after the wait is lost whenever the wait throws");
+});
+
+test("holds the payment before reporting, so a throw mid-report is still recoverable", () => {
+  const hold = signing.indexOf('holdPayment("tip", wallet,');
+  const report = signing.indexOf("reportTipTransfer(target, created.tip.tipId, txHash)");
+  assert.ok(hold > -1 && hold < report, "the local record must precede the remote one");
+});
+
+/*
+  A REVERTED TRANSFER IS NOT RETRACTED. The service verifies on-chain and
+  will never observe a reverted transfer, so the tip expires rather than
+  crediting anybody. Retracting would be the client asserting an outcome the
+  service is better placed to judge — but the READER is still told.
+*/
+test("still tells the reader when the transfer reverted", () => {
+  assert.match(signing, /The transfer failed on-chain\. Nothing was sent\./);
+});
+
+test("does not report the same tip twice", () => {
+  assert.match(source, /reportedTip \?\? \(await reportTipTransfer\(/);
+});
