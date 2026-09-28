@@ -6000,3 +6000,91 @@ describe("A count tap shows what the count is counting", () => {
     assert.match(body, /setReplyOpen\(true\)/, "an empty post still offers the field");
   });
 });
+
+/*
+  READING A NOTIFICATION IS SOMETHING YOU DO, NOT SOMETHING ARRIVING DOES.
+
+  The page marked EVERYTHING read on mount — `markRead.mutate(undefined)`,
+  where undefined means all of them — so a reader who glanced at the top of the
+  list lost every row below the fold they had never seen, and the badge then
+  said nothing was waiting. ogazboiz: "i also see the one that i've not
+  actually read i've not actually clicked, just the way normal notification
+  actually works".
+*/
+describe("Notifications are read by opening them, not by opening the list", () => {
+  const page = stripComments(read("features/notifications/components/notifications-page.tsx"));
+
+  it("never clears the list as a side effect of arriving at it", () => {
+    assert.doesNotMatch(
+      page,
+      /useEffect\([^)]*markRead/s,
+      "mark-on-mount is the bug: being on screen is not being read",
+    );
+    assert.doesNotMatch(
+      page,
+      /acknowledged\.current/,
+      "the once-per-arrival guard went with the effect it guarded",
+    );
+  });
+
+  /*
+    With the bulk effect gone the ordinary act has to do the work, and it did
+    NOT before — the row's `<Link>` navigated and acknowledged nothing. The
+    effect was covering for it.
+  */
+  it("marks the row the reader actually opened", () => {
+    assert.match(
+      page,
+      /<Link\s+href=\{href\}[\s\S]*?onClick=\{\(\) => \{\s*if \(unread\) onMarkRead\(item\.id\);/,
+      "tapping a notification must clear that one",
+    );
+    // The per-row dot and the friends-card path keep acknowledging as before.
+    assert.equal((page.match(/if \(unread\) onMarkRead\(item\.id\);/g) ?? []).length, 2);
+  });
+
+  /*
+    Clearing everything is a real thing to want — it is just not something
+    navigation should do on somebody's behalf. Without an explicit control the
+    badge would have become unclearable, which is its own bug.
+  */
+  it("offers the bulk action as a control, with its count", () => {
+    assert.match(page, /const markAllRead = \(\) => \{/);
+    assert.match(page, /Mark all read \(\{unread\}\)/);
+    assert.match(page, /\{authenticated && unread > 0 && \(/, "no control when there is nothing to clear");
+  });
+});
+
+/*
+  A GROUP MESSAGE IS NOT A DIRECT MESSAGE.
+
+  Both are recorded as `kind: 'message'` carrying only an actor, so the row
+  said "Ada sent you a message" for a room of forty people. "You" is the claim
+  that nobody else saw it, and answering a group as though it were private is a
+  real way to be embarrassed by an interface. The field is parsed ahead of the
+  service, so this reads no worse today and better on their deploy alone.
+*/
+describe("A message notification says which kind of conversation it came from", () => {
+  const page = stripComments(read("features/notifications/components/notifications-page.tsx"));
+  const types = stripComments(read("features/notifications/lib/types.ts"));
+
+  it("parses the conversation ahead of the backend, all optional", () => {
+    assert.match(types, /conversation: z/);
+    assert.match(types, /kind: z\.enum\(\["direct", "group"\]\)/);
+    assert.match(types, /\.default\(null\)\s*\n?\s*\.catch\(null\)/);
+  });
+
+  it("names the group, and still speaks when it cannot", () => {
+    assert.match(page, /item\.conversation\?\.kind === "group" \? "New group message" : "New message"/);
+    assert.match(page, /\$\{who\} messaged \$\{item\.conversation\.title\}\./);
+    assert.match(page, /\$\{who\} sent a message to a group you are in\./);
+    assert.match(page, /\$\{who\} sent you a message\./, "the direct sentence is unchanged");
+  });
+
+  /*
+    An unknown kind must NOT fall back to "direct": that is the claim that
+    nobody else saw it, and saying nothing beats saying the wrong one.
+  */
+  it("never guesses direct", () => {
+    assert.doesNotMatch(page, /conversation\?\.kind === "direct"/);
+  });
+});

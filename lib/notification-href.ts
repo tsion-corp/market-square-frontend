@@ -52,6 +52,9 @@ export type NotificationDestination = {
   actor?: { id: string; username?: string | null } | null;
   subject?: { kind: "post" | "stream" | "room" } | null;
   house?: { conversationId: string } | null;
+  /** Which conversation a `message` / `mention` row came from, once the
+      service sends it. Optional: absent today. */
+  conversation?: { id: string } | null;
 };
 
 /**
@@ -72,7 +75,23 @@ export function isGistRoomNotification(item: NotificationDestination): boolean {
 export function notificationHref(item: NotificationDestination): string | null {
   // A chat event has no post and no stream, so without this it fell through to
   // the sender's PROFILE — which is not where the message is.
-  if (item.kind === "message" || item.kind === "chat_request") return sq("/messages");
+  /*
+    ON THE THREAD when the service names one, the inbox when it does not.
+
+    A tap that lands you on the inbox root and leaves you to find the
+    conversation yourself has not delivered you to the thing it was about. The
+    id is parsed ahead of the backend, so this is the inbox today and the
+    thread the day the field ships.
+
+    `chat_request` stays on the inbox deliberately: a request is not yet a
+    conversation, and there is no thread to open.
+  */
+  if (item.kind === "message") {
+    return item.conversation?.id
+      ? sq(`/messages/${encodeURIComponent(item.conversation.id)}`)
+      : sq("/messages");
+  }
+  if (item.kind === "chat_request") return sq("/messages");
 
   // A gist room and a broadcast are both streams. See the header.
   if (item.streamId) {

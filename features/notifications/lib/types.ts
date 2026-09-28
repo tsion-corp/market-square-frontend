@@ -117,6 +117,36 @@ export const NotificationSchema = z.object({
   actor: ProfileSchema.nullable().optional().default(null),
   postId: z.string().nullable().optional().default(null),
   /**
+   * WHICH CONVERSATION A `message` OR `mention` ROW CAME FROM.
+   *
+   * PARSED AHEAD OF THE BACKEND, all optional, so the row improves the day the
+   * field ships and needs no coordinated release — the same way `members`,
+   * `website` and `weeklyRoomLimit` were parsed before the house read carried
+   * them.
+   *
+   * It exists because a group message and a direct message are currently
+   * INDISTINGUISHABLE. Both are recorded as `kind: 'message'` carrying only an
+   * actor (`conversation-service.ts`, the fan-out after `toNotify`), so "Ada
+   * sent you a message" is printed for a room of forty people exactly as it is
+   * for a private thread. ogazboiz: "if somebody messaged me on the group
+   * aspect it will look as if it's a direct message".
+   *
+   * `kind` is the part that carries the meaning; `title` is what lets the row
+   * NAME the group rather than just say one exists. Unknown kinds `catch` to
+   * null rather than guessing "direct" — saying nothing beats saying the
+   * wrong one, because "direct" is the claim that nobody else saw it.
+   */
+  conversation: z
+    .object({
+      id: z.string(),
+      kind: z.enum(["direct", "group"]).nullable().optional().default(null).catch(null),
+      title: z.string().nullable().optional().default(null),
+    })
+    .nullable()
+    .optional()
+    .default(null)
+    .catch(null),
+  /**
    * The house a `house_room` row is about — its CURRENT name, so a rename shows
    * on older rows. Null on every other kind, and once the reader has left the
    * house; the row then falls back to naming no house.
