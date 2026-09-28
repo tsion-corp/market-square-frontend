@@ -195,6 +195,13 @@ export function useSendTip() {
       // A held hash is one this app produced, so it is already 0x-prefixed.
       let txHash = (held?.txHash ?? null) as `0x${string}` | null;
       /*
+        The report, once it has been made inside the signing branch. Held so
+        the tail below does not report a second time for the same tip — the
+        service is idempotent on this, but a duplicate POST is still a lie
+        about how many times we were told something.
+      */
+      let reportedTip: Awaited<ReturnType<typeof reportTipTransfer>> | null = null;
+      /*
         THE HOLD MUST BELONG TO THIS TIP, and until now nobody checked.
 
         The hold key canonicalises the AMOUNT — `tip:<kind>:<id>:<toProfileId>`
@@ -274,17 +281,57 @@ export function useSendTip() {
          */
         if (key) holdPayment("tip", wallet, { key, txHash, ref: created.tip.tipId });
 
+        /*
+          REPORTED BEFORE THE CONFIRMATION WAIT, AND THAT ORDER IS THE FIX.
+
+          It used to run `waitForReceipt` first and report afterwards. The
+          money has ALREADY moved by this point — `send` returns only once the
+          userOperation receipt is in hand — so anything that threw between the
+          two lines left the service with a tip whose `txHash` is NULL, for
+          ever. The transfer is on-chain, the ledger reconciles it, and nothing
+          on the service side can ever match it to a tip, because the tip has
+          no hash to match on.
+
+          A thrown wait is not exotic: a dropped connection, a closed tab, a
+          slow RPC, a phone locking. The held payment in sessionStorage was the
+          only recovery, and it only works if the SAME browser retries within
+          the hour. Nobody retries a gift that looked like it worked.
+
+          Reporting first costs nothing, because the service already treats
+          this as a CLAIM rather than proof: it records the hash and settles
+          nothing until kash's watcher observes the transfer independently and
+          checks the amount and both wallets. So an early report cannot credit
+          anybody, and a transfer that later turns out to have reverted is
+          simply never observed — which `expireUnobservedPending` already
+          handles, and which re-opens if the transfer does turn up.
+
+          The wait stays, after, and is now purely for what the READER is told:
+          a reverted transfer must still say so rather than reading as sent.
+        */
+        phase("reporting");
+        reportedTip = await reportTipTransfer(target, created.tip.tipId, txHash);
+        // The service owns the hash now; a retry must not re-report it.
+        clearHeldPayment("tip", wallet);
+
         phase("confirming");
         const outcome = await waitForReceipt(txHash, chain.chainId);
         if (outcome === "reverted") {
-          // Nothing moved, so nothing may be reported as payment.
-          clearHeldPayment("tip", wallet);
+          /*
+            NOTHING IS UNDONE HERE, and that is deliberate. The report has
+            already gone and it should stand: the service verifies on-chain and
+            will never observe a reverted transfer, so the tip expires rather
+            than crediting anybody. Retracting it would be the client asserting
+            an outcome the service is better placed to judge.
+
+            The reader is still told plainly, because a reverted transfer that
+            reads as sent is the one thing this flow may not do.
+          */
           throw new Error("The transfer failed on-chain. Nothing was sent.");
         }
       }
 
       phase("reporting");
-      const reported = await reportTipTransfer(target, created.tip.tipId, txHash);
+      const reported = reportedTip ?? (await reportTipTransfer(target, created.tip.tipId, txHash));
       // Reported: the service owns it now and a retry must not re-report it.
       clearHeldPayment("tip", wallet);
       return reported;
