@@ -15,6 +15,7 @@ import { IconCalendar } from "@/components/ui/icons";
 import { ProfilePhotos } from "@/features/profile/components/profile-photos";
 import { ProfileShareSheet } from "@/components/ui/profile-share-sheet";
 import { ProfileCover } from "@/features/profile/components/profile-cover";
+import { ProfileActionRow } from "@/features/profile/components/profile-action-row";
 import { ColumnHeader, ColumnTabs } from "@/components/layout/column-header";
 import { RowSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
@@ -570,8 +571,9 @@ export function ProfilePage({
                   Whether it deserves a pill of its own is the designer's
                   question, and it is asked.
                 */}
+                {/* Message moved OFF the cover into the follow row below
+                    (node 2112:19612); the cover keeps Wink and the more menu. */}
                 <WinkButton profile={data} size="cover" />
-                {messageSlot?.(data)}
                 <PersonMoreMenu profile={data} size="cover" />
               </>
             )
@@ -674,6 +676,10 @@ export function ProfilePage({
             <CountLabel count={data.followerCount} label="Followers" />
           </Link>
         </p>
+
+        {/* node 2112:19612 — the follow row (message · Follow) below the counts
+            on somebody else's profile. Self-guards to null on your own. */}
+        <ProfileActionRow profile={data} messageSlot={messageSlot} />
 
         {/*
           THE PLACE THIS PERSON PUBLISHED — 418:25221, a 24px glyph and the
