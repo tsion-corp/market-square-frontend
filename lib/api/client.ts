@@ -80,6 +80,42 @@ export async function apiFetch(
   }
 
   let accessToken = currentAccessToken();
+
+  /*
+    A PUBLIC READ WAITS FOR AUTH TO SETTLE TOO, AND THAT IS NOT A LUXURY.
+
+    `currentAccessToken()` is null "when signed out, hydrating or not mounted"
+    — its own words — and only the `requireAuth` branch below ever waited out
+    the hydrating case. So on a COLD REFRESH every public read fired before
+    Decane had registered its token, went out with no Authorization, and the
+    service answered them as an ANONYMOUS caller.
+
+    An anonymous caller does not get the personalised fields. `isFollowing` is
+    OMITTED for them by design (`hydrateFollowState` returns early on a null
+    viewer), and an omitted follow edge renders as "Follow" — so the feed, the
+    post cards, For You and every profile showed somebody they already follow
+    as unfollowed, and stayed that way, because nothing refetched when the
+    token arrived a moment later. Their own Following list was right the whole
+    time: that one is an `authedGet` and DID wait.
+
+    ogazboiz reported exactly that shape: "even though you follow and you
+    refresh back, it shows you are not following — but if I check people I'm
+    following, they are already there."
+
+    The same race silently costs `likedByMe`, `bookmarkedByMe` and every other
+    viewer-dependent field on a public route. This is one fix for all of them,
+    at the one transport every feature goes through.
+
+    It waits ONLY while auth has not settled. A signed-out visitor reaches
+    `ready` without a token and pays nothing; a signed-in one waits out the
+    hydration they were already waiting for. No request is made anonymous by a
+    race that the client could have avoided.
+  */
+  if (!accessToken && !opts.requireAuth && !getAuthSnapshot().ready) {
+    await waitForAuthReady();
+    accessToken = currentAccessToken();
+  }
+
   if (opts.requireAuth && !accessToken) {
     // Give the session a chance to finish hydrating before judging it.
     await waitForAuthReady();

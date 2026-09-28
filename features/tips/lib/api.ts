@@ -140,9 +140,24 @@ export async function fetchReceivedTips(): Promise<ReceivedTip[]> {
       could answer. A number chosen to mean "plenty" turned into a hard
       failure, and it failed the same way every time rather than degrading.
 
-      Asking for the maximum the service accepts is the honest ceiling. If
-      somebody ever passes 100 received tips this needs the cursor the route
-      already offers, not a bigger number — there is no bigger number.
+      Asking for the maximum the service accepts is the honest ceiling: 100
+      is the route's documented maximum, so there is no bigger number to ask
+      for.
+
+      THE ROUTE OFFERS NO CURSOR. This comment used to say it did — "the
+      cursor the route already offers" — and that was simply untrue, checked
+      against both the deployed spec and the service source:
+
+        GET /me/tips/received
+          parameters:  limit only (integer, 1..100)
+          response:    { items }        <- no cursor, no nextCursor
+
+      So a reader past 100 received gifts silently loses the oldest, and the
+      client CANNOT fix that on its own however it is written. The wrong
+      comment is worse than none: it says the fix is a small client change
+      when it is a contract change, and the next person to look spends the
+      time finding that out. Raised with the service; until they add a cursor
+      and a `nextCursor`, this ceiling is real.
     */
     await msApi.authedGet("/me/tips/received", { limit: 100 })
   );
