@@ -8,24 +8,86 @@ export function formatKash(amount: string): string {
 }
 
 /**
- * A KASH amount at AT MOST TWO decimal places — "80", "80.50", "80.25".
+ * A KASH amount, cut to as many decimals as the number actually needs.
  *
- * CUT, never rounded: this is somebody's balance, and rounding 80.999 up would
- * show money they do not have. Worked on the decimal STRING, so no float ever
- * touches the digits; a whole amount (or one whose first two decimals are
- * zero) shows no decimals at all.
+ * ─── THE RULE ────────────────────────────────────────────────────────────────
+ * TWO decimals at or above 1 KASH, THREE below it, and a non-zero amount is
+ * NEVER rendered as zero — however small it is, the digits are extended until
+ * the first significant one shows.
+ *
+ * Always CUT, never rounded. This is somebody's money: rounding 80.999 up
+ * shows a balance they do not have, and rounding a 0.025 earning up to 0.03
+ * overstates what they were paid. Worked on the decimal STRING, so no float
+ * ever touches the digits.
+ *
+ * ─── WHY IT IS NOT JUST TWO ──────────────────────────────────────────────────
+ * It was, and this file asserted it: `kashAmount("0.009") === "0"`. That was
+ * correct while every credit was a whole number of cents. Then gifts became a
+ * 50/50 SPLIT, and half of the cheapest and most-tapped gift in the tray is
+ * below a cent:
+ *
+ *   Rose   0.01 KASH  ->  recipient 0.005  ->  rendered "0 KASH"
+ *   Book   0.05 KASH  ->  recipient 0.025  ->  rendered "0.02 KASH"
+ *
+ * A row reading "okayy gifted you a Rose — 0 KASH" says the sender sent
+ * nothing. That is worse than an imprecise number: it makes a gift that
+ * worked look broken, and it is the first thing anybody would report.
+ *
+ * The second line matters too, and it is why the fix is three decimals rather
+ * than only a zero guard. Earnings rows sit directly under the BALANCE, and
+ * people add them up. Five 0.025 gifts shown as "0.02" each total 0.10 beside
+ * a balance of 0.125 — a list that does not agree with the figure above it.
+ *
+ * ─── WHY MAGNITUDE AND NOT A FLAT THREE ──────────────────────────────────────
+ * Three decimals everywhere would print ticket prices and balances as "80.500"
+ * — noise on a number where the third decimal is worth nothing. Below 1 KASH
+ * that same digit is most of the amount. The precision follows the money.
  */
 export function kashAmount(amount: string): string {
   const trimmed = amount.trim();
-  if (/e/i.test(trimmed)) {
+  /*
+    Exponential notation reaches a plain decimal string BEFORE the rule runs.
+
+    This branch used to collapse to two decimals itself
+    (`Math.trunc(n * 100) / 100`), which turned 5e-3 into "0.00" and then into
+    "0" — reintroducing the exact bug above for any caller handed a small
+    number in exponential form. `toFixed(18)` matches KASH's own precision and
+    lets the one rule below decide, so there is only ever one rule.
+  */
+  if (/e/iu.test(trimmed)) {
     const n = Number.parseFloat(trimmed);
-    return kashAmount((Math.trunc(n * 100) / 100).toFixed(2));
+    return Number.isFinite(n) ? kashAmount(n.toFixed(18)) : trimmed;
   }
   const negative = trimmed.startsWith("-");
-  const [whole = "0", fraction = ""] = trimmed.replace(/^[+-]/, "").split(".");
-  const cents = fraction.slice(0, 2).padEnd(2, "0");
+  const [whole = "0", fraction = ""] = trimmed.replace(/^[+-]/u, "").split(".");
   const wholeText = String(Number(whole || "0"));
-  const text = cents === "00" ? wholeText : `${wholeText}.${cents}`;
+
+  // Below 1 KASH the third decimal is real money; at or above it, it is noise.
+  const places = wholeText === "0" ? 3 : 2;
+  let digits = fraction.slice(0, places).padEnd(2, "0");
+  // A third place that is zero adds nothing: 0.100 is 0.10, not "0.100".
+  if (digits.length === 3 && digits.endsWith("0")) digits = digits.slice(0, 2);
+
+  /*
+    A NON-ZERO AMOUNT NEVER RENDERS AS ZERO.
+
+    Below 0.001 even three decimals disappear, so the digits run on to the
+    first significant one. This is the invariant that survives the next change
+    to gift prices or to the split — it is not pinned to today's ladder, and it
+    is why a future 0.0005 credit cannot silently become "0" again.
+
+    SCOPED TO AMOUNTS UNDER 1 KASH, and the scope is the rule. Without it the
+    guard fired on 1.005 and 80.009 too, printing a third decimal on exactly
+    the amounts the magnitude rule says should not have one — and those never
+    displayed as zero in the first place. The promise is that a non-zero amount
+    never reads as ZERO, not that no digit is ever cut: 80.999 shows 80.99 for
+    the same reason it always has.
+  */
+  if (wholeText === "0" && !/[1-9]/u.test(digits) && /[1-9]/u.test(fraction)) {
+    digits = fraction.slice(0, fraction.search(/[1-9]/u) + 1);
+  }
+
+  const text = /^0*$/u.test(digits) ? wholeText : `${wholeText}.${digits}`;
   return negative && text !== "0" ? `-${text}` : text;
 }
 
