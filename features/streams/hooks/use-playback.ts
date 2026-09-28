@@ -40,7 +40,7 @@ export function useHeartbeat(streamId: string, mode: "live" | "replay", playing:
           sessionId.current = result.sessionId;
           if (!qualifiedSent.current && result.watchSeconds >= 30) {
             qualifiedSent.current = true;
-            trackMarketEvent("qualified_watch_time_reached", { surface: "stream_room", entityType: "stream", entityId: streamId, accessType: mode, metadata: { watchSeconds: result.watchSeconds } });
+            trackMarketEvent("qualified_watch_time_reached", { surface: "stream_room", entityType: "stream", entityId: streamId, metadata: { accessType: mode, watchSeconds: result.watchSeconds } });
           }
         }
       } catch {

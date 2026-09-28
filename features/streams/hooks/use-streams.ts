@@ -349,7 +349,7 @@ export function usePurchaseTicket(streamId: string) {
       return reported;
     },
     onSuccess: (ticket) => {
-      trackMarketEvent("ticket_purchased", { surface: "ticket_checkout", entityType: "stream", entityId: streamId, accessType: ticket.tier });
+      trackMarketEvent("ticket_purchased", { surface: "ticket_checkout", entityType: "stream", entityId: streamId, metadata: { accessType: ticket.tier } });
       trackMarketEvent("entitlement_issued", { surface: "ticket_checkout", entityType: "ticket", entityId: ticket.id });
       // ["ms","stream", id] is a PREFIX of the playback-token key, so this one
       // call also drops the cached 403 that was gating the player — without it
