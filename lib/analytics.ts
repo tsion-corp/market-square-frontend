@@ -3,9 +3,33 @@
 import { useEffect } from "react";
 import { apiFetch } from "@/lib/api/client";
 import { readUtm, withoutShareChannel, type UtmParams } from "@/lib/utm";
-import { api } from "./square-path.ts";
+import { getAuthSnapshot } from "@/lib/session";
+import { api, SQUARE_BASE } from "./square-path.ts";
 
+/*
+  THE EVENTS. What is measured decides what can ever be learned, so the set is
+  written to answer the question that was asked — "what do users do most" —
+  rather than to describe the code that happened to get instrumented first.
+
+  IT DID NOT. Eleven of the original eighteen were streams, tickets and store,
+  on a product whose niche is rooms and conversation. Posting, gifting and
+  opening a room — the three things people here actually do — were measured
+  nowhere, so the answer would have been predetermined by what was wired up.
+
+  The COMMUNITY block below is that correction. Nothing was removed: a stream
+  and a store purchase are still worth counting, they were simply never the
+  whole product.
+*/
 export type MarketEventName =
+  // The community: what this product is for.
+  | "post_created"
+  | "comment_created"
+  | "gift_sent"
+  | "room_opened"
+  | "room_joined"
+  | "room_left"
+  | "message_sent"
+  | "wink_sent"
   | "feed_viewed"
   | "content_opened"
   | "profile_viewed"
@@ -30,7 +54,17 @@ interface MarketEventInput {
   entityId?: string;
   surface: string;
   source?: string;
-  accessType?: string;
+  /*
+    `accessType` USED TO SIT HERE, on every event.
+
+    It is ticket-specific — how somebody got into a stream — and it was in the
+    shape all eighteen kinds carried, so seventeen of them declared a field
+    they never set. A common shape is a claim that every event has this; a
+    field only one family uses belongs in `metadata`, where it is obviously
+    optional and obviously that family's.
+
+    Callers that set it should pass `metadata: { accessType }`.
+  */
   metadata?: Record<string, string | number | boolean | null>;
 }
 
@@ -95,22 +129,88 @@ function sessionId() {
  */
 let collectorMissing = false;
 
+/**
+ * THE SURFACE THE LAST EVENT CAME FROM.
+ *
+ * A funnel is a question about the step BEFORE, and no single event can answer
+ * it — "how do people reach a room" needs to know they were on the feed. Kept
+ * in the module rather than threaded through every caller, because every
+ * caller would forget.
+ *
+ * Reset per page load, deliberately: across a refresh the previous surface is
+ * not knowledge, it is a guess.
+ */
+let lastSurface: string | null = null;
+
+/**
+ * WHAT EVERY EVENT CARRIES. Set once here, attached to all of them.
+ *
+ * ─── WHAT IS HERE, AND WHY ───────────────────────────────────────────────────
+ * `sessionId`  one visit, so events can be strung into a journey
+ * `signedIn`   signed-out browsing is first-class here and behaves nothing like
+ *              signed-in. Without it the two are averaged into one meaningless
+ *              middle, and the pre-signup funnel — the one nobody can
+ *              reconstruct afterwards — cannot be separated at all.
+ * `zone`       ONE codebase serves the standalone Square AND `/square` inside
+ *              Ark. Without this the two products are indistinguishable in the
+ *              data, and any surprise in a number is unattributable.
+ * `viewport`   see the rename below
+ * `from`       the surface before this one; funnels are unanswerable without it
+ *
+ * ─── WHAT IS DELIBERATELY NOT HERE ───────────────────────────────────────────
+ * NO USER ID. Not an oversight and not a gap to be filled later by a client:
+ * an id the browser asserts is a CLAIM, and a forged one on an analytics table
+ * is worse than a missing one — a missing id leaves a hole you can see, a
+ * forged one is indistinguishable from truth and poisons every query built on
+ * it afterwards. The viewer is attached SERVER-SIDE from the session, which
+ * the BFF already forwards. The service should refuse a client-sent one
+ * outright rather than trust it.
+ *
+ * NO RELEASE / BUILD ID, yet. It belongs here — without it a behaviour change
+ * and a deploy cannot be told apart — but nothing in this app exposes one to
+ * the browser today, and inventing a constant that never changes would be
+ * worse than the absence. It needs a build-time env var first.
+ */
+function commonProperties(surface: string) {
+  return {
+    version: 1,
+    sessionId: sessionId(),
+    timestamp: new Date().toISOString(),
+    signedIn: getAuthSnapshot().authenticated,
+    zone: SQUARE_BASE === "" ? "standalone" : "ark",
+    /*
+      `viewport`, NOT `device`. It was `device`, and it is
+      `matchMedia("(max-width: 767px)")` — a WINDOW WIDTH. A desktop browser
+      narrowed to half the screen recorded as "mobile", and a tablet in
+      landscape as "desktop".
+
+      That is a lie that gets believed: somebody reports "60% of our users are
+      on mobile" from a column named `device` and nobody re-derives it. The
+      rename costs nothing today and is unfixable once there is a year of data
+      under the old name.
+    */
+    viewport: window.matchMedia("(max-width: 767px)").matches ? "narrow" : "wide",
+    ...(lastSurface !== null && lastSurface !== surface ? { from: lastSurface } : {}),
+  };
+}
+
 export function trackMarketEvent(name: MarketEventName, input: MarketEventInput) {
   if (typeof window === "undefined") return;
   if (collectorMissing) return;
   const utm = captureVisitUtm();
   const metadata = utm || input.metadata ? { ...utm, ...input.metadata } : undefined;
   const payload = {
-    version: 1,
+    ...commonProperties(input.surface),
     name,
-    sessionId: sessionId(),
-    timestamp: new Date().toISOString(),
-    device: window.matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop",
     ...input,
     // The visit's UTM tags ride along as metadata — a shape the collector
     // already takes — so a view can be traced back to the share that brought it.
     ...(metadata ? { metadata } : {}),
   };
+  // AFTER the payload is built, or every event would report itself as its own
+  // previous surface.
+  lastSurface = input.surface;
+
   void apiFetch(api("/api/market-square/analytics/events"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -127,9 +227,16 @@ export function trackMarketEvent(name: MarketEventName, input: MarketEventInput)
 }
 
 export function useMarketView(name: MarketEventName, input: MarketEventInput, ready = true) {
-  const { entityType, entityId, surface, source, accessType } = input;
+  /*
+    Destructured rather than depending on `input`, which is a fresh object on
+    every render and would fire a view on each one. `metadata` is left out of
+    the dependency list for the same reason and is read through a ref-free
+    closure: a view event's metadata does not change without one of the fields
+    above changing too.
+  */
+  const { entityType, entityId, surface, source } = input;
   useEffect(() => {
     if (!ready) return;
-    trackMarketEvent(name, { entityType, entityId, surface, source, accessType });
-  }, [name, entityType, entityId, surface, source, accessType, ready]);
+    trackMarketEvent(name, { entityType, entityId, surface, source });
+  }, [name, entityType, entityId, surface, source, ready]);
 }
