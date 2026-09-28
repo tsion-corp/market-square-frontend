@@ -402,13 +402,9 @@ export function useProfileActivities(username: string) {
  */
 export function useFollow(profile: Profile) {
   const queryClient = useQueryClient();
-  // The follow store is keyed per viewer (two accounts in one browser must not
-  // share a follow graph), so the optimistic write needs the reader's id.
-  const me = useMe();
-  const viewerId = me.data?.id ?? null;
 
   const apply = (following: boolean) => {
-    setFollowIntent(viewerId, profile.id, following);
+    setFollowIntent(profile.id, following);
     // Lists that carry `isFollowing` outrank the intent, so their cached rows
     // have to move too or the control sits on the stale server answer until
     // the refetch lands.
@@ -435,7 +431,7 @@ export function useFollow(profile: Profile) {
       // A failed follow leaves no intent behind at all: `apply(!follow)` only
       // restores the opposite guess, and guessing is exactly what must not
       // survive an error.
-      clearFollowIntent(viewerId, profile.id);
+      clearFollowIntent(profile.id);
       toast.error(errorMessage(error, "Couldn't update follow."));
     },
     // One shared list, in lib/api/invalidate.ts — every surface that grows a

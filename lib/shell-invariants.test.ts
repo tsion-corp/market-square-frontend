@@ -386,30 +386,13 @@ describe("the friends deck offers a real Follow", () => {
   });
 });
 
-describe("follow and wink survive a reload where the payload omits the edge", () => {
-  // The feed omits isFollowing/winkedByMe; the profile page carries them. Both
-  // controls must still be right after a reload on the feed (2026-09-28).
-  const followState = stripComments(read("features/profile/lib/follow-state.ts"));
+describe("the wink write waits for the viewer, so its cooldown record is keyed", () => {
+  // The server carries winkedByMe once auth has settled (fix/public-reads-wait-
+  // for-auth), so follow/wink are right after a reload without a client bridge.
+  // What the transport fix does NOT cover is the local same-browser cooldown:
+  // its optimistic write is keyed per viewer, so the button must not fire before
+  // /me resolves or the record lands under no reader and resets (2026-09-28).
   const profileHook = stripComments(read("features/profile/hooks/use-profile.ts"));
-
-  it("persists the follow state per viewer in localStorage", () => {
-    assert.match(followState, /`ms\.follows\.\$\{viewerId\}`/, "the follow store is not keyed per viewer");
-    assert.match(followState, /window\.localStorage\.setItem\(storageKey\(viewerId\)/);
-    assert.match(followState, /window\.localStorage\.getItem\(storageKey\(viewerId\)\)/);
-  });
-
-  it("SEEDS the store from a payload that carries isFollowing (the profile page)", () => {
-    // So the feed can read the last-known answer the profile endpoint gave.
-    assert.match(
-      followState,
-      /if \(fromServer !== undefined\) setFollowIntent\(viewerId, profile\.id, fromServer\)/
-    );
-  });
-
-  it("keys the follow write on the reader, both on click and on seed", () => {
-    assert.match(profileHook, /setFollowIntent\(viewerId, profile\.id, following\)/);
-    assert.match(profileHook, /clearFollowIntent\(viewerId, profile\.id\)/);
-  });
 
   it("holds the wink until the viewer profile has loaded, so the record is keyed", () => {
     // Winking before /me resolves recorded under no viewer and reset on reload.
