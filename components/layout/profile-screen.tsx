@@ -53,7 +53,7 @@ function MessageButton({ profile }: { profile: Profile }) {
           onSuccess: (conversation) => router.push(sq(`/messages?c=${conversation.id}`)),
         })
       }
-      className="ws-glass-clear ws-press flex h-[38.37px] w-[38.37px] shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-50"
+      className="ws-press flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white transition-colors hover:bg-white/10 disabled:opacity-50"
     >
       <IconProfileSms className="h-4 w-4" />
     </button>

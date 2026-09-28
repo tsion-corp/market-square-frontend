@@ -149,7 +149,22 @@ export async function apiFetch(
     if (watched) recordCircuitFailure(undefined);
     throw error;
   }
-  if (response.status === 401) await noticeUpgradedAccount(response);
+  if (response.status === 401) {
+    const upgraded = await noticeUpgradedAccount(response);
+    /*
+      THE TOKEN WE SENT WAS REJECTED → SIGN OUT, don't resend it forever.
+
+      A held token that comes back 401 (a stale session after the Decane
+      migration, or an ordinary expiry) is dead: without this, every /me poll
+      re-sends it and the console fills with 401s while the reader sits in a
+      broken half-signed-in state (ogazboiz: "if i am having this issue please
+      log out"). `markSessionExpired` drives the SessionGuard's logout — toast
+      once, clear the cache, back to a signed-out page. A GUEST never reaches
+      here (no token, handled before the fetch); ACCOUNT_UPGRADED is handled
+      above and must not fire the ordinary "expired" path on top of it.
+    */
+    if (!upgraded && accessToken) markSessionExpired();
+  }
   if (!watched) return response;
   if (response.ok) recordCircuitSuccess();
   else recordCircuitFailure(response.status, await failureScope(response));
@@ -165,17 +180,18 @@ export async function apiFetch(
  *
  * Reads a clone: the caller still owns the body.
  */
-async function noticeUpgradedAccount(response: Response): Promise<void> {
+async function noticeUpgradedAccount(response: Response): Promise<boolean> {
   let code: unknown;
   try {
     const body = (await response.clone().json()) as { error?: { code?: unknown } } | null;
     code = body?.error?.code;
   } catch {
-    return;
+    return false;
   }
-  if (code !== "ACCOUNT_UPGRADED") return;
+  if (code !== "ACCOUNT_UPGRADED") return false;
   forgetLegacySession();
   markSessionExpired("upgraded");
+  return true;
 }
 
 /**
@@ -183,7 +199,7 @@ async function noticeUpgradedAccount(response: Response): Promise<void> {
  * and the BFF reads it when there is no bearer. Once the service has said the
  * account moved, that cookie only buys the same refusal again.
  */
-function forgetLegacySession(): void {
+export function forgetLegacySession(): void {
   try {
     for (const name of ["privy-token", "privy-id-token"]) {
       document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;

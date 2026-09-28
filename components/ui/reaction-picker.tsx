@@ -34,7 +34,10 @@ export function ReactionPicker({ onPick }: { onPick: (emoji: string) => void }) 
     <div
       role="menu"
       aria-label="Send a reaction"
-      className="absolute bottom-full right-0 z-30 mb-3"
+      // Fixed and centred on a phone — anchored to the trigger it ran off the
+      // screen's edge from a mid-row disc (ogazboiz, 2026-09-28, on-device).
+      // From `md` it is the file's popover again, tail and all.
+      className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+96px)] left-1/2 z-30 -translate-x-1/2 md:absolute md:bottom-full md:left-auto md:right-0 md:mb-3 md:translate-x-0"
       style={{ filter: "drop-shadow(0 4px 6px rgba(10,10,10,0.06))" }}
     >
       <div className="flex items-center gap-5 rounded-[20px] bg-[rgba(186,186,186,0.2)] p-3 backdrop-blur-md">
@@ -62,8 +65,9 @@ export function ReactionPicker({ onPick }: { onPick: (emoji: string) => void }) 
         </button>
       </div>
       {/* Tooltip tail (1775:20172): two discs 13px in from the right edge,
-          dropping toward the glyph the bubble points at. */}
-      <div aria-hidden className="absolute right-3.25 top-full">
+          dropping toward the glyph the bubble points at. Hidden on a phone —
+          centred on the screen, the bubble no longer points at its trigger. */}
+      <div aria-hidden className="absolute right-3.25 top-full hidden md:block">
         <span className="absolute right-0 -top-1.5 block size-3 rounded-full bg-[rgba(186,186,186,0.2)] backdrop-blur-md" />
         <span className="absolute right-0 top-1.5 block size-1 rounded-full bg-[rgba(186,186,186,0.2)] backdrop-blur-md" />
       </div>

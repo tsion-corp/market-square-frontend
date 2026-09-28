@@ -6,6 +6,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DEMO_AUTH } from "@/lib/auth-mode";
 import { onSessionExpired, setAuthSnapshot, type SessionEndReason } from "@/lib/session";
+import { forgetLegacySession } from "@/lib/api/client";
+import { clearDecaneSessionCookie } from "@/lib/decane-session-cookie";
 import { useAuth } from "@/hooks/use-auth";
 import { useBroadcastStatus } from "@/hooks/use-broadcast-status";
 import { sq, stripSquare } from "@/lib/square-path";
@@ -18,12 +20,20 @@ import { sq, stripSquare } from "@/lib/square-path";
 // with returnTo. An active broadcast is never silently killed — the redirect
 // asks the same leave-confirmation first and stays put if declined.
 export function SessionGuard() {
-  const { ready, authenticated } = useAuth();
+  const { ready, authenticated, logout } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const broadcast = useBroadcastStatus();
   const handled = useRef(false);
+  // The current logout, read through a ref so the expiry subscription below
+  // does not re-arm on every render (logout is a fresh closure each time).
+  // Assigned in an effect, not during render — refs may not be written while
+  // rendering (react-hooks/refs), and after-render is when it must be fresh.
+  const logoutRef = useRef(logout);
+  useEffect(() => {
+    logoutRef.current = logout;
+  });
 
   // Mirror session state for the non-hook api client.
   useEffect(() => {
@@ -48,7 +58,19 @@ export function SessionGuard() {
         return; // stay on the cockpit; the user chose to keep streaming
       }
       handled.current = true;
-      queryClient.removeQueries({ queryKey: ["ms", "me"] });
+      // ACTUALLY END THE SESSION, don't just redirect. The dead token lives on
+      // the auth kit (`currentAccessToken` reads it), so without this the client
+      // keeps sending it and the /me polls 401 forever while the reader is stuck
+      // "logged in but broken" (ogazboiz: "i cant logout"). Fire-and-forget and
+      // swallow errors — a logout that throws must not keep the guard from
+      // clearing the cache and routing to /auth.
+      void Promise.resolve(logoutRef.current()).catch(() => {});
+      // Wipe every credential the BFF accepts — the Decane bearer cookie AND the
+      // legacy Privy cookies — so the redirect below lands on a real guest and
+      // the next poll cannot re-authenticate the same dead account.
+      clearDecaneSessionCookie();
+      forgetLegacySession();
+      queryClient.clear();
       // An account that has MOVED did not expire, and "sign in again" would
       // point at the sign-in that was just refused. Say which door.
       toast.error(

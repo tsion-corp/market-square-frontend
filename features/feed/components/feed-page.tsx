@@ -8,13 +8,13 @@ import { EmptyState, ErrorState } from "@/components/ui/states";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryParam } from "@/hooks/use-query-param";
 import { useComposePrefill } from "@/hooks/use-compose-prefill";
-import { useFeed, useFeedHead } from "@/features/feed/hooks/use-feed";
+import { useFeed, useFeedHead, usePost } from "@/features/feed/hooks/use-feed";
 import { useLaneSignal } from "@/features/feed/hooks/use-lane-signal";
 import { Composer } from "@/features/feed/components/composer";
 import { VideoViewer } from "@/features/feed/components/video-viewer";
 import type { VideoItem } from "@/lib/video-context";
 import { FeedItemCard } from "@/features/feed/components/feed-cards";
-import type { Lane, Post } from "@/features/feed/lib/types";
+import type { FeedItem, Lane, Post } from "@/features/feed/lib/types";
 import type { Profile } from "@/lib/api/schemas";
 import { MARKET_FLAGS } from "@/lib/market-config";
 import { useMarketView } from "@/lib/analytics";
@@ -334,7 +334,37 @@ export function FeedPage({
     laneKey: `${lane}:${topics.join(",")}`,
     meId: me.data?.id ?? null,
   });
-  const items = fresh.shown;
+  const laneItems = fresh.shown;
+  /*
+    "SEE MORE, STARTING FROM THIS ONE." Tapping a post on Home opens /feed with
+    `?post=<id>`, and that post is pinned to the TOP of the timeline: if the lane
+    already carries it, it is lifted to the front; if it has not paged in yet, it
+    is fetched and prepended. The rest of the lane continues underneath, so the
+    reader lands on the post they chose and can keep scrolling the feed.
+  */
+  const leadId = useQueryParam("post");
+  const leadPost = usePost(leadId ?? "");
+  const items = useMemo(() => {
+    if (!leadId) return laneItems;
+    const rest = laneItems.filter((item) => (item.post?.id ?? item.id) !== leadId);
+    const already = laneItems.find((item) => (item.post?.id ?? item.id) === leadId);
+    const lead: FeedItem | null =
+      already ??
+      (leadPost.data
+        ? {
+            id: leadPost.data.id,
+            type: "post",
+            occurredAt: leadPost.data.createdAt,
+            repostedBy: null,
+            deepLink: leadPost.data.deepLink ?? null,
+            post: leadPost.data,
+            stream: null,
+            activity: null,
+            platformEvent: null,
+          }
+        : null);
+    return lead ? [lead, ...rest] : laneItems;
+  }, [laneItems, leadId, leadPost.data]);
   const listRef = useRef<HTMLDivElement>(null);
   const canLoadMore = Boolean(feed.hasNextPage);
   /* The shared sentinel every other paged list in the app uses — 600px of

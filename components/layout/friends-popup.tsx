@@ -350,25 +350,14 @@ function FriendsDialog({
     });
   };
   /*
-    WINK BACK OPENS THE CHAT. A wink returned is mutual interest, so it takes
-    the pair straight into their personal thread — the same door "Start gisting"
-    opens — rather than advancing the fan to nothing or dropping them on the
-    inbox list. The popup stays up for the one request (see startGisting for why
-    closing first would lose this navigation), and only closes once the thread
-    exists.
+    WINK BACK IS A WINK, NOT A NAVIGATION (ogazboiz, 2026-09-28: "it should just
+    say I wink back at the person — the only time I'm supposed to go to the
+    messaging is when I click Start gisting"). It briefly opened the thread,
+    which also meant every wink-back fired POST /conversations — and with the
+    Privy→Decane id split that call MINTS a duplicate chat for a pair who
+    already have one. Only the deliberate "Start gisting" opens a conversation.
   */
   const winkBack = () => {
-    wink.send();
-    chat.mutate(other, {
-      onSuccess: (conversation) => {
-        onClose();
-        router.push(sq(`/messages?c=${conversation.id}`));
-      },
-    });
-  };
-  // The SECONDARY "wink" on a friends/mutual card is a lighter act — say hello,
-  // stay where you are — so it keeps the old advance rather than opening a chat.
-  const winkOnly = () => {
     wink.send();
     onNext();
   };
@@ -400,11 +389,10 @@ function FriendsDialog({
   // second tap would be a second request racing the first to the same place.
   const gisting = chat.isPending;
   const primaryOff =
-    // Wink back now opens the thread too, so it is held while that is in flight.
-    (copy.primary === "wink-back" && (wink.unavailable || wink.refusal !== null || gisting)) ||
+    (copy.primary === "wink-back" && (wink.unavailable || wink.refusal !== null)) ||
     (copy.primary === "start-gisting" && gisting);
 
-  const secondaryAct = copy.secondary === "wink" ? winkOnly : startGisting;
+  const secondaryAct = copy.secondary === "wink" ? winkBack : startGisting;
   const secondaryOff =
     (copy.secondary === "wink" && (wink.unavailable || wink.refusal !== null)) ||
     (copy.secondary !== "wink" && gisting);

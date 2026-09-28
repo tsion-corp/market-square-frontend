@@ -129,12 +129,19 @@ export function RoomCardShell({
   );
 }
 
-/** One topic chip — 225:3887 / 545:47760. See the type-size note above. */
+/**
+ * One topic chip — 225:3887 / 545:47760. See the type-size note above.
+ *
+ * The BOX is the file's 16 — it was drawn h-6 (24px), which alone pushed the
+ * replay card's fixed 120 over budget and spilled the pill row out of the
+ * rounded rectangle. `max-w-full` + truncate keep a long topic label INSIDE
+ * the card: the chip caps at the row and ellipsizes rather than running out.
+ */
 export function RoomTopicChip({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <span className="flex h-6 items-center gap-1 rounded-full bg-white/10 px-2.5 text-[11px] font-bold leading-4 text-grey-100">
-      {icon}
-      {label}
+    <span className="flex h-4 max-w-full items-center gap-1 rounded-full bg-white/10 px-2 text-[10px] font-bold leading-none text-grey-100">
+      <span className="shrink-0">{icon}</span>
+      <span className="truncate">{label}</span>
     </span>
   );
 }

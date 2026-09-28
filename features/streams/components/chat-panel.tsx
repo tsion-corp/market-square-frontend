@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { atHandle } from "@/lib/handle";
 import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { errorCode } from "@/lib/api/envelope";
@@ -24,7 +23,6 @@ import { useChat, useChatHistory, useChatReaction, useSendChat } from "@/feature
 import { useLiveChat, useLiveChatPublish } from "@/features/streams/hooks/use-live-chat";
 import { baseIdentity } from "@/features/streams/lib/stage";
 import { useMentionTyping } from "@/hooks/use-mention-typing";
-import { useMe } from "@/hooks/use-me";
 import { useRoomChatSignal } from "@/features/streams/hooks/use-room-chat-signal";
 import { isReplySwipe, SWIPE_TRIGGER, swipeCommits, swipeOffset } from "@/lib/swipe-reply";
 import { DEFAULT_REACTION } from "@/lib/reactions";
@@ -473,8 +471,6 @@ export function ChatPanel({
   const overlay = variant === "overlay";
   const theater = variant === "theater";
   const room = variant === "room";
-  // Who is reading, so a room's chat can mirror the reader's own lines.
-  const me = useMe();
 
   return (
     <div
@@ -570,13 +566,6 @@ export function ChatPanel({
                 key={message.id}
                 message={message}
                 isHost={message.authorId === stream.ownerId}
-                /*
-                  `=== true` is not available here — `me.data?.id` is undefined
-                  while the reader loads, and an undefined id must never equal
-                  an undefined author. Comparing a LOADED id only: a signed-out
-                  reader owns nothing, so nothing mirrors, which is right.
-                */
-                mine={Boolean(me.data?.id) && message.authorId === me.data?.id}
                 onReply={setReplyTo}
                 onLove={(target, loved) =>
                   gate(() => love.mutate({ messageId: target.id, emoji: DEFAULT_REACTION, loved }))
@@ -640,7 +629,9 @@ export function ChatPanel({
               {/* REPLY — the one action on somebody else's message here. It is
                   drawn beside the row rather than hidden behind a long press,
                   because a live column scrolls and a gesture nobody finds is
-                  not an affordance. */}
+                  not an affordance. (This is the LIVE STREAM chat, which has no
+                  swipe wiring — the gist room's RoomBubble is the surface where
+                  the swipe replaced the visible arrow.) */}
               <button
                 type="button"
                 onClick={() => setReplyTo(message)}
@@ -932,7 +923,6 @@ export function ChatPanel({
 function RoomBubble({
   message,
   isHost,
-  mine,
   onReply,
   onLove,
   dragX,
@@ -942,8 +932,6 @@ function RoomBubble({
 }: {
   message: ChatMessage;
   isHost: boolean;
-  /** Did the reader write this one? The whole row mirrors when they did. */
-  mine: boolean;
   /** Make this message the composer's reply target. */
   onReply: (message: ChatMessage) => void;
   /** Toggle the reader's love on it. */
@@ -961,13 +949,12 @@ function RoomBubble({
 
   return (
     <li
-      className={cn(
-        "relative flex items-start gap-2 touch-pan-y",
-        // The mirror. Reversing the ROW moves the avatar, the words and both
-        // controls together, so the reader's own line is a considered right
-        // edge rather than text that drifted.
-        mine && "flex-row-reverse"
-      )}
+      // EVERY ROW READS LEFT, the reader's own included (ogazboiz, 2026-09-28).
+      // Mine-right is a DM convention: with two parties the split carries
+      // meaning. A live room is a FEED many people scroll — Twitch, YouTube
+      // Live and Spaces all run one left edge — and mirroring the odd own-row
+      // broke the scan for a distinction the name already carries.
+      className="relative flex items-start gap-2 touch-pan-y"
       style={{ transform: dragX ? `translateX(${dragX}px)` : undefined }}
       onPointerDown={(event) => onDragStart(message, event)}
       onPointerMove={onDragMove}
@@ -979,7 +966,7 @@ function RoomBubble({
       {dragX > 8 && (
         <span
           aria-hidden
-          className={cn("absolute bottom-2 text-white/50", mine ? "-right-1" : "-left-1")}
+          className="absolute -left-1 bottom-2 text-white/50"
           style={{ opacity: Math.min(1, dragX / SWIPE_TRIGGER) }}
         >
           <svg viewBox="0 0 14 14" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
@@ -992,26 +979,19 @@ function RoomBubble({
         <Avatar name={name} seed={message.authorId} src={message.author?.avatarUrl} size={24} />
       </span>
 
-      <div
-        className={cn(
-          "flex min-w-0 max-w-[calc(100%-4.5rem)] flex-col gap-0.5 [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]",
-          mine && "items-end"
-        )}
-      >
+      <div className="flex min-w-0 max-w-[calc(100%-4.5rem)] flex-col gap-0.5 [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">
         <div className="flex min-w-0 flex-col gap-0.5">
           {/* ONE META LINE, then the words under it — the shape every chat over
               video uses, and the shape the bubble was previously holding. The
               clock joins it rather than floating beside the text: with no
               bubble there is no inner corner for it to sit in. */}
-          <p className={cn("flex min-w-0 items-center gap-1", mine && "flex-row-reverse")}>
+          <p className="flex min-w-0 items-center gap-1">
+            {/* The NAME alone — the @handle beside it doubled the identity on
+                every row and ate the message's own width (ogazboiz,
+                2026-09-28: "only the name of the user"). */}
             <span className="truncate text-[13px] font-semibold leading-5 tracking-[-0.006em] text-white">
               {name}
             </span>
-            {message.author && (
-              <span className="shrink-0 text-[11px] leading-5 tracking-[-0.006em] text-white/55">
-                {atHandle(message.author.username)}
-              </span>
-            )}
             {isHost && (
               <span className="shrink-0 rounded-full bg-white/20 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-white">
                 Host
@@ -1025,36 +1005,28 @@ function RoomBubble({
               original keeps its quote and says so: a reply to nothing reads
               as a non-sequitur. */}
           {message.replyTo && (
-            <p
-              className={cn(
-                "min-w-0 truncate rounded-md bg-black/25 px-2 py-1 text-[12px] leading-4 text-white/70",
-                mine ? "border-r-2 border-white/40 text-right" : "border-l-2 border-white/40"
-              )}
-            >
+            <p className="min-w-0 truncate rounded-md border-l-2 border-white/40 bg-black/25 px-2 py-1 text-[12px] leading-4 text-white/70">
               {message.replyTo.deleted ? "Message deleted" : message.replyTo.text}
             </p>
           )}
-          <p
-            className={cn(
-              "break-words text-[13px] leading-5 tracking-[-0.006em] text-white/95",
-              mine && "text-right"
-            )}
-          >
+          <p className="break-words text-[13px] leading-5 tracking-[-0.006em] text-white/95">
             {message.text}
           </p>
         </div>
       </div>
 
-      {/* REPLY — a real control, not a hover-only one. The swipe is the
-          gesture on a phone; this is the same act for a mouse and for anybody
-          who never discovers the gesture, which on the last surface was
-          everybody. */}
+      {/* REPLY IS THE SWIPE — drag the row and let go (shared lib/swipe-reply,
+          the DM thread's own gesture; the quote cue fades in as you pull). The
+          always-visible arrow that sat here is gone (ogazboiz, 2026-09-28:
+          "that back arrow stuff is not nice, let's use the swipe") — a control
+          on every row turned the column into a toolbar. The button stays for
+          KEYBOARD readers only, a swipe meaning nothing to a Tab key:
+          invisible and pointer-inert until focused. */}
       <button
         type="button"
         onClick={() => onReply(message)}
         aria-label={"Reply to " + name}
-        title="Reply"
-        className="ws-press shrink-0 self-start pt-0.5 text-white/40 transition-colors hover:text-white/80"
+        className="ws-press pointer-events-none shrink-0 self-start pt-0.5 text-white/40 opacity-0 transition-opacity focus-visible:pointer-events-auto focus-visible:opacity-100"
       >
         <svg aria-hidden viewBox="0 0 14 14" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 3 1.5 6.5 5 10" />
