@@ -180,6 +180,22 @@ function describe(item: MarketNotification): string {
     case "comment_reply":
       return `${who} replied to your comment.`;
     case "mention":
+      /*
+        SAY WHERE, when the where is a private group.
+
+        `mention` covers four surfaces — a post, a comment, a stream and a
+        GROUP CHAT — and printed one sentence for all of them. Being named in
+        a room of forty people and being named in a public post are not the
+        same event, and the reader could not tell which had happened.
+
+        Same three states as `message`, and the same reason: an absent
+        conversation keeps the original sentence rather than guessing.
+      */
+      if (item.conversation?.kind === "group") {
+        return item.conversation.title
+          ? `${who} mentioned you in ${item.conversation.title}.`
+          : `${who} mentioned you in a group you are in.`;
+      }
       return `${who} mentioned you.`;
     case "repost":
       return `${who} reposted your post.`;

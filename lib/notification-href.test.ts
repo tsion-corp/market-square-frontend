@@ -151,3 +151,49 @@ describe("a message notification lands on the conversation, not the inbox root",
     );
   });
 });
+
+/*
+  A MENTION INSIDE A GROUP CHAT IS A CHAT EVENT TOO.
+
+  `mention` is written from four places — a post, a comment, a stream and a
+  group message — and only the first three carry a `postId` or a `streamId`.
+  So a group mention fell through to `profileHref(actor)` and landed the reader
+  on the profile of the person who named them, rather than the thread they were
+  named in. The same bug was fixed for `message` one branch above and left here.
+*/
+describe("a mention in a group chat opens the thread, not the mentioner", () => {
+  it("opens the thread when the row names a conversation", () => {
+    assert.equal(
+      notificationHref({
+        kind: "mention",
+        conversation: { id: "c-9" },
+        actor: { id: "u1", username: "ada" },
+      }),
+      "/messages/c-9",
+    );
+  });
+
+  it("still opens the post when the mention was in one", () => {
+    assert.equal(notificationHref({ kind: "mention", postId: "p-1" }), "/p/p-1");
+  });
+
+  /*
+    No conversation and no post is the pre-#331 group mention: the actor is
+    still the honest fallback, because nothing on the row names the thread.
+  */
+  it("falls back to the actor when nothing names a place", () => {
+    assert.equal(
+      notificationHref({ kind: "mention", actor: { id: "u1", username: "ada" } }),
+      // profileHref routes by the ID when it is a safe path segment, not the
+      // handle — my first expectation here was wrong, not the code.
+      "/u/u1",
+    );
+  });
+
+  it("prefers the named thread over a post the row also carries", () => {
+    assert.equal(
+      notificationHref({ kind: "mention", conversation: { id: "c-9" }, postId: "p-1" }),
+      "/messages/c-9",
+    );
+  });
+});
