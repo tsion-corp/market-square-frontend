@@ -83,12 +83,14 @@ describe("a group run's sender line", () => {
   const thread = read("features/messages/components/thread.tsx");
 
   it("names the sender, with their check and their role", () => {
-    assert.match(thread, /\{senders\.get\(run\.senderId\)!\.displayName\}/u);
-    assert.match(thread, /verification=\{senders\.get\(run\.senderId\)!\.verification\}/u);
-    assert.match(thread, /<MemberRoleChip role=\{roleOf\(run\.senderId\) \?\? ""\} \/>/u);
+    // INSIDE the bubble now (ogazboiz, 2026-09-28: the name above the run sat
+    // "far from the sent message") — the header rides the bubbles' top slot.
+    assert.match(thread, /\{sender\?\.displayName \?\? nameOf\(message\.senderId\)\}/u);
+    assert.match(thread, /verification=\{sender\.verification\}/u);
+    assert.match(thread, /\{senderRole \? <MemberRoleChip role=\{senderRole\} \/> : null\}/u);
   });
 
-  it("sits ABOVE THE RUN, never wrapping a bubble", () => {
+  it("rides the bubble's own top slot, never wrapping a bubble", () => {
     /*
       THIS IS THE WHOLE BUG, TWICE OVER. A bubble is capped at
       `max-w-[min(85%,480px)]`, and 85% resolves against ITS PARENT. Wrapping a
@@ -98,8 +100,8 @@ describe("a group run's sender line", () => {
       under a long one, which is why it looked like a text bug rather than a
       layout one.
 
-      Above the run, the bubble is a direct child of its row again and the
-      percentage means what it always meant.
+      Inside the bubble (the quote slot), the bubble stays a direct child of
+      its row and the percentage means what it always meant.
     */
     assert.doesNotMatch(
       thread,
@@ -111,11 +113,11 @@ describe("a group run's sender line", () => {
   });
 
   it("draws once per run, and never for your own messages", () => {
-    // A run IS consecutive messages from one sender, so once per run is once
-    // per name — no index and no first-of check. And nobody needs telling
-    // which messages are their own.
-    assert.match(thread, /\{group && !\(me\.data && run\.senderId === me\.data\.id\) && senders\.get\(run\.senderId\) && \(/u);
-    assert.doesNotMatch(thread, /firstOfRun/u, "the abandoned first-of-run prop is back");
+    // The first bubble of a run carries the name; a run is consecutive
+    // messages from one sender, so first-of-run is once per name. Your own
+    // messages and a 1:1's never carry one.
+    assert.match(thread, /showSender=\{index === 0\}/u);
+    assert.match(thread, /group && !mine && showSender \? \(/u);
   });
 
   it("reads the role off the SAME roster the faces come from", () => {

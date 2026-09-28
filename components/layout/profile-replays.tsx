@@ -74,12 +74,20 @@ export function ProfileReplays({ username }: { username: string }) {
             /* 545:47750 sits 27 in from the card's left, 15 down, 306 wide —
                so the insets are 27/25 and 15/15 rather than the invite's 16,
                and the row is CENTRED, which is what puts the faces mid-card. */
-            <RoomCardShell key={room.id} className="h-[120px] w-[min(359px,100%)] shrink-0 p-[15px_25px_15px_27px]">
+            /* `overflow-hidden` is the card's last line of defence: the shell
+               is a FIXED 120 and everything below budgets to exactly its 90px
+               content box, so nothing should ever reach it — but a fixed-size
+               glass card that CAN clip is one whose text can never hang out of
+               the rounded rectangle, whatever the data does. */
+            <RoomCardShell key={room.id} className="h-[120px] w-[min(359px,100%)] shrink-0 overflow-hidden p-[15px_25px_15px_27px]">
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex h-8 gap-2">
                     <IconRoomBadgeMic className="h-6 w-6 shrink-0 self-center" />
-                    <p className="line-clamp-2 min-w-0 flex-1 text-[12px] font-semibold leading-4 text-white">
+                    {/* Two lines then an ellipsis; `overflow-wrap:anywhere` so
+                        one unbroken long word wraps INTO the clamp instead of
+                        running out of the card's side. */}
+                    <p className="line-clamp-2 min-w-0 flex-1 text-[12px] font-semibold leading-4 text-white wrap-anywhere">
                       {room.title}
                     </p>
                   </div>
@@ -89,11 +97,19 @@ export function ProfileReplays({ username }: { username: string }) {
                   {/* 545:47749 is a FIXED 120 tall, and the chip row (y=40) and
                       the pill row (y=67.84) sit at fixed offsets inside it — so
                       the chip row keeps its height when a room has no topics,
-                      and a card without chips is exactly as tall as one with. */}
-                  <div className="mt-2 space-y-4 pl-8">
-                    <div className="flex min-h-[12.32px] flex-wrap items-center gap-1">
+                      and a card without chips is exactly as tall as one with.
+                      THE BUDGET IS EXACT: 32 title + 8 + 16 chips + 12 + 22
+                      pill = the padding box's 90. The chip row was h-6 chips in
+                      a wrapping row with 16 under it — 102 in a 90 box, which
+                      is precisely how a card with topics spilled its pill row
+                      out of the rectangle (ogazboiz's screenshot). One line of
+                      chips, clipped: a chip that will not fit whole wraps out
+                      of view rather than being cut in half — the invite card's
+                      own trick. */}
+                  <div className="mt-2 space-y-3 pl-8">
+                    <div className="flex h-4 flex-wrap items-center gap-x-1 gap-y-4 overflow-hidden">
                       {labelled.map(({ key, label, Icon }) => (
-                        <RoomTopicChip key={key} icon={<Icon className="h-3 w-3" />} label={label} />
+                        <RoomTopicChip key={key} icon={<Icon className="h-2.5 w-2.5" />} label={label} />
                       ))}
                     </div>
                     {/* 545:47770 — the pill and the date, 8 apart, centred. */}
@@ -110,7 +126,9 @@ export function ProfileReplays({ username }: { username: string }) {
                         </button>
                       )}
                       {room.endedAt && (
-                        <span className="tnum text-[10px] font-medium leading-4 text-white">
+                        /* One line, truncating on a too-narrow phone — the date
+                           must never wrap under the pill or push past the card. */
+                        <span className="tnum min-w-0 truncate text-[10px] font-medium leading-4 text-white">
                           {formatDate(room.endedAt)}
                         </span>
                       )}

@@ -180,7 +180,11 @@ export function EmojiPicker({ onPick }: { onPick: (emoji: string) => void }) {
       // white fill let every message behind it show through. `bg-chrome` is the
       // app's raised-surface token, with a border and a drop shadow so it reads
       // as lifted off the conversation.
-      className="absolute bottom-full right-0 z-30 mb-3 flex w-75 max-w-[80vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-chrome shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
+      // On a PHONE the panel is fixed and centred on the screen: anchored to
+      // its trigger (a mid-row disc in the room's bar) the 300px grid ran off
+      // the screen's edge and half the emoji were unreachable (ogazboiz,
+      // 2026-09-28, on-device). From `md` it goes back to the anchored popover.
+      className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+96px)] left-1/2 z-30 flex w-75 max-w-[calc(100vw-24px)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-chrome shadow-[0_16px_48px_rgba(0,0,0,0.55)] md:absolute md:bottom-full md:left-auto md:right-0 md:mb-3 md:max-w-[80vw] md:translate-x-0"
       // Stop a click inside the panel from bubbling to the field's own handlers.
       onPointerDown={(event) => event.stopPropagation()}
     >

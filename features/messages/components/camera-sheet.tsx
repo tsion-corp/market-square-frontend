@@ -5,6 +5,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/cn";
 import { getUploadLimits } from "@/lib/api/upload";
 import { MediaSendBar } from "@/features/messages/components/media-send-bar";
+import { MediaEditor, type MediaEditorHandle } from "@/features/messages/components/media-editor";
 import {
   CAMERA_HOLD_MS,
   CAMERA_MAX_CLIP_MS,
@@ -251,6 +252,9 @@ export function CameraSheet({
     else takePhoto();
   };
 
+  // The photo editor (draw/text), asked for its baked result on send.
+  const editorRef = useRef<MediaEditorHandle | null>(null);
+
   /* RETAKE — drop the shot and go back to the live camera. The preview URL is
      ours to revoke here; once a shot is CONFIRMED it passes to the caller, which
      revokes after upload. */
@@ -272,11 +276,23 @@ export function CameraSheet({
     onClose();
   }, [discard, onClose]);
 
-  const send = () => {
+  const send = async () => {
     const shot = captured;
     if (!shot) return;
+    let file = shot.file;
+    let url = shot.url;
+    // Bake in any draw/text/sticker edits (photo or clip). An untouched shot
+    // exports null and sends its original bytes; an edited one replaces them and
+    // the original preview URL is ours to revoke here. A clip re-encode runs in
+    // real time, so a longer press means a short wait before it sends.
+    const edited = await editorRef.current?.exportImage();
+    if (edited) {
+      URL.revokeObjectURL(shot.url);
+      file = edited.file;
+      url = edited.url;
+    }
     // The URL now belongs to the caller, so clear our state WITHOUT revoking it.
-    onCaptured(shot.file, shot.url, caption.trim(), viewOnce);
+    onCaptured(file, url, caption.trim(), viewOnce);
     setCaptured(null);
     setCaption("");
     setViewOnce(true);
@@ -331,23 +347,15 @@ export function CameraSheet({
              showed it: same box, same object-cover, same front-camera mirror,
              so it does not jump the instant it is taken. Okay stages it. */
           <div className="relative min-h-0 w-full flex-1 overflow-hidden bg-black sm:aspect-3/4 sm:flex-none">
-            {captured.kind === "video" ? (
-              <video
-                src={captured.url}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className={cn("h-full w-full object-cover", captured.mirrored && "-scale-x-100")}
-              />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element -- a just-captured local blob, no host
-              <img
-                src={captured.url}
-                alt="Your capture"
-                className={cn("h-full w-full object-cover", captured.mirrored && "-scale-x-100")}
-              />
-            )}
+            {/* Draw / text / stickers (and crop, photo-only) over the shot or
+                clip before it sends; baked in on send. */}
+            <MediaEditor
+              ref={editorRef}
+              src={captured.url}
+              mirrored={captured.mirrored}
+              kind={captured.kind === "video" ? "video" : "photo"}
+              fileName={captured.file.name}
+            />
           </div>
         ) : (
           /* Phone: the viewfinder takes all the room between the header and the

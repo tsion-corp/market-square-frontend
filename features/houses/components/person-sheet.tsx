@@ -139,7 +139,10 @@ export function PersonSheet({
     ) : null;
 
   return (
-    <Sheet open={open} onClose={onClose} title={person.name}>
+    // The title says WHAT the sheet is, never who — the name already sits on
+    // the card right under it, and a header repeating it read as the name
+    // twice on every card (ogazboiz, 2026-09-28: "for everybody, not only me").
+    <Sheet open={open} onClose={onClose} title={isSelf ? "Your profile" : "Profile"}>
       <div className="flex items-start gap-3">
         <Avatar
           name={person.name}

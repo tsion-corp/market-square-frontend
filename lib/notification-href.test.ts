@@ -111,3 +111,43 @@ describe("every other destination is unchanged", () => {
     );
   });
 });
+
+/*
+  A MESSAGE ROW OPENS THE THREAD, ONCE THE SERVICE NAMES ONE.
+
+  `conversation` is parsed ahead of the backend — today every `message`
+  notification carries an actor and nothing else — so both halves have to hold:
+  the thread when the id is there, the inbox when it is not, and never a
+  fabricated path in between.
+*/
+describe("a message notification lands on the conversation, not the inbox root", () => {
+  it("opens the thread when the service names one", () => {
+    assert.equal(
+      notificationHref({ kind: "message", conversation: { id: "c-1" } }),
+      "/messages/c-1",
+    );
+  });
+
+  it("still opens the inbox while the field is absent", () => {
+    assert.equal(notificationHref({ kind: "message" }), "/messages");
+    assert.equal(notificationHref({ kind: "message", conversation: null }), "/messages");
+  });
+
+  it("escapes the id rather than pasting it into a path", () => {
+    assert.equal(
+      notificationHref({ kind: "message", conversation: { id: "a/b?c" } }),
+      "/messages/a%2Fb%3Fc",
+    );
+  });
+
+  /*
+    A REQUEST IS NOT YET A CONVERSATION, so there is no thread to open and it
+    keeps the inbox even if an id ever rides along.
+  */
+  it("keeps a chat request on the inbox", () => {
+    assert.equal(
+      notificationHref({ kind: "chat_request", conversation: { id: "c-1" } }),
+      "/messages",
+    );
+  });
+});

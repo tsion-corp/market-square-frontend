@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { FeedItemCard, useFeed } from "@/features/feed";
 import type { Post, Profile } from "@/lib/api/schemas";
 import { SectionHeading } from "@/components/layout/section-heading";
@@ -54,6 +55,7 @@ export function PostForYou({
   winkSlot?: (author: Profile) => React.ReactNode;
   tipSlot?: (post: Post) => React.ReactNode;
 }) {
+  const router = useRouter();
   // The same lane the timeline below reads, so the query is shared rather than
   // fetched twice.
   const feed = useFeed("for-you");
@@ -98,6 +100,9 @@ export function PostForYou({
                   followSlot={followSlot}
                   winkSlot={winkSlot}
                   tipSlot={tipSlot}
+                  // Tapping a card opens the full /feed with THIS post pinned
+                  // first — "see more", starting from the one you chose.
+                  onOpenPost={(post) => router.push(sq(`/feed?post=${post.id}`))}
                   compact
                 />
               </div>

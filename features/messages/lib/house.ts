@@ -115,10 +115,34 @@ const MemberSchema = z.object({
 
 export type HouseMember = z.infer<typeof MemberSchema>;
 
+/*
+  THE ROUTE ANSWERS AN OBJECT, NOT AN ARRAY — and this parsed an array.
+
+  `z.array(MemberSchema).parse(...)` THREW on every call, so the query was
+  never anything but an error and `unavailable` was permanently true. The
+  fallback it exists to be was therefore dead: a house whose read carries no
+  roster showed no Members row at all, and nothing said why.
+
+  Checked against the DEPLOYED spec rather than the repo's, because the two can
+  differ and it is the deployed one that answers this client:
+
+    GET /conversations/{id}/members -> data: { items, title, lastActiveAt }
+
+  `title` and `lastActiveAt` ride along for the group header, which is a
+  different surface; they are parsed so the shape is stated in one place, and
+  the hook returns the items because that is what a roster is.
+*/
+const MembersResponseSchema = z.object({
+  items: z.array(MemberSchema),
+  title: z.string().nullable().optional().default(null),
+  lastActiveAt: z.string().nullable().optional().default(null),
+});
+
 export function useHouseMembers(id: string, enabled: boolean) {
   const query = useQuery({
     queryKey: ["ms", "house", id, "members"],
-    queryFn: async () => z.array(MemberSchema).parse(await msApi.authedGet(`/conversations/${id}/members`)),
+    queryFn: async () =>
+      MembersResponseSchema.parse(await msApi.authedGet(`/conversations/${id}/members`)).items,
     enabled: enabled && id.length > 0,
     retry: (count, error) => errorCode(error) !== "NOT_FOUND" && count < 1,
   });

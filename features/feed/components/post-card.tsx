@@ -606,6 +606,7 @@ export function PostCard({
   winkSlot,
   tipSlot,
   onOpenMedia,
+  onOpenPost,
   onQuote,
   full = false,
   compact = false,
@@ -644,6 +645,12 @@ export function PostCard({
   tipSlot?: (post: Post) => React.ReactNode;
   /** Promotes a media card into the full-screen viewer. */
   onOpenMedia?: (post: Post) => void;
+  /**
+   * Overrides where tapping the card goes. Home's "Post For You" rail uses it
+   * to open the /feed timeline with THIS post pinned first, rather than the
+   * single-post permalink.
+   */
+  onOpenPost?: (post: Post) => void;
 }) {
   const like = useLikePost();
   const repost = useRepostPost();
@@ -659,6 +666,10 @@ export function PostCard({
     const target = event.target as HTMLElement;
     if (target.closest("a, button, input, textarea, [role='button']")) return;
     if (window.getSelection()?.toString()) return;
+    if (onOpenPost) {
+      onOpenPost(post);
+      return;
+    }
     router.push(sq(`/p/${post.id}`));
   };
   const bookmark = useBookmarkPost();

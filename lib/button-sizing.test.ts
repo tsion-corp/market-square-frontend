@@ -38,6 +38,10 @@ const DESIGN_LOCKED = new Set<string>([
   // Home's "Coming Soon" card is node 1542:3294 pixel for pixel — the 89-tall
   // cover and the 28-tall Share carry the file's own heights, not the scale.
   "components/layout/coming-soon-card.tsx",
+  // The profile's follow row is node 2112:19612 pixel for pixel — 28-tall
+  // controls and the 118-wide Following pill carry the file's own heights,
+  // not the scale (the same standing as follow-pill.tsx's 78×38).
+  "features/profile/components/profile-action-row.tsx",
   // A gist room posted to the feed (2082:20198 / 20246 / 1356:32947). Its
   // three actions are 40 tall in all three states — the card's own geometry,
   // four under the touch floor and four over the scale's smallest desktop

@@ -147,6 +147,7 @@ export function FeedItemCard({
   winkSlot,
   tipSlot,
   onOpenMedia,
+  onOpenPost,
   onQuote,
   compact = false,
 }: {
@@ -160,6 +161,8 @@ export function FeedItemCard({
   tipSlot?: (post: Post) => React.ReactNode;
   /** Promotes a video card into the full-screen viewer. */
   onOpenMedia?: (post: Post) => void;
+  /** Overrides where tapping the card goes (see PostCard). */
+  onOpenPost?: (post: Post) => void;
   onQuote?: (post: Post) => void;
 }) {
   if (item.type === "post" && item.post)
@@ -170,6 +173,7 @@ export function FeedItemCard({
         followSlot={followSlot}
         winkSlot={winkSlot}
         onOpenMedia={onOpenMedia}
+        onOpenPost={onOpenPost}
         tipSlot={tipSlot}
         onQuote={onQuote}
         compact={compact}

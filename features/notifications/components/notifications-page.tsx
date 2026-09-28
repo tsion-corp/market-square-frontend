@@ -3,7 +3,7 @@
 import { friendsMomentFor } from "@/lib/friends-popup";
 import { notificationHref } from "@/lib/notification-href";
 import { openFriendsCard } from "@/lib/friends-card-store";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { inboxTime } from "@/lib/inbox-time";
 import { cn } from "@/lib/cn";
@@ -141,7 +141,13 @@ function headline(item: MarketNotification): string {
     case "role_resolved":
       return "Role resolved";
     case "message":
-      return "New message";
+      /*
+        A GROUP MESSAGE IS NOT A DIRECT MESSAGE, and the headline is where the
+        difference is cheapest to read. Falls back to "New message" while the
+        service sends no conversation — which is today — so this reads no worse
+        than it did and better the moment the field lands.
+      */
+      return item.conversation?.kind === "group" ? "New group message" : "New message";
     case "chat_request":
       return "Message request";
     case "group_added":
@@ -204,6 +210,21 @@ function describe(item: MarketNotification): string {
     case "role_resolved":
       return "Your role request has been resolved.";
     case "message":
+      /*
+        NAME THE ROOM WHERE THERE IS ONE. "Ada sent you a message" printed for
+        a room of forty people is not a small imprecision: "you" is the claim
+        that nobody else saw it, and a reader answering a group as though it
+        were private is a real way to be embarrassed by an interface.
+
+        Three states, not two. A named group names itself; a group whose title
+        the reader may no longer see still says it was a group; and no
+        conversation at all keeps the original sentence rather than guessing.
+      */
+      if (item.conversation?.kind === "group") {
+        return item.conversation.title
+          ? `${who} messaged ${item.conversation.title}.`
+          : `${who} sent a message to a group you are in.`;
+      }
       return `${who} sent you a message.`;
     case "chat_request":
       // A request is not yet a conversation, and the copy must not imply the
@@ -388,8 +409,26 @@ function Row({
   }
 
   if (!href) return <div className={className}>{body}</div>;
+  /*
+    TAPPING THE ROW IS WHAT READS IT.
+
+    This `<Link>` acknowledged nothing — it navigated and left the row unread,
+    and the page-level effect that marked EVERYTHING read on mount was quietly
+    covering for that. With the effect gone, the ordinary act of opening a
+    notification has to be the thing that clears it, or nothing ever would.
+
+    `onClick` rather than anything cleverer: it fires on a keyboard activation
+    as well as a pointer one, and the mutation is fire-and-forget — the reader
+    is already on their way to the destination and must never wait on it.
+  */
   return (
-    <Link href={href} className={className}>
+    <Link
+      href={href}
+      className={className}
+      onClick={() => {
+        if (unread) onMarkRead(item.id);
+      }}
+    >
       {body}
     </Link>
   );
@@ -429,14 +468,33 @@ export function NotificationsPage({
   */
   const unread = notifications.data?.pages[0]?.unreadCount ?? 0;
 
-  // Mark-as-read on view: opening the surface is the acknowledgement, so it
-  // fires once per arrival at the page rather than on every refetch.
-  const acknowledged = useRef(false);
-  useEffect(() => {
-    if (!authenticated || acknowledged.current || unread === 0) return;
-    acknowledged.current = true;
-    markRead.mutate(undefined);
-  }, [authenticated, unread, markRead]);
+  /*
+    OPENING THE PAGE IS NOT READING IT.
+
+    This marked EVERYTHING read the moment the surface mounted —
+    `markRead.mutate(undefined)`, where undefined means "all of them". So a
+    reader who glanced at the top of the list lost every row below the fold
+    they had never seen, and the badge said nothing was waiting when plenty
+    was. ogazboiz: "i also see the one that i've not actually read i've not
+    actually clicked — just the way normal notification actually works".
+
+    He is describing the platform convention, and it is the right one: a
+    notification is read when you OPEN it, or when you say so. Arriving at the
+    list is neither. Nothing about a row being on screen — or, worse, off it —
+    means it was read.
+
+    So mark-on-mount is gone and there are now three ways a row becomes read,
+    all of them a deliberate act:
+      · tapping the row, which is the ordinary case and did NOT do it before —
+        the bulk effect was covering for a `<Link>` that acknowledged nothing;
+      · the per-row dot, which has always been there;
+      · "Mark all read", which is the bulk action made EXPLICIT rather than a
+        side effect of navigation. Without it the badge would have become
+        unclearable, which is its own bug.
+  */
+  const markAllRead = () => {
+    if (unread > 0) markRead.mutate(undefined);
+  };
 
   return (
     <>
@@ -450,6 +508,51 @@ export function NotificationsPage({
       */}
       <div className="flex items-center justify-between gap-4 px-8 pb-2 pt-6">
         <h1 className="text-[24px] font-medium leading-[31.2px] text-white">Notifications</h1>
+
+        {/*
+          THE BULK ACTION, MADE EXPLICIT.
+
+          Clearing everything used to happen as a SIDE EFFECT of arriving at
+          the page. It is a real thing to want — it is just not something
+          navigation should do on your behalf — so it is a control you press.
+
+          It appears only when there is something to clear, and it counts, so
+          pressing it is a decision with a number attached rather than a blind
+          sweep. `unreadCount` is global and deliberately not filtered by the
+          group tab, so the label says what will actually happen even while a
+          bucket is selected.
+        */}
+        {authenticated && unread > 0 && (
+          <button
+            type="button"
+            onClick={markAllRead}
+            disabled={markRead.isPending}
+            /*
+              THE COUNT AND THE ACTION HAVE THE SAME SCOPE, and that is the
+              whole safety of this control.
+
+              `unreadCount` is GLOBAL — the service computes it with no group
+              argument while filtering the list beside it — and
+              `markRead(undefined)` is global too. So on a filtered tab the
+              button reads "Mark all read (40)" above three visible rows, and
+              it really does clear 40. The number IS the disclosure.
+
+              The failure to avoid is the two drifting apart: a per-tab count
+              on a global action would promise three and take forty, which is
+              the hazard the mount effect committed silently. The title says
+              the scope outright so a reader who has filtered does not have to
+              infer it from the mismatch.
+            */
+            title={
+              group
+                ? `Clears all ${unread} unread notifications, not only the ones in this filter`
+                : `Clears all ${unread} unread notifications`
+            }
+            className="ws-press ml-auto shrink-0 rounded-full px-3 py-1.5 text-[13px] leading-5 text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
+          >
+            Mark all read ({unread})
+          </button>
+        )}
 
         {/*
           742:15825 — 145x44 at a full round on `#979797` at 5%, the label at
