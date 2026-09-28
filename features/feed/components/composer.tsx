@@ -9,7 +9,7 @@ import type { ComposePrefill } from "@/lib/compose-prefill";
 import type { DeepLink } from "@/lib/api/schemas";
 import { LinkTargetPicker } from "@/components/ui/link-target-picker";
 import { Avatar } from "@/components/ui/avatar";
-import { IconClock, IconImage, IconLink, IconX } from "@/components/ui/icons";
+import { IconClock, IconEmoji, IconImage, IconLink, IconX } from "@/components/ui/icons";
 import { SymbolPicker } from "@/components/ui/symbol-picker";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { cn } from "@/lib/cn";
@@ -107,6 +107,40 @@ export function Composer({
   const gate = useGate();
   const create = useCreatePost();
   const upload = useUploadPostMedia();
+  /*
+    THE PICKER HAD NO TRIGGER AND NO OPEN STATE — it was mounted permanently.
+
+    `EmojiPicker` is the PANEL, not a button; the caller owns whether it is on
+    screen, which is what `chat-panel` does with `emojiOpen`. This composer
+    rendered it unconditionally, so on a phone a 240px `fixed` panel sat over
+    the post box from the moment the sheet opened: ogazboiz went to write a
+    post and could not see the field. On desktop it hid above the toolbar,
+    which is why it went unnoticed.
+
+    Same shape as the room's composer rather than a second one — a toggle, a
+    dismissal on click-away and Escape, and a close after a pick so the panel
+    does not sit over the text somebody just added to.
+  */
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const emojiWrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!emojiOpen) return;
+    const onDown = (event: PointerEvent) => {
+      if (emojiWrap.current && !emojiWrap.current.contains(event.target as Node)) {
+        setEmojiOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setEmojiOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [emojiOpen]);
+
   const field = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   // Seeded once. Later renders must not clobber what the person has typed, so
@@ -511,19 +545,42 @@ export function Composer({
             }}
           />
 
-          <EmojiPicker
-            onPick={(emoji) => {
-              const node = field.current;
-              const at = node?.selectionStart ?? text.length;
-              const next = `${text.slice(0, at)}${emoji}${text.slice(at)}`;
-              typing.update(next, at + emoji.length);
-              const caret = at + emoji.length;
-              window.requestAnimationFrame(() => {
-                node?.focus();
-                node?.setSelectionRange(caret, caret);
-              });
-            }}
-          />
+          {/* The panel is anchored to THIS wrapper on desktop (`md:absolute
+              md:bottom-full`), so it needs the positioned parent; on a phone
+              the panel is `fixed` and the wrapper only scopes the click-away. */}
+          <div ref={emojiWrap} className="relative shrink-0">
+            {emojiOpen && (
+              <EmojiPicker
+                onPick={(emoji) => {
+                  const node = field.current;
+                  const at = node?.selectionStart ?? text.length;
+                  const next = `${text.slice(0, at)}${emoji}${text.slice(at)}`;
+                  typing.update(next, at + emoji.length);
+                  const caret = at + emoji.length;
+                  // Closed on pick: the panel covers the field on a phone, and
+                  // leaving it up hides the character it just inserted.
+                  setEmojiOpen(false);
+                  window.requestAnimationFrame(() => {
+                    node?.focus();
+                    node?.setSelectionRange(caret, caret);
+                  });
+                }}
+              />
+            )}
+            <button
+              type="button"
+              aria-label="Add emoji"
+              aria-haspopup="dialog"
+              aria-expanded={emojiOpen}
+              onClick={() => setEmojiOpen((value) => !value)}
+              className={cn(
+                "ws-press flex text-white/50 transition-colors hover:text-white/80",
+                emojiOpen && "text-white"
+              )}
+            >
+              <IconEmoji className="h-5 w-5" />
+            </button>
+          </div>
 
           <button
             onClick={() => setKind(kind === "story" ? "update" : "story")}
