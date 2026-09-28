@@ -20,7 +20,7 @@ import {
   IconMenuPeople,
   IconMenuShare,
 } from "@/components/layout/house-menu";
-import { sq } from "@/lib/square-path";
+import { asset, sq } from "@/lib/square-path";
 import { cn } from "@/lib/cn";
 import { shortDateLabel } from "@/lib/format";
 
@@ -84,14 +84,52 @@ export function HouseProfileScreen({ id }: { id: string }) {
   // The replay card wears the room's topics as chips; the labels come from the
   // shared vocabulary rather than being title-cased off the key.
   const topics = useTopics();
+  /*
+    THE MEMBERS ROUTE WINS FOR A MEMBER, AND IT IS ABOUT THE FOLLOW EDGE.
+
+    The house read's roster is `.map(toSummary)` with NO follow hydration
+    (service `conversation-service.ts`, the `showRoster` branch), while
+    `listMembers` calls `hydrateFollowState` explicitly. So a tile built from
+    the house read carries no `isFollowing`, and `useIsFollowing` correctly
+    refuses to invent one — which renders "Follow" over somebody the reader
+    already follows. ogazboiz reported exactly that.
+
+    It is also the only COMPLETE list: the house read caps its roster at
+    `MEMBERS_ON_A_ROW = 4`, a constant written for the inbox's avatar stack
+    ("you, Ada and 4 others"), while this house has 246 members.
+
+    So: ask the route whenever it can answer — the reader is a member, or the
+    capped roster came back empty — and prefer its answer. The capped roster
+    stays as the fallback for the state the route cannot serve at all, a
+    SIGNED-OUT or non-member reader of a public house, which is the state the
+    design is drawn in. Neither is asked to cover the other's case.
+  */
+  const viewerIsMember = house.data?.viewerIsMember === true;
   const membersQuery = useHouseMembers(
     id,
-    Boolean(house.data) && fromHouse.length === 0,
+    Boolean(house.data) && (viewerIsMember || fromHouse.length === 0),
   );
+  const fromRoute = membersQuery.data ?? [];
   const roster =
-    fromHouse.length > 0
-      ? fromHouse.map((profile) => ({ profile }))
-      : (membersQuery.data ?? []);
+    fromRoute.length > 0 ? fromRoute : fromHouse.map((profile) => ({ profile }));
+  /*
+    FIVE TILES THEN THE CONTROL — `Frame 2147225670` draws exactly five
+    members and a sixth cell that is "View all". It was twelve here, a number
+    from nowhere in the file.
+  */
+  const MEMBERS_ON_THE_ROW = 5;
+  const [showAllMembers, setShowAllMembers] = useState(false);
+  const shownMembers = showAllMembers ? roster : roster.slice(0, MEMBERS_ON_THE_ROW);
+  /*
+    The service's own total, which is NOT capped — `memberCount` is computed
+    from the full participant list even where the roster beside it is trimmed
+    to four. Falling back to the list's length keeps the control honest for a
+    house whose count did not come back rather than inventing one.
+  */
+  const memberTotal = house.data?.memberCount ?? null;
+  const hiddenMembers = showAllMembers
+    ? 0
+    : Math.max(0, (memberTotal ?? roster.length) - shownMembers.length);
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -450,65 +488,64 @@ export function HouseProfileScreen({ id }: { id: string }) {
             </h2>
             {/* `Frame 2147225670` — the tiles 24 apart, centred on each other,
                 and the rail clips rather than wraps: the file draws one row. */}
-            <ul className="flex items-center gap-6 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {roster.slice(0, 12).map((member) => (
+            <ul
+              className={cn(
+                "flex items-center gap-6 pb-1",
+                // Expanded, the row becomes the grid the design's single row
+                // cannot be: 246 members do not fit on one line at any width.
+                showAllMembers
+                  ? "flex-wrap"
+                  : "overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+              )}
+            >
+              {shownMembers.map((member) => (
                 <HouseMemberTile
                   key={member.profile.id}
                   profile={member.profile}
                 />
               ))}
-              {/* `Frame 2147225673` — View all: a 48 disc over its label, both
-                  centred in a 104 x 113 cell so it sits on the tiles' photos
-                  rather than their names. It only appears when there is more
-                  than the row shows — a "View all" over everything there is
-                  would be a link to the same thing. */}
-              {roster.length > 12 && (
+              {/*
+                `Frame 2147225673` — View all: a 48 disc over its label, both
+                centred in a 104 x 113 cell so it sits on the tiles' photos
+                rather than their names.
+
+                IT IS GATED ON THE TRUE TOTAL, NOT ON THE LIST WE HOLD.
+
+                It was `roster.length > 12`, and the house read caps its roster
+                at four — so on a 246-member house the control could never
+                appear, which is what ogazboiz hit. `memberCount` is the
+                service's own total and is not capped, so it is the only number
+                that can answer "is there more than this row shows".
+
+                `hiddenMembers` falls back to the list's own length for a house
+                whose count did not come back, and a house with nothing hidden
+                still draws no control — a "View all" over everything there is
+                would be a link to the same thing.
+              */}
+              {hiddenMembers > 0 && (
                 <li className="flex h-[113px] w-[104px] shrink-0 flex-col items-center justify-center gap-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      document
-                        .getElementById("house-members")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    }
-                    className="ws-press grid size-12 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-                    aria-label="View all members"
+                    onClick={() => setShowAllMembers(true)}
+                    className="ws-press grid size-12 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                    aria-label={`View all ${memberTotal ?? roster.length} members`}
                   >
-                    <svg
-                      aria-hidden
-                      viewBox="0 0 16 16"
-                      className="size-4"
-                      fill="none"
-                    >
-                      <circle
-                        cx="5.6"
-                        cy="5"
-                        r="2.1"
-                        stroke="currentColor"
-                        strokeWidth="1.3"
+                    {/* `Button` 24 at white/10 INSIDE the 48 — the design
+                        nests two discs, so the inner one reads a step lighter
+                        than the outer rather than being one flat circle. */}
+                    <span className="grid size-6 place-items-center rounded-full bg-white/10">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={asset("/icons/house-members/people.svg")}
+                        alt=""
+                        aria-hidden
+                        className="h-3 w-3"
                       />
-                      <circle
-                        cx="11"
-                        cy="5.6"
-                        r="1.7"
-                        stroke="currentColor"
-                        strokeWidth="1.3"
-                      />
-                      <path
-                        d="M1.9 12.4c0-1.8 1.7-2.8 3.7-2.8s3.7 1 3.7 2.8"
-                        stroke="currentColor"
-                        strokeWidth="1.3"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M11.2 9.9c1.7.1 2.9 1 2.9 2.5"
-                        stroke="currentColor"
-                        strokeWidth="1.3"
-                        strokeLinecap="round"
-                      />
-                    </svg>
+                    </span>
                   </button>
-                  <span className="text-[14px] leading-[16.5px] text-white">
+                  {/* 14/16.5 at white 50% — the file's own opacity, not a
+                      muted token that happens to look similar. */}
+                  <span className="text-[14px] leading-[16.5px] text-white/50">
                     View all
                   </span>
                 </li>

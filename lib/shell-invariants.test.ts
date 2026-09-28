@@ -5166,17 +5166,69 @@ describe("A house has its own page, the way a person does", () => {
       here" and "nobody is in here" are different things.
     */
     /*
-      ONE ROSTER, TWO SOURCES, and the house read wins. It carries a capped
-      roster for a PUBLIC house — including to a signed-out stranger, the state
-      the design is built around — while the members route is bearerAuth and
-      serves a member of a PRIVATE house, which the house read deliberately
-      will not. Neither is asked to cover the other's case, and an empty array
-      is never read as "no members": a private house answers [] to everyone
-      outside it, and `memberCount` stays the truth.
+      ONE ROSTER, TWO SOURCES, AND THE MEMBERS ROUTE NOW WINS.
+
+      This asserted the opposite — that the house read won — and the house read
+      is the source that cannot carry a follow edge. Its roster is
+      `.map(toSummary)` with no follow hydration, while `listMembers` calls
+      `hydrateFollowState`, so a tile built from the house read renders
+      "Follow" over somebody the reader already follows. It is also capped at
+      four, a constant written for the inbox's avatar stack.
+
+      So the route is preferred wherever it can answer, and the capped roster
+      is the fallback for the one state the route cannot serve at all — a
+      SIGNED-OUT or non-member reader of a public house, which is the state the
+      design is drawn in. An empty array is still never read as "no members":
+      a private house answers [] to everyone outside it and `memberCount`
+      stays the truth.
     */
     assert.match(screen, /const fromHouse = house\.data\?\.members \?\? \[\];/);
-    assert.match(screen, /fromHouse\.length > 0\s*\n?\s*\?/);
+    assert.match(
+      screen,
+      /fromRoute\.length > 0 \? fromRoute : fromHouse\.map/,
+      "the members route must be preferred — it is the only source carrying isFollowing",
+    );
+    assert.match(
+      screen,
+      /viewerIsMember \|\| fromHouse\.length === 0/,
+      "the route must be asked for a member, not only when the capped roster is empty",
+    );
     assert.match(screen, /roster\.length > 0 && \(/);
+    /*
+      VIEW ALL IS GATED ON THE SERVICE'S TOTAL, NOT ON THE LIST WE HOLD.
+
+      It was `roster.length > 12` against a roster the service caps at four, so
+      on a 246-member house the control could never appear. `memberCount` is
+      not capped, and it is the only number that can answer "is there more than
+      this row shows".
+    */
+    assert.match(screen, /const memberTotal = house\.data\?\.memberCount \?\? null;/);
+    assert.match(screen, /hiddenMembers > 0 && \(/);
+    assert.doesNotMatch(
+      screen,
+      /roster\.length > 12/,
+      "gating View all on the held list hides it behind the service's own cap",
+    );
+    /*
+      The badges are the file's exported nodes, not hand-drawn look-alikes, and
+      the wink disc is WHITE 20% with a white face — the follow badge's solid
+      white and accent glyph is a different badge's colouring.
+    */
+    const tile = stripComments(read("components/layout/house-member-tile.tsx"));
+    for (const glyph of ["wink-face", "profile-tick", "profile-add"]) {
+      assert.match(
+        tile,
+        new RegExp(`icons/house-members/\\$\\{name\\}|${glyph}`),
+        `${glyph} must be the exported node`,
+      );
+    }
+    assert.doesNotMatch(tile, /<circle\s/u, "the glyphs must not be hand-drawn SVG again");
+    assert.match(tile, /bg-white\/20/, "the wink disc is white at 20%, not solid white");
+    assert.doesNotMatch(
+      tile,
+      /shadow-\[0_2px_8px/,
+      "effects is empty on both badge frames — the drop shadow was invented",
+    );
     /*
       The three fields the service is adding are parsed ahead of it, all
       optional, so each section appears the moment its field does and the
