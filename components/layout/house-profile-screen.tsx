@@ -369,7 +369,21 @@ export function HouseProfileScreen({ id }: { id: string }) {
       {/* `Frame 2147230547` — the body, 24 between its blocks. */}
       <div className="flex flex-col gap-6 pt-6">
         {data?.description && (
-          <p
+          /*
+            A `div`, NOT a `p` — `PostText` renders its own block element.
+
+            This was a paragraph wrapping a component that returns a
+            paragraph, which is invalid and a hydration error. It was also
+            silently breaking the clamp: a browser CLOSES the outer `<p>` when
+            it meets the inner one, so `line-clamp-6` was landing on an empty
+            element and the description, the renderer's paragraph and the
+            "Read more" button all ended up as siblings after it. Nothing was
+            ever clamped, and the button it pairs with had nothing to reveal.
+
+            As a `div` the clamp applies to the box that actually holds the
+            text, which is what it was written to do.
+          */
+          <div
             className={cn(
               // `whitespace-pre-line` is the whole of "they can format their
               // bio": the textarea has always accepted newlines and the column
@@ -397,7 +411,7 @@ export function HouseProfileScreen({ id }: { id: string }) {
                 Read more
               </button>
             )}
-          </p>
+          </div>
         )}
 
         {house.isPending && (
