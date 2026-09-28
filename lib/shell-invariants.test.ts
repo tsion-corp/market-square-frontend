@@ -6106,6 +6106,17 @@ describe("A message notification says which kind of conversation it came from", 
     assert.match(types, /\.default\(null\)\s*\n?\s*\.catch\(null\)/);
   });
 
+  /*
+    THE SAME BUG ONE KIND OVER. `mention` covers a post, a comment, a stream
+    AND a group chat, and printed one sentence for all four — so being named
+    in a private room of forty read exactly like being named in a public post.
+  */
+  it("says when a mention happened inside a group", () => {
+    assert.match(page, /\$\{who\} mentioned you in \$\{item\.conversation\.title\}\./);
+    assert.match(page, /\$\{who\} mentioned you in a group you are in\./);
+    assert.match(page, /\$\{who\} mentioned you\./, "the public sentence is unchanged");
+  });
+
   it("names the group, and still speaks when it cannot", () => {
     assert.match(page, /item\.conversation\?\.kind === "group" \? "New group message" : "New message"/);
     assert.match(page, /\$\{who\} messaged \$\{item\.conversation\.title\}\./);

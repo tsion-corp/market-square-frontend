@@ -93,6 +93,25 @@ export function notificationHref(item: NotificationDestination): string | null {
   }
   if (item.kind === "chat_request") return sq("/messages");
 
+  /*
+    A MENTION INSIDE A GROUP CHAT IS A CHAT EVENT TOO.
+
+    `mention` is written from four places — a post, a comment, a stream, and a
+    GROUP MESSAGE (`conversation-service.ts`, the fan-out beside the `message`
+    one). Only the first three carry a `postId` or a `streamId`, so a group
+    mention fell all the way through to `profileHref(actor)` and landed the
+    reader on the profile of the person who named them — which is the exact
+    bug the comment above describes for `message`, one kind further down the
+    same function. It was fixed there and left here.
+
+    Placed BEFORE the post and stream branches on purpose: a row that somehow
+    carried both should still open the thread it names, because that is the
+    specific place rather than the general one.
+  */
+  if (item.kind === "mention" && item.conversation?.id) {
+    return sq(`/messages/${encodeURIComponent(item.conversation.id)}`);
+  }
+
   // A gist room and a broadcast are both streams. See the header.
   if (item.streamId) {
     // `housePath` and `profileHref` already return /square paths; `sq` is idempotent.
