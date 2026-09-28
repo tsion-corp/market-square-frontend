@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DecaneKit } from "decane-connect-kit";
+import { SQUARE_WALLET_PROTECTION } from "@/lib/wallet-protection";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { createQueryClient } from "@/lib/query-client";
@@ -9,6 +10,7 @@ import { DEMO_AUTH } from "@/lib/auth-mode";
 import { useDecaneCredentials } from "@/hooks/use-decane-credentials";
 import { DecaneRecoveryHost } from "@/components/providers/decane-recovery-host";
 import { DecaneTokenBridge } from "@/components/providers/decane-token-bridge";
+import { SquareHandoff } from "@/components/providers/square-handoff";
 import {
   collectRotatedRecoveryPassword,
   deliverRecoveryFile,
@@ -43,7 +45,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
  */
 function DecaneAuthProvider({ children }: { children: React.ReactNode }) {
   const decane = useDecaneCredentials();
-  if (!decane) return <div className="min-h-dvh bg-[#0F0F0F]" aria-busy="true" />;
+  if (!decane)
+    return <div className="min-h-dvh bg-[#0F0F0F]" aria-busy="true" />;
   return (
     <DecaneKit
       config={{
@@ -55,11 +58,22 @@ function DecaneAuthProvider({ children }: { children: React.ReactNode }) {
           authMethods: ["google", "email", "x"],
           chains: DECANE_CHAINS,
           showStatusOverlay: false,
-          // No passkey or password at sign-in. Square is a place people read
-          // and post first; the wallet is protected at the moment it is first
-          // used (hooks/use-evm-send, lib/wallet-protection), not as the price
-          // of getting in the door.
-          deferDeviceProtection: true,
+          // The identity tier: no passkey, no password, nothing stored on the
+          // device — ever. Square is a place people read and post first, and
+          // signing in is the whole ceremony. Existing readers port on their
+          // next sign-in with the same wallet; see lib/wallet-protection for
+          // the security statement and why the send gate is a no-op here.
+          protection: SQUARE_WALLET_PROTECTION,
+          // Keep the session across tabs, not just across reloads. Without it
+          // closing the tab reads as being signed out, which is most of what
+          // people meant by "it signs me out too quickly" — the enclave session
+          // is still valid for hours at that point.
+          //
+          // The trade: the session handle is the signing credential, so this
+          // widens where it can be read from one tab to the whole origin. Square
+          // defers device protection anyway, so the wallet is protected at first
+          // use rather than at sign-in; this does not change that.
+          resumeSessionAcrossTabs: true,
           onRecoveryRotated: collectRotatedRecoveryPassword,
           onRecoveryFileReady: deliverRecoveryFile,
           promptForRecoveryFile,
@@ -69,6 +83,7 @@ function DecaneAuthProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      <SquareHandoff />
       <DecaneTokenBridge />
       <DecaneRecoveryHost />
     </DecaneKit>

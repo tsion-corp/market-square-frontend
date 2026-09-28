@@ -28,8 +28,11 @@ export async function fetchTipCapability() {
  * nothing here is hydrated with a profile. `amountKash` stays a string.
  *
  * `limit` is the only parameter the route takes — no cursor, so this is a
- * recent-window read rather than a pageable history. 200 is what the gift
- * gallery needs to count honestly; it is not a claim to have every tip ever.
+ * recent-window read rather than a pageable history. 100 is the most the
+ * route accepts (`tipsReceivedQuerySchema`, max 100): asking for 200 was a
+ * 400 on every profile visit — VALIDATION_ERROR, "Too big: expected number
+ * to be <=100" — which the gallery read as "no counts", silently. It is not
+ * a claim to have every tip ever.
  */
 /**
  * WHERE A TIP CAME FROM — `source` on `TipWithContext`.

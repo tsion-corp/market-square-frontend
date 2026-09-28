@@ -117,6 +117,32 @@ export function useMessages(conversationId: string, open: boolean) {
 }
 
 /**
+ * The thread's OLDER pages, driven by the reader scrolling up.
+ *
+ * A second query rather than turning useMessages into an infinite one: the
+ * newest page polls every few seconds, and an infinite query refetches every
+ * loaded page on each poll — a long history would cost a page per 5s for
+ * every page the reader had opened. History does not change; it is fetched
+ * once per page and kept. Keyed OUTSIDE the ["ms", "messages", id] prefix on
+ * purpose, so the invalidations a send or a read receipt fire on the newest
+ * page leave it alone.
+ *
+ * `startCursor` is the newest page's `nextCursor`: where history begins. Null
+ * until that page has loaded, or when the thread is shorter than one page.
+ */
+export function useMessageHistory(conversationId: string, startCursor: string | null) {
+  return useInfiniteQuery({
+    queryKey: ["ms", "messages-history", conversationId],
+    queryFn: ({ pageParam }) => fetchMessages(conversationId, pageParam ?? undefined),
+    initialPageParam: startCursor,
+    getNextPageParam: (last) => last.nextCursor,
+    enabled: Boolean(conversationId) && startCursor !== null,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
  * The roster behind a group thread's avatars and its members sheet.
  *
  * ONE query for both, deliberately. The bubbles need it to turn a `senderId`

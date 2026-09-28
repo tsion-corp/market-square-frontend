@@ -23,6 +23,16 @@ function wallet(state: { protected: boolean; protectResult?: boolean }) {
 }
 
 describe("wallet protection before a first action", () => {
+  it("does nothing at all in the identity tier — no check, no ask, no prompt", async () => {
+    // protectDevice() is a documented no-op returning false there; running the
+    // gate would read that as "declined" and refuse every send.
+    const w = wallet({ protected: false, protectResult: false });
+    let asked = false;
+    await ensureWalletProtected(w, async () => { asked = true; return true; }, "identity");
+    assert.equal(asked, false);
+    assert.deepEqual(w.calls, []);
+  });
+
   it("passes a protected device through without asking", async () => {
     const w = wallet({ protected: true });
     let asked = false;
