@@ -6,7 +6,7 @@ import { useGate } from "@/hooks/use-gate";
 import { RailMenu } from "@/components/layout/app-shell";
 import { ExploreSettingsMenu } from "@/components/layout/explore-settings-menu";
 import { LocationSheet } from "@/components/layout/location-sheet";
-import { IconHomeFilter, IconHomeFilterCaret, IconHomeSettings } from "@/components/ui/home-icons";
+import { IconHomeFilter, IconHomeFilterCaret } from "@/components/ui/home-icons";
 import { IconTopSearch } from "@/components/ui/topbar-icons";
 
 /**
@@ -128,7 +128,12 @@ export function HomeTopRow({
           : "border-white/40 hover:border-white/55"
       )}
     >
-      <IconHomeSettings className={cn("h-5 w-5 shrink-0", open ? "text-[#9F65FD]" : "text-[#D9D9D9]")} />
+      {/* A FILTER glyph, not a gear. The pill opens exploration preferences
+          that narrow what the grid shows — that is filtering, and a settings
+          cog beside a search field read as account settings, which it is not
+          (ogazboiz, 2026-09-28). `IconHomeFilter` is the same mark the houses
+          row's filter pill already uses, so the two surfaces now agree. */}
+      <IconHomeFilter className={cn("h-5 w-5 shrink-0", open ? "text-[#9F65FD]" : "text-[#D9D9D9]")} />
     </span>
   );
 

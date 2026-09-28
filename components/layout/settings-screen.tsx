@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/hooks/use-auth";
 import { useMe } from "@/hooks/use-me";
+import { useLogout } from "@/hooks/use-logout";
 import { errorCode } from "@/lib/api/envelope";
 import { countryOptions } from "@/lib/countries";
 import { SignInPrompt } from "@/components/ui/states";
@@ -34,6 +35,7 @@ import {
   IconSettingsMessage,
   IconSettingsChevron,
   IconExternalLink,
+  IconLogout,
 } from "@/components/ui/icons";
 import { sq } from "@/lib/square-path";
 
@@ -710,6 +712,7 @@ export function SettingsScreen({ username }: { username: string }) {
   const { ready, authenticated } = useAuth();
   const me = useMe();
   const router = useRouter();
+  const logout = useLogout();
   /*
     SETTINGS ARE YOUR OWN. The route carries a username, so
     `/u/<someone-else>/settings` is a URL anybody can type — it lands on the
@@ -830,6 +833,33 @@ export function SettingsScreen({ username }: { username: string }) {
             />
           ))}
         </nav>
+
+        {/*
+          LOG OUT — an account ACTION, not a preference, so it sits APART at the
+          foot of the list rather than among the toggles inside a section. It is
+          also the one place a person can sign out of on desktop now that the
+          account menu dropped it (app-shell, 2026-09-22), so it earns a real
+          home here. `useLogout` carries the whole flow — the "you're live"
+          confirm, the session teardown and the hard reload to /auth — so this
+          is only the trigger. Destructive tone is house-menu's #FF6B6B, the
+          app's own for a row like this; it is never the reserved --color-like
+          (a heart) or --color-down (a value delta).
+        */}
+        <button
+          type="button"
+          onClick={() => void logout()}
+          className="mt-4 flex h-[81px] w-full items-center gap-4 border-y border-white/15 px-4 py-6 text-left transition-colors hover:bg-white/[0.03]"
+        >
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[#FF6B6B]/10">
+            <IconLogout className="size-5 text-[#FF6B6B]" />
+          </span>
+          <div className="flex min-w-0 flex-col gap-2">
+            <p className="text-base font-bold leading-4 text-[#FF6B6B]">Log out</p>
+            <p className="text-[13px] font-normal leading-5 text-white/50">
+              Sign out of your account on this device.
+            </p>
+          </div>
+        </button>
       </div>
 
       {/* THE CHOSEN SETTING — only once one is chosen: the second column from

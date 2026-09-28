@@ -3084,8 +3084,12 @@ describe("Gist rooms can be scheduled, and upcoming ones look like open ones", (
     assert.match(row, /relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-\[0\.68px\]/);
     // The same 0.68 hairline the field uses, so the pair reads as one.
     assert.match(row, /border-white\/40/);
-    assert.match(row, /<IconHomeSettings className=\{cn\("h-5 w-5 shrink-0", open \? "text-\[#9F65FD\]" : "text-\[#D9D9D9\]"\)\} \/>/);
-    // The settings control draws no caret of its own any more.
+    // A FILTER glyph, not a gear — the pill narrows what the grid shows, and a
+    // settings cog beside a search field read as account settings (ogazboiz,
+    // 2026-09-28). Same mark the houses filter pill uses, so the two agree.
+    assert.match(row, /<IconHomeFilter className=\{cn\("h-5 w-5 shrink-0", open \? "text-\[#9F65FD\]" : "text-\[#D9D9D9\]"\)\} \/>/);
+    assert.doesNotMatch(row, /<IconHomeSettings/, "the search pill is a gear again");
+    // The control draws no caret of its own any more.
     assert.doesNotMatch(row, /-scale-y-100/, "the settings caret is back");
     // It opens EXPLORE SETTINGS (1317:158022) in RailMenu's own panel — not the
     // account menu any more (ogazboiz, 2026-09-12) — for everyone.
