@@ -655,14 +655,41 @@ function DeckCard({
         // `pan-y` hands vertical scrolling back to the browser, so the deck can
         // never trap the timeline it sits inside.
         front && "touch-pan-y select-none",
+        /*
+          A CARD THAT IS NOT THE FRONT ONE TAKES NO POINTERS AT ALL.
+
+          `aria-hidden` above says it is not content; this says it is not a
+          target. They have to agree, and they did not: a back card was hidden
+          from a screen reader and still fully tappable, which is the worst of
+          both — invisible to the people who navigate by structure, live to
+          everybody who navigates by touch.
+
+          Belt to pal-card's braces. That guards the card FACE for any caller;
+          this guarantees the deck's own invariant no matter what is added to
+          a card later. Paging stays with the arrows, the dots and the swipe,
+          which are the affordances the file draws.
+        */
+        !front && "pointer-events-none",
         // No transition WHILE a finger is down, or the card lags the hand.
         swipe.dragging
           ? "transition-none"
           : "transition-[transform,opacity] duration-300 motion-reduce:transition-none",
         front ? "z-20" : "z-10",
-        // The next person is blurred so who is next stays a surprise; the
-        // previous card stays dim and readable, as the file draws it.
-        node.hideNext && slot === 1 && "blur-[7px]"
+        /*
+          BOTH SIDES BLUR, which is NOT what the file draws.
+
+          The design blurs only the NEXT card — "who is next stays a surprise"
+          — and leaves the previous one dim but readable. ogazboiz looked at it
+          running and asked for the left to match the right, and it is his
+          call: the asymmetry reads as a rendering fault rather than as intent,
+          and the card behind you is somebody you have already been shown, so
+          softening it gives nothing away that was not already given.
+
+          Still gated on `hideNext`, so a deck configured to show its next card
+          plainly keeps both sides sharp rather than gaining a blur the layout
+          never asked for.
+        */
+        node.hideNext && Math.abs(slot) === 1 && "blur-[7px]"
       )}
       style={{
         // The card's box is the file's 543.42 × 718; it is centred on the front

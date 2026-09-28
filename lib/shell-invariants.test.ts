@@ -391,6 +391,50 @@ describe("the friends deck is node 844:18440's, on Home and on /pals", () => {
   const layout = stripComments(read("lib/deck-layout.ts"));
   const card = stripComments(read("components/layout/pal-card.tsx"));
 
+  /*
+    A CARD BEHIND THE FRONT ONE IS A PICTURE, NOT A TARGET.
+
+    The back cards were `aria-hidden` and fully tappable — hidden from anyone
+    navigating by structure, live to everyone navigating by touch. The buttons
+    on them were already `disabled`; the card FACE, the biggest target on
+    screen, was a plain `<Link>` carrying `tabIndex={-1}` alone, which governs
+    the tab order and nothing else. Tapping the blurred card at either edge of
+    the fan opened that person.
+  */
+  it("takes no pointer on any card but the front one", () => {
+    assert.match(
+      deck,
+      /!front && "pointer-events-none"/,
+      "a back card must refuse pointers, not just hide from a screen reader",
+    );
+    assert.match(
+      card,
+      /!interactive && "pointer-events-none"/,
+      "the card face is the largest target and must go inert with the card",
+    );
+    assert.match(card, /aria-disabled=\{interactive \? undefined : true\}/);
+    assert.doesNotMatch(
+      card,
+      /tabIndex=\{interactive \? undefined : -1\}\s*\n\s*className="absolute block overflow-hidden"/,
+      "tabIndex alone was the bug: it never refused a tap",
+    );
+  });
+
+  /*
+    BOTH SIDES BLUR, and that is a DEPARTURE from the file, asked for after
+    looking at it running: the design softens only the next card so who is
+    next stays a surprise, and the asymmetry read as a rendering fault. The
+    card behind you is somebody already shown, so it gives nothing away.
+  */
+  it("blurs the card on each side, not only the one ahead", () => {
+    assert.match(deck, /Math\.abs\(slot\) === 1 && "blur-\[7px\]"/);
+    assert.doesNotMatch(
+      deck,
+      /slot === 1 && "blur-\[7px\]"/,
+      "blurring only the next card leaves the fan lopsided",
+    );
+  });
+
   it("DIMS the two cards behind by the node's own opacity — 0.39 and 0.30", () => {
     // The file draws depth here with layer opacity on the whole back card,
     // photo and controls included; the front card alone is at full strength.
