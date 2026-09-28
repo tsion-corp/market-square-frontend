@@ -82,7 +82,18 @@ export function ProfileCover({
   const [scale, setScale] = useState<number | null>(null);
   /* The picture open full screen, if any: the profile picture or the cover. */
   const [viewing, setViewing] = useState<{ src: string; alt: string } | null>(null);
-  const coverSrc = profile.coverUrl ?? asset("/profile/default-cover.jpg");
+  /*
+    THE COVER IS HARD-CODED FOR NOW — node 2102:18362 (2026-09-28): the ARK
+    mascot standing on the orange checkered sweep, composed from the node's own
+    raster layers at its exact geometry (bg crop offset −300.94/−118.02, the
+    1024² mascot cut-out at 293² @ 133.5,63) and baked at 3x to
+    `public/profile/ark-cover.jpg`. EVERY profile wears it — `coverUrl` is
+    deliberately not read — until the avatar system ogazboiz's teammate is
+    building ships and profiles get generated covers of their own. The person's
+    own PROFILE PICTURE (the rounded tile below) is untouched and still theirs
+    to change. To restore user covers: `profile.coverUrl ?? asset(…)` again.
+  */
+  const coverSrc = asset("/profile/ark-cover.jpg");
   const avatarSrc = profile.avatarUrl ?? artworkForSeed(resolveSeed({ id: profile.id, name }));
   useLayoutEffect(() => {
     const el = cardRef.current;
@@ -108,59 +119,30 @@ export function ProfileCover({
       above the actions; `md:` returns the file's frame.
     */
     <div ref={cardRef} className="relative h-[300px] w-full overflow-hidden rounded-[20px] md:aspect-[741/473] md:h-auto">
-      {/*
-        THE COVER PHOTOGRAPH, AND THE FALLBACK IT KEEPS.
-
-        `coverUrl` was requested when `PublicProfile` carried `avatarUrl` and
-        nothing else pictorial, and the service has since added it — confirmed
-        on the live contract at `:8094`, where it is on both `Profile` and
-        `PublicProfile`.
-
-        THE SEEDED ARTWORK STAYS AS THE FALLBACK, and not merely for
-        tidiness: the deployed spec does NOT carry the field yet, so in
-        production every profile still answers without it. Absent, this is the
-        same `GradientThumb` that shipped before — seeded on the username, so
-        it is the same picture on every visit rather than a new one each
-        render — and it is also what a person who has set no cover gets.
-      */}
-      {/*
-        THE DEFAULT IS THE FILE'S OWN PHOTOGRAPH — node 543:45694, the cover
-        every profile in the design wears until the person sets one. It is the
-        image fill `b4f45247…` exported from the file (a lone winter tree, an
-        Unsplash photograph per its EXIF), resized to 1482 wide — 2x of the
-        741 card — at `public/profile/default-cover.jpg`.
-
-        HOW IT IS FRAMED, and why not with the file's numbers. The node crops
-        the picture to its middle half (`cropTransform` y-scale 0.5, offset
-        0.134) and STRETCHES that 3:1 band into the 1.57:1 card, so the render
-        shows the tree pulled nearly twice as tall as it is. That is a
-        distortion, not a composition, and a photograph nobody chose should at
-        least be the photograph. So the same band is shown at its true ratio:
-        `object-cover` at the band's centre (62.5% across — the tree — and
-        38.4% down), scaled 1.9x about that point, which puts the tree where
-        the render puts it without bending it.
-
-        The seeded GradientThumb that stood here is gone: a default the file
-        draws replaces a default we invented.
-      */}
-      {profile.coverUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={profile.coverUrl}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={asset("/profile/default-cover.jpg")}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 h-full w-full scale-[1.9] object-cover"
-          style={{ objectPosition: "62.5% 38.4%", transformOrigin: "62.5% 38.4%" }}
-        />
-      )}
+      {/* THE COVER IS LAYERED, not one flat picture, so the mascot's head can
+          be swapped per user (the seeded-avatar personalisation ogazboiz is
+          building toward). Layer 1: the orange checkered sweep, baked from the
+          node's own raster at its exact crop (offset −300.94/−118.02).
+          Layer 2: the 1024² transparent mascot cut-out — the very bitmap the
+          file's SVG wraps — positioned by the node's geometry: a 293² box at
+          (133.5, 63) in the 535×342 frame → centre-x 52.34%, height 85.67%,
+          its feet 4.09% below the card edge (the frame clips them, as the
+          file does). Layer 3 (coming): the per-seed HEAD overlay. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={asset("/profile/ark-cover-bg.jpg")}
+        alt=""
+        aria-hidden
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={asset("/profile/ark-mascot.png")}
+        alt=""
+        aria-hidden
+        className="absolute w-auto max-w-none -translate-x-1/2"
+        style={{ left: "52.336%", bottom: "-4.094%", height: "85.673%" }}
+      />
 
       {/* 108 of 473 at the top, 215 at the foot — see the note above for why
           these are vertical and why the alphas are not the stops' 1.0. */}

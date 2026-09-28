@@ -2419,7 +2419,9 @@ describe("Web push", () => {
   });
 
   it("forgets this browser on sign-out and re-records it on load", () => {
-    assert.match(stripComments(read("hooks/use-logout.ts")), /await unsubscribeThisBrowser\(\);/);
+    // Still called on sign-out, now best-effort so a dead session (401) can't
+    // block the logout from completing.
+    assert.match(stripComments(read("hooks/use-logout.ts")), /await Promise\.resolve\(unsubscribeThisBrowser\(\)\)\.catch/);
     assert.match(stripComments(read("components/layout/app-shell.tsx")), /if \(authenticated\) void refreshPushSubscription\(\);/);
   });
 

@@ -66,7 +66,7 @@ export function ProfileActionRow({
   if (me.data?.id === profile.id) return null;
 
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex items-center justify-between gap-3 py-4">
       {/* LEFT — who follows this person: a face pile of the first three, then
           the names and how many more (node 2112:19612). Real followers from the
           paged list; absent (an empty span keeping justify-between) until any

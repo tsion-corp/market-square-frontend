@@ -26,6 +26,7 @@ import { defaultViewOnce, type MediaSource } from "@/features/messages/lib/camer
 import { CameraSheet } from "@/features/messages/components/camera-sheet";
 import { ViewOnceMark } from "@/components/ui/view-once";
 import { MediaSendBar } from "@/features/messages/components/media-send-bar";
+import { MediaEditor, type MediaEditorHandle } from "@/features/messages/components/media-editor";
 import { useQueryClient } from "@tanstack/react-query";
 import { isHttpUrl } from "@/lib/http-url";
 import { RowSkeleton } from "@/components/ui/skeleton";
@@ -827,7 +828,11 @@ function BubbleText({
       mentions={message.mentions}
       linkClassName={bubbleLinkClass(mine)}
       className={cn(
-        "min-w-0 text-[14px] font-normal leading-5 tracking-[-0.006em]",
+        // `overflow-wrap: anywhere`, not just break-words: a pasted URL is one
+        // unbreakable word, and break-words does not count toward intrinsic
+        // sizing — so the word pushed the bubble past its cap and ran over the
+        // stamp beside it. `anywhere` both breaks it and lets the box shrink.
+        "min-w-0 wrap-anywhere text-[14px] font-normal leading-5 tracking-[-0.006em]",
         mine ? "text-[#5A5A5A]" : "text-white",
         className
       )}
@@ -876,7 +881,10 @@ function ReplyQuote({
       {line && (
         <span
           className={cn(
-            "line-clamp-1 text-[12px] leading-4",
+            // `anywhere` beside the clamp: a pasted URL is one unbreakable
+            // word, and without it the excerpt's min-content width pushed the
+            // quote past the bubble's edge before the clamp could clip it.
+            "line-clamp-1 wrap-anywhere text-[12px] leading-4",
             mine ? "text-[#5A5A5A]" : "text-white/85",
             replyTo.deleted && "italic"
           )}
@@ -2013,11 +2021,21 @@ function MessageRow({
   openingSnap,
   onEdit,
   onRemove,
+  showSender,
+  senderRole,
 }: {
   message: Message;
   mine: boolean;
   group: boolean;
   sender: Profile | null;
+  /**
+   * Draw the sender's name INSIDE this bubble — the first message of a run in
+   * a group (ogazboiz, 2026-09-28: the name floating above the run sat "far
+   * from the sent message"; WhatsApp puts it in the bubble's own top line).
+   */
+  showSender?: boolean;
+  /** The sender's house role, for the chip beside the in-bubble name. */
+  senderRole?: string | null;
   /** Spends a snap. Given by the thread, which owns the mutation. */
   onOpenSnap: (messageId: string) => Promise<{ media: { url: string; kind: string | null } | null }>;
   /** True while THIS message's open is in flight. */
@@ -2142,7 +2160,27 @@ function MessageRow({
     []
   );
 
-  const quote = message.replyTo ? (
+  /*
+    WHO SAID IT — inside the bubble, WhatsApp's way (ogazboiz, 2026-09-28: the
+    run-level name above the bubble sat "far from the sent message"). It rides
+    the bubbles' existing top slot beside the quote, so the bubble stays a
+    direct child of its row and the `max-w-[min(85%,480px)]` cap keeps meaning
+    85% of the PANE — the wrap-in-a-column bug this name once caused cannot
+    come back this way. Once per run (`showSender`), incoming group bubbles
+    only: your own messages and a 1:1's need no name.
+  */
+  const senderHeader =
+    group && !mine && showSender ? (
+      <span className="flex max-w-full items-center gap-1.5">
+        <span className="min-w-0 truncate text-[12.5px] font-semibold leading-4 text-white">
+          {sender?.displayName ?? nameOf(message.senderId)}
+        </span>
+        {sender && <VerifiedBadge verification={sender.verification} className="h-3 w-3 shrink-0" />}
+        {senderRole ? <MemberRoleChip role={senderRole} /> : null}
+      </span>
+    ) : null;
+
+  const replyQuote = message.replyTo ? (
     <ReplyQuote
       replyTo={message.replyTo}
       mine={mine}
@@ -2150,6 +2188,14 @@ function MessageRow({
       onJump={onJump}
     />
   ) : undefined;
+  // The name then the quote, in the one slot every bubble renders at its top.
+  const quote =
+    senderHeader || replyQuote ? (
+      <>
+        {senderHeader}
+        {replyQuote}
+      </>
+    ) : undefined;
 
   // A removed message keeps its row but loses its attachment along with its
   // body — the whole point of the state is that the content is gone.
@@ -2464,6 +2510,9 @@ function Composer({
       : {}),
   };
   const canSend = canSendMessage(outgoing) && !send.isPending;
+  // The staged gallery image's editor (draw/text/stickers/crop), asked for its
+  // baked result on send.
+  const galleryEditorRef = useRef<MediaEditorHandle | null>(null);
 
   /**
    * Stop recording, upload, and stage the result like any other attachment.
@@ -2591,7 +2640,7 @@ function Composer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingId]);
 
-  const submit = () => {
+  const submit = async () => {
     /*
       SAVING AN EDIT AND SENDING A MESSAGE ARE THE SAME BUTTON, and the strip
       above the field is what tells them apart. Two buttons that look alike
@@ -2605,7 +2654,35 @@ function Composer({
       return;
     }
     if (!canSend) return;
-    send.mutate(outgoing, {
+    let payload = outgoing;
+    /*
+      A GALLERY PHOTO OR CLIP WAS EDITED ON ITS PREVIEW (draw / text / stickers,
+      plus crop on a photo): bake it, re-upload the result, and send THAT key.
+      The pick uploaded the original already, so an edit costs a second upload —
+      the honest price of editing after the fact, paid only when there really is
+      one. A clip re-encode happens inside exportImage and takes the clip's length.
+    */
+    if (
+      (attachment?.result.kind === "image" || attachment?.result.kind === "video") &&
+      galleryEditorRef.current?.hasEdits()
+    ) {
+      const edited = await galleryEditorRef.current.exportImage();
+      if (edited && payload.media) {
+        try {
+          const up = await uploadFile(edited.file, undefined, "attachment", "message");
+          payload = {
+            ...payload,
+            media: { ...payload.media, key: up.key, url: up.url, width: null, height: null },
+          };
+        } catch (cause) {
+          URL.revokeObjectURL(edited.url);
+          toast.error(cause instanceof Error ? cause.message : "That edit didn't upload.");
+          return;
+        }
+        URL.revokeObjectURL(edited.url);
+      }
+    }
+    send.mutate(payload, {
       onSuccess: () => {
         typing.reset();
         // Frees the object URL as well as clearing the row — the sent message
@@ -2732,18 +2809,19 @@ function Composer({
                 </svg>
               </button>
             </div>
-            {/* A chosen file, so it is shown WHOLE (object-contain) — the sender
-                framed it already; we do not re-crop it. */}
+            {/* The chosen file, shown whole. A photo or clip gets the editor
+                (draw / text / stickers; crop is photo-only) baked in on send;
+                a clip re-encode runs at send time. */}
             <div className="relative min-h-0 w-full flex-1 overflow-hidden bg-black sm:aspect-3/4 sm:flex-none">
-              {attachment.result.kind === "video" ? (
-                <video
+              {attachment.result.kind === "image" || attachment.result.kind === "video" ? (
+                <MediaEditor
+                  ref={galleryEditorRef}
                   src={attachment.previewUrl}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  controls
-                  className="h-full w-full object-contain"
+                  kind={attachment.result.kind === "video" ? "video" : "photo"}
+                  fileName={
+                    attachment.fileName ||
+                    (attachment.result.kind === "video" ? "video.mp4" : "photo.jpg")
+                  }
                 />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element -- a local blob preview
@@ -3467,47 +3545,22 @@ export function Thread({
             {groupBySender(day.messages).map((run) => (
               <div key={run.key} className="flex flex-col gap-4">
                 {/*
-                  WHO SAID IT, AND WHAT THEY ARE HERE — once per RUN, above it.
-
-                  A group showed a FACE and never a NAME, so telling two people
-                  apart meant recognising their avatar, and an admin speaking
-                  for the house read exactly like anybody else talking.
-
-                  IT SITS ABOVE THE RUN RATHER THAN INSIDE A MESSAGE, and that
-                  is not tidiness — it is the only place it does not break the
-                  bubble. A bubble is capped at `max-w-[min(85%,480px)]`, and
-                  85% resolves against ITS PARENT. Wrapping a bubble in a
-                  column to stack a name on top made that parent the column,
-                  which is shrink-to-fit — so the cap became 85% of the NAME's
-                  width: "okay" rendered as three stacked letters under a short
-                  name, and correctly under a long one (ogazboiz: "why is the
-                  test like that even though they type normal").
-
-                  Above the run, the bubble is a direct child of its row again
-                  and the percentage means what it always meant.
-
-                  A run is already consecutive messages from one sender, so
-                  once per run IS once per name — no index, no first-of check.
+                  WHO SAID IT lives INSIDE the first bubble of the run now
+                  (`showSender` — see MessageRow's senderHeader): the name
+                  floating above the run sat visibly apart from its message
+                  (ogazboiz, 2026-09-28), and inside the bubble is where
+                  WhatsApp settles it. Once per run is still once per name —
+                  a run is consecutive messages from one sender.
                 */}
-                {group && !(me.data && run.senderId === me.data.id) && senders.get(run.senderId) && (
-                  <span className="flex max-w-[240px] items-center gap-1.5 pl-1">
-                    <span className="truncate text-[12px] font-semibold leading-4 text-white/90">
-                      {senders.get(run.senderId)!.displayName}
-                    </span>
-                    <VerifiedBadge
-                      verification={senders.get(run.senderId)!.verification}
-                      className="h-3 w-3 shrink-0"
-                    />
-                    <MemberRoleChip role={roleOf(run.senderId) ?? ""} />
-                  </span>
-                )}
-                {run.messages.map((message) => (
+                {run.messages.map((message, index) => (
                   <MessageRow
                     key={message.id}
                     message={message}
                     mine={Boolean(me.data && message.senderId === me.data.id)}
                     group={group}
                     sender={senders.get(message.senderId) ?? null}
+                    showSender={index === 0}
+                    senderRole={roleOf(run.senderId)}
                     roomCardSlot={roomCardSlot}
                     onReply={setReplyTo}
                     onJump={jumpTo}
