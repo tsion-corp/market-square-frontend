@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { FeedItemCard, useFeed } from "@/features/feed";
 import type { Post, Profile } from "@/lib/api/schemas";
@@ -9,6 +10,25 @@ import { sq } from "@/lib/square-path";
 
 /** The design shows ten before the pill takes over (ogazboiz, 2026-09-12). */
 const SHOWN = 10;
+
+/**
+ * How many pages of the lane the rail will pull to try to FILL its ten.
+ *
+ * The rail keeps only media posts and text long enough to fill a card, and a
+ * page of thirty can hold very few of those — measured on the live for-you lane
+ * it was three. The rail reads only the pages that happen to be loaded, so on
+ * its own it showed those three; and because `refetchOnWindowFocus` refreshes
+ * page one whenever the reader returns to the tab, a burst of short posts at the
+ * top of the lane pushes the qualifying ones onto page two and the rail quietly
+ * shrinks — "why does Post For You become 1" (2026-09-28). So it pages forward
+ * until it has its ten or it runs out, the same "keep paging until it is worth
+ * showing" the discover grid uses — bounded here so a text-only lane cannot make
+ * the rail chase quality cards for ever (4×30 = 120 scanned, plenty to fill ten
+ * on any lane with even a little media, and a hard ceiling on the rail's own
+ * fetching). It drives the SAME shared query the timeline reads, so the extra
+ * pages are ones the timeline would have paged to anyway, not a second fetch.
+ */
+const MAX_PAGES = 4;
 
 /**
  * A text-only post shorter than this leaves the media card mostly empty, and
@@ -72,6 +92,24 @@ export function PostForYou({
     })
     .slice(0, SHOWN);
 
+  // Pull the next page until the rail has its ten or the lane runs dry — see
+  // MAX_PAGES. `hasNextPage`/`isFetchingNextPage` keep it from firing twice, and
+  // the page ceiling keeps a text-heavy lane from paging for ever; when the
+  // window refocuses and page one shrinks, this simply tops the rail back up.
+  const loadedPages = feed.data?.pages.length ?? 0;
+  const fetchNextPage = feed.fetchNextPage;
+  useEffect(() => {
+    if (
+      items.length < SHOWN &&
+      loadedPages > 0 &&
+      loadedPages < MAX_PAGES &&
+      feed.hasNextPage &&
+      !feed.isFetchingNextPage
+    ) {
+      void fetchNextPage();
+    }
+  }, [items.length, loadedPages, feed.hasNextPage, feed.isFetchingNextPage, fetchNextPage]);
+
   // Nothing to show is no section — never an empty shelf above a timeline that
   // is also empty.
   if (!feed.isPending && items.length === 0) return null;
@@ -101,8 +139,15 @@ export function PostForYou({
                   winkSlot={winkSlot}
                   tipSlot={tipSlot}
                   // Tapping a card opens the full /feed with THIS post pinned
-                  // first — "see more", starting from the one you chose.
+                  // first — "see more", starting from the one you chose. BOTH
+                  // the body (onOpenPost) AND the image/video (onOpenMedia) go
+                  // there: without onOpenMedia the card's video renders as a
+                  // bare inline player with no tap target, so tapping the clip
+                  // did nothing (2026-09-28). The media never opens the
+                  // immersive viewer from the rail — the rail is a taste, the
+                  // tap takes you INTO the feed.
                   onOpenPost={(post) => router.push(sq(`/feed?post=${post.id}`))}
+                  onOpenMedia={(post) => router.push(sq(`/feed?post=${post.id}`))}
                   compact
                 />
               </div>

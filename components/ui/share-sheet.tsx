@@ -2,9 +2,6 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import Link from "next/link";
-import { sq } from "@/lib/square-path";
-import { shareIntoPostText } from "@/lib/square-link";
 import { Sheet } from "@/components/ui/sheet";
 import { IconShareFacebook, IconShareTelegram, IconShareWhatsApp, IconShareX } from "@/components/ui/share-icons";
 import { IconMsShare } from "@/components/ui/design-icons";
@@ -201,33 +198,17 @@ export function ShareSheet({
           );
         })}
         {/*
-          POST IT HERE — the share that stays inside Square.
-
-          ogazboiz asked for X's behaviour (2026-09-21): share a link and post
-          it as a normal post, where the link arrives as a card rather than as
-          a string of characters. It reuses the composer's existing prefill
-          contract rather than inventing a second door: the compose query is
-          already how the friends card posts into Square.
-
-          Concatenation rather than a template literal, which looks fussy and
-          is not: lib/button-sizing.test.ts scans template literals naively, and
-          a backtick here pairs with one in the header comment to swallow half
-          the file into a single "class string" that trips the ratchet.
-
-          NO TRACKING CHANNEL on this one. The others tag the URL with where it
-          was shared because they leave the product; this link is about to sit
-          in Square's own feed, where "shared via Square" says nothing.
+          NO "Post to Square" ROW. Sharing a post or profile back into Square's
+          own feed is redundant when the reader is already inside the Square
+          app — the outward destinations (WhatsApp, X, …) and Copy link are the
+          whole point of this sheet, which is reaching people who are NOT here.
+          (It was added on 2026-09-21 for X's behaviour and removed 2026-09-28
+          on the same owner's call — "we are already on the square application,
+          there's no need to share to square".) A Square link pasted into a
+          post still renders as a card via `SharedLinkCard`; that path is
+          unaffected. shell-invariants pins this row's ABSENCE so it cannot
+          quietly return.
         */}
-        <Link
-          href={sq("/?compose=1&text=" + encodeURIComponent(shareIntoPostText(payload.url)))}
-          onClick={onClose}
-          className={row}
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white">
-            <IconMsShare className="h-5 w-5" />
-          </span>
-          Post to Square
-        </Link>
         <button type="button" onClick={() => void copy()} className={row}>
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white">
             <IconLink className="h-5 w-5" />

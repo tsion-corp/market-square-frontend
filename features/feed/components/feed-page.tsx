@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { Spinner } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/ui/states";
@@ -403,6 +404,22 @@ export function FeedPage({
     }
     document.startViewTransition(apply);
   };
+
+  /*
+    ON HOME, TAPPING A POST OPENS "VIEW ALL POST", NOT THE FULL-SCREEN VIEWER.
+    ogazboiz/PM (2026-09-28): tapping the card — its words OR its image/video —
+    should land on the feed with THAT post pinned to the top and the rest of the
+    lane scrolling under it, the same door the "Post For You" rail already uses
+    (`?post=<id>`, pinned by `leadId` above). Home is the gateway: a tap takes
+    you INTO the feed focused on what you tapped, where a video autoplays inline.
+    The immersive swipe viewer (`openMedia`) is kept for `/feed` and `/pals`,
+    where the reader is already inside the timeline. The header (avatar + name)
+    keeps its own link to the profile; like/comment/share keep their actions —
+    `openPost` in the card bails on any anchor/button, so only bare card taps
+    route here.
+  */
+  const router = useRouter();
+  const openInFeed = (post: Post) => router.push(sq(`/feed?post=${post.id}`));
   const showComposer = composerOpen || compose === "1" || compose === "story";
   useMarketView("feed_viewed", {
     surface: mode === "pals" ? "market_square_pals" : "market_square_home",
@@ -444,7 +461,10 @@ export function FeedPage({
               item={item}
               followSlot={followSlot}
               winkSlot={winkSlot}
-              onOpenMedia={openMedia}
+              // Home: tap the media OR the card body → view-all feed, post pinned
+              // first. Elsewhere: media opens the immersive viewer as before.
+              onOpenMedia={mode === "home" ? openInFeed : openMedia}
+              onOpenPost={mode === "home" ? openInFeed : undefined}
               tipSlot={tipSlot}
               onQuote={(post) => {
                 setQuoting(post);

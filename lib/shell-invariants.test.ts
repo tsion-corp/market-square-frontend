@@ -386,6 +386,39 @@ describe("the friends deck offers a real Follow", () => {
   });
 });
 
+describe("follow and wink survive a reload where the payload omits the edge", () => {
+  // The feed omits isFollowing/winkedByMe; the profile page carries them. Both
+  // controls must still be right after a reload on the feed (2026-09-28).
+  const followState = stripComments(read("features/profile/lib/follow-state.ts"));
+  const profileHook = stripComments(read("features/profile/hooks/use-profile.ts"));
+
+  it("persists the follow state per viewer in localStorage", () => {
+    assert.match(followState, /`ms\.follows\.\$\{viewerId\}`/, "the follow store is not keyed per viewer");
+    assert.match(followState, /window\.localStorage\.setItem\(storageKey\(viewerId\)/);
+    assert.match(followState, /window\.localStorage\.getItem\(storageKey\(viewerId\)\)/);
+  });
+
+  it("SEEDS the store from a payload that carries isFollowing (the profile page)", () => {
+    // So the feed can read the last-known answer the profile endpoint gave.
+    assert.match(
+      followState,
+      /if \(fromServer !== undefined\) setFollowIntent\(viewerId, profile\.id, fromServer\)/
+    );
+  });
+
+  it("keys the follow write on the reader, both on click and on seed", () => {
+    assert.match(profileHook, /setFollowIntent\(viewerId, profile\.id, following\)/);
+    assert.match(profileHook, /clearFollowIntent\(viewerId, profile\.id\)/);
+  });
+
+  it("holds the wink until the viewer profile has loaded, so the record is keyed", () => {
+    // Winking before /me resolves recorded under no viewer and reset on reload.
+    assert.match(profileHook, /const viewerResolving = authenticated && me\.isPending/);
+    assert.match(profileHook, /if \(!eligibility\.ok \|\| throttled \|\| viewerResolving\) return/);
+    assert.match(profileHook, /isPending: mutation\.isPending \|\| viewerResolving/);
+  });
+});
+
 describe("the friends deck is node 844:18440's, on Home and on /pals", () => {
   const deck = stripComments(read("components/layout/friends-deck.tsx"));
   const layout = stripComments(read("lib/deck-layout.ts"));
@@ -2128,11 +2161,13 @@ describe("A gist room's chat can answer a particular message", () => {
 });
 
 describe("A shared link posts as a post, and arrives as the thing it points at", () => {
-  it("offers posting into Square beside the outward shares", () => {
+  it("does NOT offer posting back into Square — the reader is already here", () => {
+    // Removed 2026-09-28: sharing a post/profile into Square's own feed is
+    // redundant inside the Square app. The sheet reaches people who are NOT
+    // here (WhatsApp, X, …) plus Copy link; a re-added row fails this.
     const sheet = stripComments(read("components/ui/share-sheet.tsx"));
-    assert.match(sheet, /Post to Square/);
-    // The composer's EXISTING prefill contract, not a second door.
-    assert.match(sheet, /"\/\?compose=1&text=" \+ encodeURIComponent\(shareIntoPostText\(payload\.url\)\)/);
+    assert.doesNotMatch(sheet, /Post to Square/);
+    assert.doesNotMatch(sheet, /shareIntoPostText/);
   });
 
   it("draws one card per post, from the first Square link in its words", () => {
@@ -2987,6 +3022,17 @@ describe("Gist rooms can be scheduled, and upcoming ones look like open ones", (
     assert.match(stripComments(read("components/layout/home-screen.tsx")), /postsSlot=\{<PostForYou/);
     // View more opens the page that actually scrolls.
     assert.match(stripComments(read("components/layout/post-for-you.tsx")), /href: sq\("\/feed"\)/);
+    // Tapping a rail card — its BODY *or* its image/video — opens the feed with
+    // that post pinned first. Without onOpenMedia the card's video is a bare
+    // inline player with no tap target, so the clip did nothing (2026-09-28).
+    const railSrc = stripComments(read("components/layout/post-for-you.tsx"));
+    assert.match(railSrc, /onOpenPost=\{\(post\) => router\.push\(sq\(`\/feed\?post=\$\{post\.id\}`\)\)\}/);
+    assert.match(railSrc, /onOpenMedia=\{\(post\) => router\.push\(sq\(`\/feed\?post=\$\{post\.id\}`\)\)\}/);
+    // The rail keeps only media / long-text cards, so a page of 30 holds few —
+    // it pages forward (bounded) to fill its ten, or it "becomes 1" as short
+    // posts crowd the top of the lane on refocus (2026-09-28).
+    assert.match(railSrc, /loadedPages < MAX_PAGES/);
+    assert.match(railSrc, /void fetchNextPage\(\)/);
     // ONE component, so the composer and the viewer are never a second copy.
     const screen = stripComments(read("components/layout/feed-screen.tsx"));
     assert.match(screen, /<FeedPage\n\s*mode="feed"/);
