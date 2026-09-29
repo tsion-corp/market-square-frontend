@@ -52,6 +52,7 @@ export function GiftSheet({
   open,
   onClose,
   onSend,
+  viewerIsHost = false,
   priced = false,
   recipients,
   initialRecipientId,
@@ -122,6 +123,12 @@ export function GiftSheet({
    * for. Flip it with `MARKET_FLAGS.liveGifts` once the route ships.
    */
   priced?: boolean;
+  /**
+   * The READER runs this room. The title says who the money is FOR, and for
+   * the host that is never "your creator" — they are the creator; their tray
+   * tips the audience.
+   */
+  viewerIsHost?: boolean;
 }) {
   const [selectedId, setSelectedId] = useState(LIVE_GIFTS[0].id);
   const [quantity, setQuantity] = useState<number>(1);
@@ -217,7 +224,10 @@ export function GiftSheet({
 
         <div className="relative mt-3 flex items-center justify-center">
           <h2 className="text-[15px] font-bold leading-5 text-white">
-            {priced ? "Tip your creator" : "Send a gift"}
+            {/* The HOST is the creator — "Tip your creator" on their own tray
+                read as tipping themselves (ogazboiz, 2026-09-28). For them it
+                names the real recipients: the room's audience. */}
+            {priced ? (viewerIsHost ? "Tip your audience" : "Tip your creator") : "Send a gift"}
           </h2>
           {/* 23px circle, 4% white, blurred — the file's, pinned right. */}
           <button

@@ -1,14 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { IconLive, IconMic, IconQuote } from "@/components/ui/icons";
 import { Avatar } from "@/components/ui/avatar";
 import { formatKash, relativeTime } from "@/lib/format";
 import { LIVE_GIFTS } from "@/lib/gifts";
+import { useGate } from "@/hooks/use-gate";
 import { useKashAccount, KashBuySheet } from "@/features/kash";
 import { useReceivedTips, type ReceivedTip } from "@/features/tips";
-import { asset, sq } from "@/lib/square-path";
+import { OpenHouseSheet } from "@/features/houses";
+import { asset } from "@/lib/square-path";
 
 /**
  * THE EARNINGS PANEL — nodes 492:46239 (empty) and 492:46539 (populated).
@@ -205,7 +206,9 @@ function EarnedRow({ tip }: { tip: ReceivedTip }) {
 export function ProfileEarnings() {
   const account = useKashAccount();
   const tips = useReceivedTips(true);
+  const gate = useGate();
   const [buyOpen, setBuyOpen] = useState(false);
+  const [roomOpen, setRoomOpen] = useState(false);
 
   // Only confirmed tips are earnings. The service's own words on `pending` are
   // that it "must never be presented to a user as though the money arrived",
@@ -344,13 +347,23 @@ export function ProfileEarnings() {
             empty state points at the thing that would fill it, which is the
             one useful thing an empty state can do.
           */}
-          <Link
-            href={sq("/gist-rooms")}
+          {/*
+            OPENS THE CREATE SHEET IN PLACE — it does NOT navigate. Linking to
+            `/gist-rooms?open=1` opened the same sheet but only after a page
+            change, which read as "it took me to another page" instead of a
+            modal (ogazboiz, 2026-09-28). So the earnings panel mounts the very
+            sheet the rooms page mounts (`OpenHouseSheet`) and opens it right
+            here, gated the same way — `useGate` sends a signed-out reader to
+            sign in first, exactly as houses-street does.
+          */}
+          <button
+            type="button"
+            onClick={() => gate(() => setRoomOpen(true))}
             className="ws-press flex h-12 items-center gap-2.5 rounded-full bg-spotlight px-5 text-[16px] font-bold leading-[22px] text-white transition-opacity hover:opacity-90"
           >
             <IconMic className="h-6 w-6 shrink-0" />
             Start Gistroom
-          </Link>
+          </button>
         </div>
       ) : (
         <section className="flex flex-col gap-4">
@@ -364,6 +377,7 @@ export function ProfileEarnings() {
       )}
 
       <KashBuySheet open={buyOpen} onClose={() => setBuyOpen(false)} />
+      <OpenHouseSheet open={roomOpen} onClose={() => setRoomOpen(false)} />
     </div>
   );
 }

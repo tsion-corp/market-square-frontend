@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { profileHref } from "@/lib/profile-href";
 import { toast } from "sonner";
 import { atHandle } from "@/lib/handle";
@@ -58,6 +58,7 @@ import {
   useLeaveGroup,
   useDeleteConversation,
   useMarkConversationRead,
+  useMessageHistory,
   useMessages,
   useRenameGroup,
   useSendMessage,
@@ -87,7 +88,12 @@ import {
   messageMediaKind,
 } from "@/features/messages/lib/message-media";
 import { playProgress, playedBars, waveformBars } from "@/features/messages/lib/waveform";
-import { isAtBottom } from "@/features/messages/lib/thread-scroll";
+import {
+  anchorAfterPrepend,
+  isAtBottom,
+  isNearTop,
+  mergeHistory,
+} from "@/features/messages/lib/thread-scroll";
 import {
   MESSAGE_MAX,
   type Conversation,
@@ -3214,6 +3220,8 @@ export function Thread({
   const me = useMe();
   const group = isGroupThread(conversation);
   const messages = useMessages(conversation.id, true);
+  // Older pages, fetched as the reader scrolls up — see useMessageHistory.
+  const history = useMessageHistory(conversation.id, messages.data?.nextCursor ?? null);
   const markRead = useMarkConversationRead();
   const reducedMotion = useReducedMotion();
   const [membersOpen, setMembersOpen] = useState(false);
@@ -3356,8 +3364,12 @@ export function Thread({
     if (conversation.unreadCount > 0) markRead.mutate(conversation.id);
   }, [seenThrough, conversation.id, conversation.unreadCount, markRead]);
 
-  // The service returns newest-first; a thread reads oldest-first.
-  const items = [...(messages.data?.items ?? [])].reverse();
+  // The service returns newest-first; a thread reads oldest-first — every
+  // older page the reader has scrolled into, then the live newest page.
+  const items = mergeHistory(
+    messages.data?.items ?? [],
+    history.data?.pages.map((page) => page.items) ?? []
+  );
   const days = groupMessagesByDay(items);
 
   /*
@@ -3416,6 +3428,28 @@ export function Thread({
     const node = river.current;
     if (node) node.scrollTop = node.scrollHeight;
   };
+
+  /*
+    OLDER MESSAGES ARRIVE ABOVE THE READER. Prepending content would scroll
+    what they were reading out from under them, so the pane's height is noted
+    when a page is asked for and the offset is moved by exactly what arrived,
+    before the browser paints (a layout effect). Only history pages do this;
+    the newest page merges at the bottom and follows the live-edge rule.
+  */
+  const anchor = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
+  const historyPages = history.data?.pages.length ?? 0;
+  const loadOlder = () => {
+    const node = river.current;
+    if (!node || !history.hasNextPage || history.isFetchingNextPage) return;
+    anchor.current = { scrollTop: node.scrollTop, scrollHeight: node.scrollHeight };
+    void history.fetchNextPage();
+  };
+  useLayoutEffect(() => {
+    const node = river.current;
+    if (!node || !anchor.current) return;
+    node.scrollTop = anchorAfterPrepend(anchor.current, node.scrollHeight);
+    anchor.current = null;
+  }, [historyPages]);
 
   // Opening a conversation lands on its newest message, never at the top of
   // its history.
@@ -3510,9 +3544,11 @@ export function Thread({
         ref={river}
         onScroll={(event) => {
           following.current = isAtBottom(event.currentTarget);
+          if (isNearTop(event.currentTarget)) loadOlder();
         }}
         className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 pt-[calc(40px+var(--ws-thread-top-inset,0px))]"
       >
+        {history.isFetchingNextPage && <RowSkeleton />}
         {messages.isPending && [0, 1, 2].map((i) => <RowSkeleton key={i} />)}
         {messages.isError && (
           <ErrorState

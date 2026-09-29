@@ -9,7 +9,7 @@ import { getSponsoredEvmChainById } from "@/lib/trade/sponsored-evm";
 import { isReceiptChain, publicClientForChain } from "@/lib/trade/receipt";
 import { receiptOutcome, type TxOutcome } from "@/lib/tx-receipt";
 import { askToProtectWallet } from "@/lib/decane-recovery";
-import { ensureWalletProtected } from "@/lib/wallet-protection";
+import { ensureWalletProtected, SQUARE_WALLET_PROTECTION } from "@/lib/wallet-protection";
 
 /**
  * The ONE path by which anything leaves a reader's wallet.
@@ -106,10 +106,11 @@ function useDecaneEvmSend(): EvmSend {
       // ever sends from.
       const address = wallet.addresses?.evm as `0x${string}` | undefined;
       if (!address) throw new Error("No wallet is connected.");
-      // The first wallet action on this device is where the passkey or
-      // password is asked for — see lib/wallet-protection. Before unlock,
-      // since a device with nothing stored has nothing to unlock with.
-      await ensureWalletProtected(wallet, askToProtectWallet);
+      // Device tier only: the first wallet action on this device is where the
+      // passkey or password is asked for. In Square's identity tier this is a
+      // no-op — see lib/wallet-protection. Before unlock, since a device with
+      // nothing stored has nothing to unlock with.
+      await ensureWalletProtected(wallet, askToProtectWallet, SQUARE_WALLET_PROTECTION);
       await ensureUnlocked(wallet);
 
       const sponsored = getSponsoredEvmChainById(chainId);

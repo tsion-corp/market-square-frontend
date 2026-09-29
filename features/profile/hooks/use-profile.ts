@@ -210,9 +210,25 @@ export function useWink(profile: Profile) {
   const [serverRefusal, setServerRefusal] = useState<{ until: number; text: string } | null>(
     null
   );
+  const { authenticated } = useAuth();
   const me = useMe();
   const viewerId = me.data?.id ?? null;
   const sent = useSentWinks(viewerId);
+  /*
+    THE VIEWER MUST BE KNOWN BEFORE A WINK IS SENT OR JUDGED.
+
+    A wink only needs the auth TOKEN to POST, but the cooldown that stops a
+    second one is remembered in `wink-store` keyed by the viewer's id — which
+    comes from a SEPARATE `/me` query that may still be in flight. Winking in
+    that window recorded the wink under no viewer (`rememberWink` no-ops on a
+    null id), so it vanished on the next reload and the button re-enabled —
+    "I winked already but after refresh I can wink again" (2026-09-28). The
+    same gap made the button flash "winkable" on a refresh before `/me`
+    resolved. So while an authenticated reader's profile is loading the control
+    is held: neither sendable nor shown as fresh. Signed-out readers are not
+    held — their tap opens the sign-in gate, and `/me` is disabled for them.
+  */
+  const viewerResolving = authenticated && me.isPending;
 
   const mutation = useMutation({
     mutationFn: () => sendWink(profile.id),
@@ -317,10 +333,14 @@ export function useWink(profile: Profile) {
           ? `You already winked at ${profile.displayName || profile.username}`
           : null
         : describeWinkRefusal(eligibility.reason, eligibility.retryAfterMs),
-    isPending: mutation.isPending,
+    // Held (disabled) while the viewer profile loads, so the button is never
+    // enabled before we can record what it does — see `viewerResolving`.
+    isPending: mutation.isPending || viewerResolving,
     send: () => {
-      // Refuse locally rather than spending a request the service will reject.
-      if (!eligibility.ok || throttled) return;
+      // Refuse locally rather than spending a request the service will reject,
+      // and never send before we know who the wink is FROM (it would not be
+      // remembered) — see `viewerResolving`.
+      if (!eligibility.ok || throttled || viewerResolving) return;
       mutation.mutate();
     },
   };

@@ -386,6 +386,22 @@ describe("the friends deck offers a real Follow", () => {
   });
 });
 
+describe("the wink write waits for the viewer, so its cooldown record is keyed", () => {
+  // The server carries winkedByMe once auth has settled (fix/public-reads-wait-
+  // for-auth), so follow/wink are right after a reload without a client bridge.
+  // What the transport fix does NOT cover is the local same-browser cooldown:
+  // its optimistic write is keyed per viewer, so the button must not fire before
+  // /me resolves or the record lands under no reader and resets (2026-09-28).
+  const profileHook = stripComments(read("features/profile/hooks/use-profile.ts"));
+
+  it("holds the wink until the viewer profile has loaded, so the record is keyed", () => {
+    // Winking before /me resolves recorded under no viewer and reset on reload.
+    assert.match(profileHook, /const viewerResolving = authenticated && me\.isPending/);
+    assert.match(profileHook, /if \(!eligibility\.ok \|\| throttled \|\| viewerResolving\) return/);
+    assert.match(profileHook, /isPending: mutation\.isPending \|\| viewerResolving/);
+  });
+});
+
 describe("the friends deck is node 844:18440's, on Home and on /pals", () => {
   const deck = stripComments(read("components/layout/friends-deck.tsx"));
   const layout = stripComments(read("lib/deck-layout.ts"));
@@ -2128,11 +2144,13 @@ describe("A gist room's chat can answer a particular message", () => {
 });
 
 describe("A shared link posts as a post, and arrives as the thing it points at", () => {
-  it("offers posting into Square beside the outward shares", () => {
+  it("does NOT offer posting back into Square — the reader is already here", () => {
+    // Removed 2026-09-28: sharing a post/profile into Square's own feed is
+    // redundant inside the Square app. The sheet reaches people who are NOT
+    // here (WhatsApp, X, …) plus Copy link; a re-added row fails this.
     const sheet = stripComments(read("components/ui/share-sheet.tsx"));
-    assert.match(sheet, /Post to Square/);
-    // The composer's EXISTING prefill contract, not a second door.
-    assert.match(sheet, /"\/\?compose=1&text=" \+ encodeURIComponent\(shareIntoPostText\(payload\.url\)\)/);
+    assert.doesNotMatch(sheet, /Post to Square/);
+    assert.doesNotMatch(sheet, /shareIntoPostText/);
   });
 
   it("draws one card per post, from the first Square link in its words", () => {
@@ -2987,6 +3005,17 @@ describe("Gist rooms can be scheduled, and upcoming ones look like open ones", (
     assert.match(stripComments(read("components/layout/home-screen.tsx")), /postsSlot=\{<PostForYou/);
     // View more opens the page that actually scrolls.
     assert.match(stripComments(read("components/layout/post-for-you.tsx")), /href: sq\("\/feed"\)/);
+    // Tapping a rail card — its BODY *or* its image/video — opens the feed with
+    // that post pinned first. Without onOpenMedia the card's video is a bare
+    // inline player with no tap target, so the clip did nothing (2026-09-28).
+    const railSrc = stripComments(read("components/layout/post-for-you.tsx"));
+    assert.match(railSrc, /onOpenPost=\{\(post\) => router\.push\(sq\(`\/feed\?post=\$\{post\.id\}`\)\)\}/);
+    assert.match(railSrc, /onOpenMedia=\{\(post\) => router\.push\(sq\(`\/feed\?post=\$\{post\.id\}`\)\)\}/);
+    // The rail keeps only media / long-text cards, so a page of 30 holds few —
+    // it pages forward (bounded) to fill its ten, or it "becomes 1" as short
+    // posts crowd the top of the lane on refocus (2026-09-28).
+    assert.match(railSrc, /loadedPages < MAX_PAGES/);
+    assert.match(railSrc, /void fetchNextPage\(\)/);
     // ONE component, so the composer and the viewer are never a second copy.
     const screen = stripComments(read("components/layout/feed-screen.tsx"));
     assert.match(screen, /<FeedPage\n\s*mode="feed"/);
@@ -3055,8 +3084,12 @@ describe("Gist rooms can be scheduled, and upcoming ones look like open ones", (
     assert.match(row, /relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-\[0\.68px\]/);
     // The same 0.68 hairline the field uses, so the pair reads as one.
     assert.match(row, /border-white\/40/);
-    assert.match(row, /<IconHomeSettings className=\{cn\("h-5 w-5 shrink-0", open \? "text-\[#9F65FD\]" : "text-\[#D9D9D9\]"\)\} \/>/);
-    // The settings control draws no caret of its own any more.
+    // A FILTER glyph, not a gear — the pill narrows what the grid shows, and a
+    // settings cog beside a search field read as account settings (ogazboiz,
+    // 2026-09-28). Same mark the houses filter pill uses, so the two agree.
+    assert.match(row, /<IconHomeFilter className=\{cn\("h-5 w-5 shrink-0", open \? "text-\[#9F65FD\]" : "text-\[#D9D9D9\]"\)\} \/>/);
+    assert.doesNotMatch(row, /<IconHomeSettings/, "the search pill is a gear again");
+    // The control draws no caret of its own any more.
     assert.doesNotMatch(row, /-scale-y-100/, "the settings caret is back");
     // It opens EXPLORE SETTINGS (1317:158022) in RailMenu's own panel — not the
     // account menu any more (ogazboiz, 2026-09-12) — for everyone.
