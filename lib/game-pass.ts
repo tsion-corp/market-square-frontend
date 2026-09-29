@@ -1,3 +1,5 @@
+import { encodeFunctionData, parseAbi } from "viem";
+
 /*
   THE PLAYER NAME, AS GAMEARENA'S CONTRACT DEFINES IT.
 
@@ -97,4 +99,47 @@ export function nameKey(raw: string): string {
 /** Whether two names are the same claim as far as the contract is concerned. */
 export function isSameName(a: string, b: string): boolean {
   return nameKey(a) === nameKey(b);
+}
+
+/**
+ * The pass contract's surface, as far as Square uses it.
+ *
+ * Kept here beside the name rules rather than next to the network client,
+ * because building the claim transaction is pure — and the test runner covers
+ * lib/ and nothing else, so logic that lives elsewhere is logic nothing tests.
+ */
+export const GAME_PASS_ABI = parseAbi([
+  "function hasMinted(address player) external view returns (bool)",
+  "function usernameOf(address player) external view returns (string)",
+  "function isUsernameAvailable(string username) external view returns (bool)",
+  "function mint(string username) external",
+]);
+
+/**
+ * The transaction that claims a name.
+ *
+ * `mint(string)` is msg.sender-based, so the pass belongs to whoever signs
+ * this — nobody can mint it on a player's behalf, which is why GameArena funds
+ * the gas rather than minting for them.
+ *
+ * It refuses to BUILD a transaction the contract would reject. A revert costs
+ * the player gas, arrives after they have waited and watched, and tells them
+ * nothing they can act on.
+ */
+export function mintCall(name: string): {
+  to: `0x${string}`;
+  data: `0x${string}`;
+  chainId: number;
+} {
+  const problem = nameProblem(name);
+  if (problem) throw new RangeError(`not a claimable name: ${problem}`);
+  return {
+    to: GAME_PASS_ADDRESS,
+    data: encodeFunctionData({
+      abi: GAME_PASS_ABI,
+      functionName: "mint",
+      args: [name],
+    }),
+    chainId: CELO_CHAIN_ID,
+  };
 }

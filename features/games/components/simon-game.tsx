@@ -49,6 +49,14 @@ interface Props {
   /** Called once with the final score when the game ends. */
   onFinished: (score: number) => void;
   onClose: () => void;
+  /**
+   * Shown under the final score — the offer to make these scores count.
+   *
+   * A slot, so this screen stays a game: it knows the rules and nothing about
+   * GameArena, wallets or what a player's standing is. Whoever mounts the game
+   * decides whether there is anything to offer.
+   */
+  footerSlot?: React.ReactNode;
 }
 
 type Phase = "ready" | "showing" | "input" | "over";
@@ -65,7 +73,13 @@ const PADS = [
 const wait = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export function SimonGame({ seed, targetScore, onFinished, onClose }: Props) {
+export function SimonGame({
+  seed,
+  targetScore,
+  onFinished,
+  onClose,
+  footerSlot,
+}: Props) {
   const [phase, setPhase] = useState<Phase>("ready");
   const [round, setRound] = useState(1);
   const [lit, setLit] = useState<number | null>(null);
@@ -317,6 +331,9 @@ export function SimonGame({ seed, targetScore, onFinished, onClose }: Props) {
                 ? `${targetScore} still stands.`
                 : "Sent to the chat."}
             </p>
+            {footerSlot && (
+              <div className="mx-auto mb-3 w-full max-w-sm">{footerSlot}</div>
+            )}
             <button
               type="button"
               onClick={onClose}

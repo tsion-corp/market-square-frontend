@@ -6,6 +6,7 @@ import {
   type ChallengeSender,
 } from "@/components/ui/challenge-slot";
 import { SimonGame } from "@/features/games/components/simon-game";
+import { MakeItCount } from "@/features/games/components/make-it-count";
 import { reportScore } from "@/features/games/lib/report-score";
 import { newSeed } from "@/lib/simon";
 
@@ -79,6 +80,20 @@ export function ChallengeHost({ children }: { children: React.ReactNode }) {
             void reportScore(score);
           }}
           onClose={() => setOpen(null)}
+          /*
+            The offer to make these scores count, under the final score and
+            never before it. `returnTo` is read at render rather than stored,
+            so GoodDollar returns the player to the thread they were actually
+            in — including its query — rather than to wherever the game
+            happened to be opened from.
+          */
+          footerSlot={
+            <MakeItCount
+              returnTo={
+                typeof window === "undefined" ? "" : window.location.href
+              }
+            />
+          }
         />
       )}
     </ChallengeContext.Provider>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { decodeFunctionData, parseAbi } from "viem";
 import {
   CELO_CHAIN_ID,
   USERNAME_MAX,
@@ -8,6 +9,7 @@ import {
   nameKey,
   nameProblem,
   nameProblemMessage,
+  mintCall,
   sanitiseName,
 } from "./game-pass.ts";
 
@@ -149,5 +151,40 @@ describe("typing is shaped into something claimable", () => {
 describe("where the pass lives", () => {
   it("is Celo, not the chain the rest of Square is on", () => {
     assert.equal(CELO_CHAIN_ID, 42220);
+  });
+});
+
+/*
+  THE MINT IS THE CLAIM. It is the one transaction a Square player ever sends
+  on Celo, they watch it happen, and a revert costs them gas while telling them
+  nothing — so a transaction that cannot succeed must never be built.
+*/
+describe("the transaction that claims a name", () => {
+  const MINT_ABI = parseAbi(["function mint(string username) external"]);
+
+  it("calls mint with the name exactly as typed", () => {
+    const call = mintCall("OgazBoiz");
+    const decoded = decodeFunctionData({ abi: MINT_ABI, data: call.data });
+    assert.equal(decoded.functionName, "mint");
+    // Capitals survive: the contract stores what was typed and lowercases
+    // only for the uniqueness check.
+    assert.deepEqual(decoded.args, ["OgazBoiz"]);
+  });
+
+  it("goes to Celo, not the chain the rest of Square runs on", () => {
+    assert.equal(mintCall("ogazboiz").chainId, CELO_CHAIN_ID);
+    assert.notEqual(mintCall("ogazboiz").chainId, 8453);
+  });
+
+  it("refuses to build a transaction the contract would reject", () => {
+    for (const bad of [
+      "ab",
+      "",
+      "og az",
+      "a".repeat(17),
+      "\u{1F3AE}\u{1F3AE}\u{1F3AE}",
+    ]) {
+      assert.throws(() => mintCall(bad), RangeError, bad);
+    }
   });
 });
