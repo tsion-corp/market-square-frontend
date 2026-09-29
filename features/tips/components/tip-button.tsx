@@ -6,7 +6,11 @@ import { useGate } from "@/hooks/use-gate";
 import { useMe } from "@/hooks/use-me";
 import { IconDonate } from "@/components/ui/room-icons";
 import { IconMsGift } from "@/components/ui/design-icons";
-import { TipSheet } from "@/features/tips/components/tip-sheet";
+import { GiftSheet } from "@/components/ui/gift-sheet";
+import type { LiveGift } from "@/lib/gifts";
+import { multiplyKash } from "@/lib/kash-amount";
+import { toast } from "sonner";
+import { useSendTip } from "@/features/tips/hooks/use-tips";
 import { useTippingUnavailable } from "@/features/tips/lib/availability";
 import { useTipCapability } from "@/features/tips/hooks/use-tips";
 import { tipBlockedBecause, tipSurfaceOf } from "@/lib/tip-capability";
@@ -34,12 +38,26 @@ import type { TipTarget } from "@/features/tips/lib/types";
  */
 export function TipButton({
   target,
-  balance,
+  balanceCoins,
+  onTopUp,
   variant = "icon",
 }: {
   target: TipTarget;
-  /** Forwarded straight to the sheet — see `TipSheet` for why it is a slot. */
-  balance?: (amountKash: string | null) => React.ReactNode;
+  /**
+   * THE READER'S COIN BALANCE, and a number rather than a slot.
+   *
+   * The sheet this opens is the ROOM'S — coins, quantities, a top-up link —
+   * so what it needs is a coin count, not a rendered KASH line. The old
+   * `balance` slot existed because `TipSheet` displayed a KASH figure and the
+   * kash slice owns that; this needs no rendering from anybody.
+   *
+   * Still composed in at the layout level (`home-screen`, `feed-screen`),
+   * because the coin balance belongs to the gifts slice and slices never
+   * import each other.
+   */
+  balanceCoins?: number | null;
+  /** Short of coins — opens the top-up the layout owns, for the same reason. */
+  onTopUp?: (needed: number) => void;
   /**
    * "icon" is the timeline's 42×26 glyph pill described above.
    *
@@ -58,6 +76,29 @@ export function TipButton({
    */
   variant?: "icon" | "post" | "dock";
 }) {
+  /*
+    ONE GIFT, PRICED THE WAY THE ROOM PRICES IT.
+
+    The room multiplies the gift's own KASH price by the quantity and refuses
+    anything that cannot be priced EXACTLY — three Roses is 0.03, never
+    0.030000000000000002 — because rounding would bill an amount the sender was
+    never shown. A post is the same money on the same rail, so it is the same
+    arithmetic rather than a second one written here.
+
+    No `toProfileId`: a post has exactly one recipient by construction, which
+    is what the sheet's absent `recipients` already says.
+  */
+  const send = useSendTip();
+  const sendGift = (gift: LiveGift, quantity: number) => {
+    const amountKash = multiplyKash(gift.priceKash, quantity);
+    if (!amountKash) {
+      toast.error("That quantity can't be priced exactly.");
+      return;
+    }
+    send.mutate({ target, amountKash, giftId: gift.id });
+    setOpen(false);
+  };
+
   const [open, setOpen] = useState(false);
   // Counts openings. It does two jobs: zero means the sheet has never been
   // opened and need not be in the tree at all, and the value keys the sheet so
@@ -124,12 +165,14 @@ export function TipButton({
           </button>
         )}
         {opened > 0 && (
-          <TipSheet
+          <GiftSheet
             key={opened}
             open={open}
             onClose={() => setOpen(false)}
-            target={target}
-            balance={balance}
+            onSend={sendGift}
+            priced
+            balanceCoins={balanceCoins}
+            onTopUp={onTopUp}
           />
         )}
       </>
@@ -234,12 +277,14 @@ export function TipButton({
           has something to animate — the `key` is what makes the NEXT opening
           a clean one. */}
       {opened > 0 && (
-        <TipSheet
+        <GiftSheet
           key={opened}
           open={open}
           onClose={() => setOpen(false)}
-          target={target}
-          balance={balance}
+          onSend={sendGift}
+          priced
+          balanceCoins={balanceCoins}
+          onTopUp={onTopUp}
         />
       )}
     </div>

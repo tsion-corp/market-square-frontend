@@ -55,7 +55,7 @@ import { RoomDock } from "@/features/houses/components/room-dock";
 import { RoomPhoneBar } from "@/features/houses/components/room-phone-bar";
 import { RoomReactions, useRoomReactions } from "@/features/houses/components/room-reactions";
 import { GiftBursts, useGiftBursts } from "@/features/streams/components/gift-bursts";
-import { GiftSheet, type GiftRecipient } from "@/features/streams/components/gift-sheet";
+import { GiftSheet, type GiftRecipient } from "@/components/ui/gift-sheet";
 import { giftsArePriced } from "@/lib/gifts";
 import { multiplyKash } from "@/lib/kash-amount";
 import { useSendTip, recipientLeftTheRoom , tipAlreadyInFlight , recipientCannotHoldKash , GIFT_PHASE_SAYS } from "@/features/tips";

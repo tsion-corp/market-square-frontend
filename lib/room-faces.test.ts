@@ -391,6 +391,6 @@ test("every gift surface quotes SQUARE COINS, and none quotes KASH", () => {
     tray is the surface that still multiplies a coin price by a quantity, so it
     carries the assertion alone now.
   */
-  const tray = readFileSync("features/streams/components/gift-sheet.tsx", "utf8");
+  const tray = readFileSync("components/ui/gift-sheet.tsx", "utf8");
   assert.match(tray, /selected\.priceCoins \* quantity/);
 });
