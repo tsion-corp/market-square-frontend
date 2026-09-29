@@ -45,8 +45,10 @@ export const SIMON_GAME = "simon";
 const SEED_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 
 /** The most a Simon game can be worth. A score past this did not come from the
-    game, so the message is not a challenge. */
-const MAX_SCORE = MAX_ROUNDS * POINTS_PER_ROUND;
+    game, so the message is not a challenge — and it is not reportable either.
+    Exported so the route that reports scores and the parser that reads them
+    share ONE ceiling; two copies drift and the looser one becomes the hole. */
+export const MAX_SIMON_SCORE = MAX_ROUNDS * POINTS_PER_ROUND;
 
 export interface SimonChallenge {
   seed: string;
@@ -58,7 +60,7 @@ export interface SimonChallenge {
     through `sq()` for the build they are in. */
 export function challengePath(seed: string, score: number): string {
   if (!SEED_PATTERN.test(seed)) throw new RangeError("not a usable seed");
-  if (!Number.isInteger(score) || score < 0 || score > MAX_SCORE) {
+  if (!Number.isInteger(score) || score < 0 || score > MAX_SIMON_SCORE) {
     throw new RangeError(`not a Simon score: ${score}`);
   }
   return `/g/${SIMON_GAME}/${seed}?s=${score}`;
@@ -94,7 +96,7 @@ export function parseChallenge(text: string | null | undefined): SimonChallenge 
   if (!SEED_PATTERN.test(seed)) return null;
 
   const score = Number(rawScore);
-  if (!Number.isInteger(score) || score < 0 || score > MAX_SCORE) return null;
+  if (!Number.isInteger(score) || score < 0 || score > MAX_SIMON_SCORE) return null;
 
   return { seed, score };
 }
