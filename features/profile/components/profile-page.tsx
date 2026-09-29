@@ -383,7 +383,6 @@ export function ProfilePage({
   housesSlot,
   housesOfSlot,
   replaysSlot,
-  giftGallerySlot,
   earningsSlot,
   composeSlot,
   postSlot,
@@ -406,12 +405,6 @@ export function ProfilePage({
    */
   housesOfSlot?: (profile: Profile) => React.ReactNode;
   replaysSlot?: (profile: Profile) => React.ReactNode;
-  /**
-   * The gift gallery — node 492:41810. It counts the viewer's own received
-   * tips, so it lives in the tips slice and arrives as a slot; profile and
-   * tips never import each other.
-   */
-  giftGallerySlot?: React.ReactNode;
   /**
    * The earnings panel — nodes 492:46239 (empty) and 492:46539 (populated).
    * It reads the KASH engine and the tips ledger, two slices the profile may
@@ -844,7 +837,16 @@ export function ProfilePage({
           <AccountTabs
             tabs={[
               { value: "posts", label: "Posts" },
-              ...(isMe && giftGallerySlot
+              /*
+                GATED ON `earningsSlot`, which used to be `giftGallerySlot`.
+
+                That slot was doing two jobs: mounting the gallery, and standing
+                in for "the account panels are available". Removing the gallery
+                would have taken Earnings, Badges and Replays with it. Earnings
+                is the other own-profile panel and is passed from the same
+                place, so it is the honest gate for the same condition.
+              */
+              ...(isMe && earningsSlot
                 ? ([
               { value: "earnings", label: "Earnings" },
               {
@@ -855,7 +857,6 @@ export function ProfilePage({
                 disabledReason:
                   badges.unavailable || !badges.data ? "Not available yet" : undefined,
               },
-              { value: "gifts", label: "Gift Gallery" },
               {
                 value: "replays",
                 label: "Replays",
@@ -878,11 +879,10 @@ export function ProfilePage({
           )}
           {/* The account panels are YOUR OWN, gated where ownership is decided:
               a stranger's strip is Posts alone and can never mount these. */}
-          {isMe && giftGallerySlot && (
+          {isMe && earningsSlot && (
             <>
               {accountTab === "earnings" && earningsSlot}
               {accountTab === "badges" && badges.data && <BadgesPanel badges={badges.data.items} />}
-              {accountTab === "gifts" && giftGallerySlot}
             </>
           )}
         </div>
