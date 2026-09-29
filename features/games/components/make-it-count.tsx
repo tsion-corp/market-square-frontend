@@ -107,9 +107,44 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
     setBusy(false);
   }, [claimName, name]);
 
-  // Nothing to say while we do not know, and nothing to say if the player
-  // cannot act — an offer that leads nowhere is worse than silence.
-  if (loading || !available) return null;
+  // Nothing while we genuinely do not know yet.
+  if (loading) return null;
+
+  /*
+    UNREACHABLE IS SHOWN, NOT HIDDEN.
+
+    This used to render nothing when the arena could not be reached, on the
+    reasoning that an offer leading nowhere is worse than silence. That was
+    wrong here, and this repo already says why: a capability that is off is
+    VISIBLE and INERT, never deleted — deleting it silently loses the roadmap,
+    and leaving it live tells a lie.
+
+    Rendering nothing made "we cannot reach the arena" indistinguishable from
+    "this was never built", which is exactly the confusion it caused: the flow
+    was complete and committed, and looked absent. So the step is stated and
+    the control is a real disabled button.
+  */
+  if (!available) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left">
+        <p className="text-[14px] font-semibold text-white">
+          Make your scores count
+        </p>
+        <p className="mt-1 text-[13px] leading-5 text-white/55">
+          Prove you&rsquo;re a real person once and every game you play here
+          counts on the leaderboard. Can&rsquo;t reach the arena right now —
+          your score is saved in this chat either way.
+        </p>
+        <button
+          type="button"
+          disabled
+          className="ws-press mt-2.5 w-full cursor-default rounded-full bg-white/10 px-4 py-2 text-[14px] font-semibold text-white/40"
+        >
+          Unavailable right now
+        </button>
+      </div>
+    );
+  }
 
   if (hasPass) {
     return (
