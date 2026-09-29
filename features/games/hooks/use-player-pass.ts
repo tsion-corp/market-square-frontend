@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSocialWallet } from "decane-connect-kit";
-import type { EIP1193Provider } from "viem";
+import { toHex, type EIP1193Provider } from "viem";
 import { useEvmSend } from "@/hooks/use-evm-send";
 import { CELO_CHAIN_ID, mintCall } from "@/lib/game-pass";
 import { buildFvLink, fvMessage } from "@/lib/gooddollar-link";
@@ -128,10 +128,37 @@ export function usePlayerPass() {
       try {
         const provider =
           wallet.getEthereumProvider() as unknown as EIP1193Provider;
+        /*
+          THE MESSAGE IS HEX-ENCODED, AND THAT IS NOT A FORMALITY.
+
+          `personal_sign` takes its message as a HEX string. Passing the raw
+          text with only a TypeScript cast to satisfy the type compiles, runs,
+          returns a signature — and signs something other than GoodDollar's
+          message, so their server recovers a different address, or none. It
+          surfaces at the very end as their own "Login information is missing"
+          screen, with nothing on our side having reported an error.
+
+          viem's signMessage does this encoding internally, which is why
+          GameArena's SDK path never had to think about it; calling the
+          provider directly makes it ours to do.
+        */
         const fvsig = (await provider.request({
           method: "personal_sign",
-          params: [fvMessage(address) as `0x${string}`, address],
+          params: [toHex(fvMessage(address)), address],
         })) as string;
+
+        /*
+          A signature is 65 bytes — 0x plus 130 hex characters. Anything else
+          means the wallet handed back something that cannot be recovered from,
+          and sending it onward just moves the failure to GoodDollar's screen
+          where we can neither see it nor explain it.
+        */
+        if (typeof fvsig !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(fvsig)) {
+          return {
+            ok: false,
+            error: "Your wallet couldn't sign that. Try again.",
+          };
+        }
         window.location.assign(
           buildFvLink({
             address,

@@ -208,3 +208,32 @@ describe("nothing is asked before somebody has played", () => {
     assert.doesNotMatch(thread, /MakeItCount/);
   });
 });
+
+/*
+  THE VERIFICATION SIGNATURE IS HEX, AND NOTHING LOCAL CAN TELL YOU OTHERWISE.
+
+  `personal_sign` takes its message as a hex string. Passing the raw text with
+  a TypeScript cast to satisfy the type compiles, runs, and returns a perfectly
+  well-formed signature — of the wrong thing. GoodDollar then recovers a
+  different address, or none, and the only symptom is their own "Login
+  information is missing" screen at the end of the flow, with no error raised
+  anywhere in our code.
+
+  It shipped exactly once, and was found by a person standing in front of that
+  screen rather than by any check.
+*/
+describe("the GoodDollar signature is signed over hex", () => {
+  it("hex-encodes the message before personal_sign", () => {
+    assert.match(passHook, /params:\s*\[toHex\(fvMessage\(address\)\), address\]/);
+  });
+
+  it("never passes the raw message with a cast instead", () => {
+    assert.doesNotMatch(passHook, /fvMessage\(address\) as `0x\$\{string\}`/);
+  });
+
+  it("refuses a signature that is not 65 bytes rather than forwarding it", () => {
+    // Sending a malformed signature moves the failure onto GoodDollar's screen,
+    // where we can neither see it nor explain it to the player.
+    assert.match(passHook, /\^0x\[0-9a-fA-F\]\{130\}\$/);
+  });
+});
