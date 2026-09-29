@@ -266,19 +266,56 @@ export function usePlayerPass() {
           if (!IS_OUT_OF_GAS.test(describeError(error)) || !address)
             throw error;
           const gas = await requestGas();
-          if (!gas.funded && !gas.already) {
-            return {
-              ok: false,
-              error:
-                "Your account needs a small top-up before it can take a name. Proving you're a real person unlocks it.",
-            };
+
+          /*
+            EACH REFUSAL MEANS SOMETHING DIFFERENT, so each gets its own
+            sentence. Collapsing them is how a player is told to try again
+            when what they actually need is to verify — and they would try
+            again, forever, because trying again cannot work.
+          */
+          if (!gas.funded) {
+            if (gas.outcome === "unverified") {
+              return {
+                ok: false,
+                error:
+                  "Prove you're a real person first — that's what unlocks the name.",
+              };
+            }
+            if (gas.outcome === "already_claimed") {
+              return {
+                ok: false,
+                error:
+                  "You've been topped up before and it's been spent. Names can only be funded once.",
+              };
+            }
+            if (gas.outcome === "daily_cap" || gas.outcome === "faucet_empty") {
+              return {
+                ok: false,
+                error: "Can't fund names right now — try again later today.",
+              };
+            }
+            if (gas.outcome !== "not_fresh") {
+              return {
+                ok: false,
+                error:
+                  "Your account needs a small top-up before it can take a name. Proving you're a real person unlocks it.",
+              };
+            }
           }
-          const before = await readBalance(address);
-          if (!(await waitForGas(address, before > 0n ? before + 1n : 1n))) {
-            return {
-              ok: false,
-              error: "Still waiting on your top-up. Try again in a moment.",
-            };
+
+          /*
+            `not_fresh` means the wallet ALREADY holds enough, so there is
+            nothing in flight to wait for — waiting would sit out the whole
+            timeout watching a balance that is not going to change.
+          */
+          if (gas.outcome !== "not_fresh") {
+            const before = await readBalance(address);
+            if (!(await waitForGas(address, before > 0n ? before + 1n : 1n))) {
+              return {
+                ok: false,
+                error: "Still waiting on your top-up. Try again in a moment.",
+              };
+            }
           }
           hash = await attemptMint();
         }

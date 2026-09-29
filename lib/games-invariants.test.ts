@@ -422,13 +422,20 @@ describe("paying your own gas is actually honoured", () => {
   as fast as accounts can be made.
 */
 describe("asking for gas cannot be aimed at somebody else", () => {
-  it("resolves the wallet from the session and reads nothing from the body", () => {
+  it("resolves the wallet from the session and reads nothing from the request", () => {
     assert.match(faucetRoute, /await getRequestWallet\(req, claims\)/);
-    assert.doesNotMatch(faucetRoute, /body\.wallet|\bjson\(\)/);
+    /*
+      The hazard is the REQUEST body, not the upstream response — this route
+      reads the latter to tell a refusal apart from a success. So the rule is
+      that nothing is ever taken off `req`, which is what a caller could
+      control.
+    */
+    assert.doesNotMatch(faucetRoute, /req\.json\(\)|req\.text\(\)|body\.wallet|body\.address/);
   });
 
   it("sends upstream only the wallet it resolved", () => {
-    assert.match(faucetRoute, /JSON\.stringify\(\{ wallet \}\)/);
+    // Their faucet's field is `address`; the value is still the session's.
+    assert.match(faucetRoute, /JSON\.stringify\(\{ address: wallet \}\)/);
   });
 
   it("refuses a signed-out caller outright", () => {
@@ -460,5 +467,37 @@ describe("gas is asked for only when the claim actually failed for it", () => {
     // The faucet answering means it SENT. Minting against a balance still in
     // flight fails exactly as before and reads as the top-up doing nothing.
     assert.ok(passHook.indexOf("waitForGas(") < passHook.lastIndexOf("attemptMint()"));
+  });
+});
+
+/*
+  THEIR FAUCET TAKES `address`. THEIR SCORE ROUTE TAKES `wallet`.
+
+  Sending the wrong one is accepted as a request carrying no address rather
+  than refused, so it would fail as "this player cannot be funded" instead of
+  as a bad call — a wrong field wearing the costume of an empty wallet.
+*/
+describe("the faucet is called the way GameArena documented it", () => {
+  it("sends the address field, not the wallet field", () => {
+    assert.match(faucetRoute, /JSON\.stringify\(\{ address: wallet \}\)/);
+    assert.doesNotMatch(faucetRoute, /JSON\.stringify\(\{ wallet \}\)/);
+  });
+
+  it("keeps every refusal distinct instead of collapsing them", () => {
+    // Collapsing them tells a player to try again when what they need is to
+    // verify — and they would try again forever, because it cannot work.
+    for (const reason of ["unverified", "already_claimed", "daily_cap", "faucet_empty", "not_fresh"]) {
+      assert.match(passHook + reportClient, new RegExp(reason), reason);
+    }
+  });
+
+  it("does not wait for money that was never sent", () => {
+    // not_fresh means the wallet already holds enough, so there is nothing in
+    // flight — waiting would sit out the whole timeout for no reason.
+    assert.match(passHook, /if \(gas\.outcome !== "not_fresh"\) \{[\s\S]{0,200}?waitForGas/);
+  });
+
+  it("never forwards an unknown upstream reason to a player as copy", () => {
+    assert.match(reportClient, /KNOWN_OUTCOMES\.has\(reason\)/);
   });
 });

@@ -37,26 +37,49 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    /*
+      THE FIELD IS `address`, NOT `wallet`.
+
+      Their score route takes `wallet` and their faucet takes `address`, and
+      sending the wrong one is accepted as a request with no address rather
+      than refused — so it would have failed as an unfundable player rather
+      than as a bad call. Taken from their contract, not guessed.
+    */
     const upstream = await gameArenaFetch("/api/faucet", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ wallet }),
+      body: JSON.stringify({ address: wallet }),
     });
 
-    /*
-      ALREADY FUNDED IS NOT A FAILURE. Their faucet allows one drip per wallet,
-      so a second ask is refused — and the right response to that is to go and
-      try the claim anyway, because the gas may already be sitting there. It is
-      reported separately so the client can tell the two apart.
-    */
-    if (upstream.status === 409) {
-      return NextResponse.json({ funded: false, reason: "already" }, { status: 200 });
+    const body: unknown = await upstream.json().catch(() => null);
+    const record = (body ?? {}) as Record<string, unknown>;
+    const reason = typeof record.reason === "string" ? record.reason : null;
+
+    if (record.success === true) {
+      return NextResponse.json({ funded: true, reason: "sent" }, { status: 200 });
     }
-    if (!upstream.ok) {
-      console.error("[gamearena] faucet refused:", upstream.status);
+
+    /*
+      EVERY REFUSAL IS PASSED THROUGH BY NAME, because they mean different
+      things to the player and collapsing them is how somebody is told to try
+      again when what they actually need is to verify.
+
+        already_claimed — funded once before; the gas may be spent
+        not_fresh       — already holds enough; no drip needed, just mint
+        unverified      — the GoodDollar gate; verifying is the way through
+        daily_cap       — the global kill-switch, transient
+        faucet_empty    — their faucet needs topping up; ours to report, not fix
+    */
+    if (reason) {
+      return NextResponse.json({ funded: false, reason }, { status: 200 });
+    }
+    if (upstream.status === 401) {
+      // Our key is wrong or unset — an operator's problem, never the player's.
+      console.error("[gamearena] faucet rejected our partner key");
       return NextResponse.json({ funded: false, reason: "refused" }, { status: 200 });
     }
-    return NextResponse.json({ funded: true }, { status: 200 });
+    console.error("[gamearena] faucet refused:", upstream.status);
+    return NextResponse.json({ funded: false, reason: "refused" }, { status: 200 });
   } catch (error) {
     console.error(
       "[gamearena] could not reach the faucet:",

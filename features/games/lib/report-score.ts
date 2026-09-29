@@ -64,7 +64,32 @@ export async function reportScore(
  * its one drip, so the gas may well be sitting there and the claim is worth
  * attempting rather than abandoning.
  */
-export type GasRequest = { funded: boolean; already: boolean };
+/**
+ * What came back from a request for gas, kept by NAME rather than collapsed.
+ *
+ * They mean different things to the player, and flattening them is how
+ * somebody is told to try again when what they actually need is to verify.
+ */
+export type GasOutcome =
+  /** Sent. The balance still has to land. */
+  | "sent"
+  /** Funded once before — the gas may already be spent. */
+  | "already_claimed"
+  /** Already holds enough; no drip needed, go straight to the claim. */
+  | "not_fresh"
+  /** The GoodDollar gate. Verifying is the way through, not retrying. */
+  | "unverified"
+  /** Their global daily kill-switch. Transient. */
+  | "daily_cap"
+  /** Their faucet wallet needs topping up. Ours to report, not to fix. */
+  | "faucet_empty"
+  /** Refused, unreachable, or not configured. */
+  | "refused";
+
+export interface GasRequest {
+  funded: boolean;
+  outcome: GasOutcome;
+}
 
 export async function requestGas(): Promise<GasRequest> {
   try {
@@ -74,11 +99,28 @@ export async function requestGas(): Promise<GasRequest> {
       body: "{}",
       cache: "no-store",
     });
-    if (!response.ok) return { funded: false, already: false };
+    if (!response.ok) return { funded: false, outcome: "refused" };
     const body: unknown = await response.json().catch(() => null);
     const record = (body ?? {}) as Record<string, unknown>;
-    return { funded: record.funded === true, already: record.reason === "already" };
+    const reason =
+      typeof record.reason === "string" ? record.reason : "refused";
+    return {
+      funded: record.funded === true,
+      outcome: (KNOWN_OUTCOMES.has(reason) ? reason : "refused") as GasOutcome,
+    };
   } catch {
-    return { funded: false, already: false };
+    return { funded: false, outcome: "refused" };
   }
 }
+
+/** An outcome we have not seen before is treated as a refusal rather than
+    forwarded, so a new upstream string can never reach a player as copy. */
+const KNOWN_OUTCOMES = new Set([
+  "sent",
+  "already_claimed",
+  "not_fresh",
+  "unverified",
+  "daily_cap",
+  "faucet_empty",
+  "refused",
+]);
