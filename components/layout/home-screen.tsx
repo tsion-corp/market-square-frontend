@@ -4,8 +4,8 @@ import { useState } from "react";
 
 import { FeedPage, ArkmarksPage, PostDetailPage, type Post } from "@/features/feed";
 import { FollowPill, WinkButton } from "@/features/profile";
+import { useCoinBalance } from "@/features/gifts";
 import { TipButton } from "@/features/tips";
-import { KashBalance } from "@/features/kash";
 import { HomeTopRow } from "@/components/layout/home-top-row";
 import { HomeSearch } from "@/components/layout/home-search";
 import { HomeBanner } from "@/components/layout/home-banner";
@@ -33,7 +33,6 @@ const followSlot = (author: Parameters<typeof FollowPill>[0]["profile"]) => (
 // the kash slice, so it is joined in here rather than imported across — the
 // same route slot the follow control above uses. It renders nothing at all
 // where there is no wallet or no engine, which is the honest answer.
-const balanceSlot = (amountKash: string | null) => <KashBalance amountKash={amountKash} />;
 
 // The wink sits between the tip and the follow on every post header — node
 // 496:13389 draws all three. It belongs to the profile slice, which owns the
@@ -42,13 +41,6 @@ const winkSlot = (author: Parameters<typeof WinkButton>[0]["profile"]) => (
   <WinkButton profile={author} size="post" />
 );
 
-const tipSlot = (post: Post) => (
-  <TipButton
-    target={{ kind: "post", id: post.id, recipient: post.author }}
-    balance={balanceSlot}
-    variant="post"
-  />
-);
 
 /**
  * The three post-header controls, for every screen that hands the feed slice
@@ -56,7 +48,34 @@ const tipSlot = (post: Post) => (
  * composition, exported, so the pals screen does not carry a second copy of
  * the slice-joining above.
  */
-export const POST_SLOTS = { followSlot, winkSlot, tipSlot } as const;
+/*
+  A HOOK, NOT A CONST, because one of the three now needs a balance.
+
+  `tipSlot` opens the room's gift sheet, which is priced in COINS and shows
+  what the reader holds — so it needs a number that only a hook can fetch. A
+  module-level object cannot call one.
+
+  The other two are unchanged and still pure. Exported as one hook rather than
+  splitting them so a caller still gets the whole header in one spread, which
+  is the thing this export existed for.
+*/
+export function usePostSlots() {
+  /*
+    The coin balance belongs to the gifts slice and `TipButton` to tips; slices
+    never import each other, so the layer allowed to know both supplies it —
+    the same reason `FollowPill` and the wink arrive as slots. The query is
+    small, cached and shared with every other coin surface.
+  */
+  const coins = useCoinBalance();
+  const tipSlot = (post: Post) => (
+    <TipButton
+      target={{ kind: "post", id: post.id, recipient: post.author }}
+      balanceCoins={coins}
+      variant="post"
+    />
+  );
+  return { followSlot, winkSlot, tipSlot };
+}
 
 /**
  * Home, composed — node 225:3315.
@@ -76,6 +95,7 @@ export const POST_SLOTS = { followSlot, winkSlot, tipSlot } as const;
  * both.
  */
 export function HomeScreen() {
+  const { tipSlot } = usePostSlots();
   /*
     HOME ANSWERS ITS OWN SEARCH.
 
@@ -123,16 +143,16 @@ export function HomeScreen() {
 }
 
 export function ArkmarksScreen() {
-  return <ArkmarksPage followSlot={followSlot} winkSlot={winkSlot} tipSlot={tipSlot} />;
+  const slots = usePostSlots();
+  return <ArkmarksPage {...slots} />;
 }
 
 export function PostScreen({ postId }: { postId: string }) {
+  const slots = usePostSlots();
   return (
     <PostDetailPage
       postId={postId}
-      followSlot={followSlot}
-      winkSlot={winkSlot}
-      tipSlot={tipSlot}
+      {...slots}
     />
   );
 }

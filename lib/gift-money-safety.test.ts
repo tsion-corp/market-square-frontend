@@ -55,7 +55,7 @@ test("the tray follows the caller's chosen recipient, not the one at mount", () 
     prop changed on every "Gift" tap and `toId` stayed null, falling through
     to `people[0]`. Money to the wrong human, silently.
   */
-  const sheet = code("features/streams/components/gift-sheet.tsx");
+  const sheet = code("components/ui/gift-sheet.tsx");
   // The bug shape specifically: the RECIPIENT held as state seeded from the
   // prop. `lastNamed` is also seeded from it and is the fix, not the defect —
   // an assertion broad enough to catch both would fail on the cure.
@@ -95,7 +95,7 @@ test("the reset happens during render, never in an effect", () => {
     cascade a second render per recipient change, and lint refuses setState
     inside one — the same rule that caught the coin sheet earlier today.
   */
-  const sheet = code("features/streams/components/gift-sheet.tsx");
+  const sheet = code("components/ui/gift-sheet.tsx");
   assert.doesNotMatch(sheet, /useEffect\([^)]*setPicked/u, "no effect-driven reset");
 });
 

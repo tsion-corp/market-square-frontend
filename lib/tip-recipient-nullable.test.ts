@@ -58,10 +58,19 @@ test("every reader treats null as 'not named', never as 'nobody paid'", () => {
     "invalidating a profile query needs a username, and there is none to use"
   );
 
-  const sheet = code("features/tips/components/tip-sheet.tsx");
-  assert.match(sheet, /receipt\.recipient \?/u, "the receipt must not render a name it does not have");
-  // The failure this replaces: `Sent to undefined`.
-  assert.doesNotMatch(sheet, /Sent to \{/u, "no interpolation without a null check in front of it");
+  /*
+    THE RECEIPT HALF WENT WITH THE TIP SHEET.
+
+    That sheet rendered "Sent to <name>" and had to guard a null recipient — a
+    gist-room gift names nobody, and the bug this file exists for was
+    `Sent to undefined`. Posts now open the room's gift sheet, which never
+    renders a recipient name at all, so there is no interpolation left to
+    guard.
+
+    The rule itself is unchanged and still pinned above: `recipient` is
+    NULLABLE on the wire and `use-tips` must not reach through it. What is gone
+    is one reader, not the reason.
+  */
 });
 
 test("the null comes from adopt() copying the target, which is why tsc missed it", () => {

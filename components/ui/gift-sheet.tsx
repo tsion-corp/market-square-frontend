@@ -227,7 +227,19 @@ export function GiftSheet({
             {/* The HOST is the creator — "Tip your creator" on their own tray
                 read as tipping themselves (ogazboiz, 2026-09-28). For them it
                 names the real recipients: the room's audience. */}
-            {priced ? (viewerIsHost ? "Tip your audience" : "Tip your creator") : "Send a gift"}
+            {/*
+              "SEND A GIFT", NOT "TIP YOUR CREATOR".
+
+              This sheet now opens on a post and on a profile as well as in a
+              room, and in most of those the recipient is a PEER — not anybody's
+              creator. ogazboiz, twice: "not everything is tip your creator".
+
+              The HOST variant stays, because it is the one case where the
+              relationship is real and is the thing being described: a host
+              tipping the room is tipping their audience, and that is worth
+              saying.
+            */}
+            {viewerIsHost ? "Tip your audience" : "Send a gift"}
           </h2>
           {/* 23px circle, 4% white, blurred — the file's, pinned right. */}
           <button
