@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePlayerPass } from "@/features/games/hooks/use-player-pass";
+import { useMe } from "@/hooks/use-me";
 import { MARKET_FLAGS } from "@/lib/market-config";
 import {
   checkName,
@@ -41,7 +42,29 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
     claimName,
   } = usePlayerPass();
 
-  const [name, setName] = useState("");
+  /*
+    THE FIELD OPENS ON THEIR SQUARE HANDLE.
+
+    Somebody who plays a game in Square and is then asked to invent a name has
+    been handed a small puzzle for no reason — the name they want is almost
+    always the one they already go by here. So the field is SEEDED with it and
+    checked like anything else: free, and one tap takes it; taken, and they are
+    asked for another exactly as before.
+
+    A suggestion, never a claim. Nothing is minted until they press the button,
+    and the name still binds to THEIR wallet — so this cannot hand anybody
+    somebody else's name, which is the trap in matching handles across two
+    systems.
+
+    Stored as null-until-typed and DERIVED at read, rather than seeded through
+    an effect: writing state from an effect body is a cascading render, and the
+    suggestion is a pure function of the profile.
+  */
+  const me = useMe();
+  const suggestion = sanitiseName(me.data?.username ?? "");
+  const [typed, setTyped] = useState<string | null>(null);
+  const name = typed ?? suggestion;
+  const setName = setTyped;
   /*
     THE ANSWER IS STORED WITH THE NAME IT IS ABOUT, and read back only while
     the two still match.
@@ -218,7 +241,9 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
           Get your player name
         </p>
         <p className="mt-1 text-[13px] leading-5 text-white/55">
-          This is the name on the leaderboard. Each one can only be taken once.
+          {typed === null && suggestion
+            ? "We've put your Square name in. Each name can only be taken once — if it's gone, pick another."
+            : "This is the name on the leaderboard. Each one can only be taken once."}
         </p>
 
         <input

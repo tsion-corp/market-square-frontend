@@ -313,3 +313,38 @@ describe("an expired verification is said differently from a missing one", () =>
     assert.doesNotMatch(readChain, /functionName: "authenticationPeriod"/);
   });
 });
+
+/*
+  THE NAME FIELD SUGGESTS; IT NEVER CLAIMS.
+
+  Seeding the field with somebody's Square handle is a convenience. Claiming
+  one on their behalf would be something else entirely — and matching handles
+  across two systems is exactly how one person ends up holding a name that
+  belongs to another. The claim stays behind a press, and the name still binds
+  to the wallet that signs it.
+*/
+describe("the player name is suggested, not assumed", () => {
+  it("opens the field on their Square handle", () => {
+    assert.match(makeItCount, /useMe\(\)/);
+    assert.match(makeItCount, /sanitiseName\(me\.data\?\.username \?\? ""\)/);
+  });
+
+  it("only ever claims from an explicit press", () => {
+    // onClaim must be reachable from the button and from nothing else — no
+    // effect, no auto-submit on a free name.
+    assert.match(makeItCount, /onClick=\{\(\) => void onClaim\(\)\}/);
+    const effects = makeItCount.match(/useEffect\(/g) ?? [];
+    assert.equal(
+      effects.length,
+      1,
+      "a second effect here would be the one that auto-claims",
+    );
+    assert.doesNotMatch(makeItCount, /useEffect\([\s\S]{0,400}?onClaim\(/);
+  });
+
+  it("still checks a suggested name like any other", () => {
+    // A seeded name is not a trusted one: it goes through the same contract
+    // check, so a taken handle is refused rather than attempted.
+    assert.match(makeItCount, /availability === "available"/);
+  });
+});
