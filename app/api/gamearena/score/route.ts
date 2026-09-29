@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getRequestWallet, verifyRequest } from "@/lib/server/auth";
 import { MAX_REPORT_BODY, parseScoreReport } from "@/lib/gamearena-report";
+import { gameArenaConfigured, gameArenaFetch } from "@/lib/server/gamearena";
 
 /**
  * Reports a Simon score played in Square onto GameArena's boards.
@@ -38,24 +39,11 @@ import { MAX_REPORT_BODY, parseScoreReport } from "@/lib/gamearena-report";
  * their validated path.
  */
 
-/** Their backend. Unset means the integration is simply off — the same way
-    their own partner routes stay inert until a partner is configured. */
-const GAMEARENA_API = (process.env.GAMEARENA_API_URL ?? "").replace(/\/+$/, "");
-const PARTNER_KEY = process.env.GAMEARENA_PARTNER_KEY ?? "";
-
-/** Upstream is not in the player's way: a board that is slow must not hold a
-    thread open, so the report is abandoned rather than awaited indefinitely. */
-const UPSTREAM_TIMEOUT_MS = 5000;
-
-function configured(): boolean {
-  return GAMEARENA_API.length > 0 && PARTNER_KEY.length > 0;
-}
-
 export async function POST(req: NextRequest) {
   // Not configured is not an error the player should see. Their game was
   // played and their card is already correct; only the leaderboard write is
   // absent, and that is an operator's problem, not theirs.
-  if (!configured())
+  if (!gameArenaConfigured())
     return NextResponse.json(
       { reported: false, reason: "off" },
       { status: 200 },
@@ -87,19 +75,14 @@ export async function POST(req: NextRequest) {
   const { score, handle } = report;
 
   try {
-    const upstream = await fetch(`${GAMEARENA_API}/api/partner/score`, {
+    const upstream = await gameArenaFetch("/api/partner/score", {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-partner-key": PARTNER_KEY,
-      },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
         wallet,
         score,
         ...(handle ? { name: handle } : {}),
       }),
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      cache: "no-store",
     });
 
     if (!upstream.ok) {
