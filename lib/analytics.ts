@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { apiFetch } from "@/lib/api/client";
 import { readUtm, withoutShareChannel, type UtmParams } from "@/lib/utm";
 import { getAuthSnapshot } from "@/lib/session";
+import { identifyForAnalytics, mixpanelReady, sendToMixpanel } from "@/lib/mixpanel";
 import { api, SQUARE_BASE } from "./square-path.ts";
 
 /*
@@ -211,6 +212,19 @@ export function trackMarketEvent(name: MarketEventName, input: MarketEventInput)
   // previous surface.
   lastSurface = input.surface;
 
+  /*
+    MIXPANEL IS THE TRANSPORT THAT EXISTS.
+
+    `POST /analytics/events` is still not deployed, so the call below has never
+    delivered anything — it 404s once per page load and latches. It stays,
+    because when a collector of ours does land it is the one that keeps the raw
+    events and can attach the viewer from the SESSION rather than trusting the
+    browser. Mixpanel is the tool for reading them, not the record.
+
+    Both are fire-and-forget and neither can fail the action.
+  */
+  if (mixpanelReady()) sendToMixpanel(name, payload, payload.sessionId);
+
   void apiFetch(api("/api/market-square/analytics/events"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -240,3 +254,13 @@ export function useMarketView(name: MarketEventName, input: MarketEventInput, re
     trackMarketEvent(name, { entityType, entityId, surface, source });
   }, [name, entityType, entityId, surface, source, ready]);
 }
+
+/*
+  WHO THE EVENTS BELONG TO — re-exported here so a caller has ONE analytics
+  import rather than two, and so the identity and the events can never be
+  wired to different modules.
+
+  Called when the viewer resolves and again with null on sign-out: on a shared
+  device the next person's events must not be filed under the last one's.
+*/
+export { identifyForAnalytics } from "@/lib/mixpanel";

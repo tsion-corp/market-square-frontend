@@ -30,7 +30,25 @@ describe("the common properties every event carries", () => {
     built on it. The viewer is attached SERVER-SIDE from the session the BFF
     already forwards.
   */
-  it("never sends a user id from the client", () => {
+  /*
+    THE RULE, AND WHY ITS SCOPE IS WHAT IT IS.
+
+    No user id goes in the EVENT PAYLOAD, because the payload is what a
+    collector of ours would receive — and that collector holds the session, so
+    it is better placed to say who the viewer is than a browser that can claim
+    anything.
+
+    Mixpanel is a departure and a deliberate one: there is no server of ours in
+    that path, so the choice is a claimed `distinct_id` or no per-person
+    analysis at all — and "what does a user do most" is the question that was
+    asked. It is set in `lib/mixpanel.ts`, out of the payload, where the
+    departure is visible and documented rather than smuggled into a field
+    called `userId`.
+
+    That keeps this assertion meaningful: the day our collector exists, the
+    payload is still clean and the service attaches the viewer itself.
+  */
+  it("never puts a user id in the event payload", () => {
     for (const forbidden of [/\buserId:/, /\bprofileId:/, /\bviewerId:/]) {
       assert.doesNotMatch(source, forbidden, "the viewer is the service's to attach, not the browser's to claim");
     }
@@ -97,5 +115,51 @@ describe("the events cover what this product is actually for", () => {
     for (const kept of ["stream_started", "ticket_purchased", "store_item_viewed"]) {
       assert.match(source, new RegExp(`\\| "${kept}"`));
     }
+  });
+});
+
+/*
+  THE TRANSPORT THAT ACTUALLY EXISTS. `POST /analytics/events` is still not
+  deployed, so until it is, Mixpanel is the only thing that receives anything.
+*/
+describe("the Mixpanel transport", () => {
+  const mp = readFileSync("lib/mixpanel.ts", "utf8");
+
+  it("is a no-op without a token, rather than throwing on every event", () => {
+    assert.match(mp, /export function mixpanelReady\(\): boolean/);
+    assert.match(mp, /return TOKEN\.length > 0;/);
+    assert.match(mp, /if \(!TOKEN \|\| typeof window === "undefined"\) return;/);
+  });
+
+  /*
+    A retried or double-fired event must count ONCE. Without an insert id a
+    flaky connection inflates every number it touches, and inflation is the one
+    error nobody goes looking for.
+  */
+  it("de-duplicates with an insert id", () => {
+    assert.match(mp, /\$insert_id:/);
+  });
+
+  /*
+    On a shared device the next person's events must not be filed under the
+    last one's, so identity is resettable rather than write-once.
+  */
+  it("can be reset to nobody", () => {
+    assert.match(mp, /export function identifyForAnalytics\(id: string \| null\)/);
+    assert.match(mp, /distinct_id: distinctId \?\? sessionId/);
+  });
+
+  it("never lets a blocked request reach the caller", () => {
+    assert.match(mp, /\.catch\(\(\) => \{\}\)/);
+    assert.match(mp, /\} catch \{/, "an ad-blocker can make fetch throw synchronously");
+  });
+
+  /*
+    The API SECRET is a different credential from the project token and must
+    never reach the browser.
+  */
+  it("reads only the public project token", () => {
+    assert.match(mp, /NEXT_PUBLIC_MIXPANEL_TOKEN/);
+    assert.doesNotMatch(mp, /API_SECRET|api_secret/);
   });
 });

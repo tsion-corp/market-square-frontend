@@ -2671,6 +2671,7 @@ function LiveHouse({
         open={giftsOpen}
         onClose={() => setGiftsOpen(false)}
         onSend={sendGift}
+        viewerIsHost={isHost}
         recipients={giftRecipients}
         priced={giftsArePriced(stream.status)}
         initialRecipientId={giftTo}

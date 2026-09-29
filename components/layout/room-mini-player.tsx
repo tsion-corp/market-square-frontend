@@ -8,7 +8,7 @@ import { useEndStream, useStageSlots } from "@/features/streams";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DestructiveConfirmSheet } from "@/components/ui/destructive-confirm-sheet";
-import { IconChevronUp, IconRefresh, IconVolume, IconX } from "@/components/ui/icons";
+import { IconFullscreen, IconRefresh, IconVolume, IconX } from "@/components/ui/icons";
 import { IconRoomLeave, IconRoomMic, IconRoomMicOff } from "@/components/ui/room-icons";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/cn";
@@ -376,7 +376,10 @@ function PlayerBody({
                 onClick={() => router.push(roomHref)}
                 className="group-data-[rail=icon]/rail:hidden"
               >
-                <IconChevronUp className="h-4 w-4" />
+                {/* An EXPAND glyph — this restores the minimised room to its
+                    full page. A chevron-up read as "scroll up"/"collapse", not
+                    "open this back up" (ogazboiz, 2026-09-28). */}
+                <IconFullscreen className="h-4 w-4" />
               </RoundButton>
             )}
             <HangUp session={session} streamId={streamId} />

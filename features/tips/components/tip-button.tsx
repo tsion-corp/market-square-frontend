@@ -194,12 +194,19 @@ export function TipButton({
       {/* Tooltip, in the app's one existing pattern (the icon rail's, in
           `app-shell`): a positioned span revealed by the group's hover state,
           `pointer-events-none` so it can never eat the click it describes.
-          Two departures, both deliberate:
+          Three departures, all deliberate:
             · it also opens on `group-focus-within`, so a keyboard user sees the
               same label a mouse user does — the rail's version is hover-only;
             · it is `aria-hidden`, because the button already carries the label
               as its accessible name and a screen reader reading "Give a tip"
-              twice is noise, not redundancy.
+              twice is noise, not redundancy;
+            · it opens BELOW the button (`top-full`), not above it. This control
+              sits at the very top of the post card, so an upward tooltip left
+              the card entirely and rendered into the sticky column header's
+              stacking context — which owns that strip and painted OVER it, so
+              the label read as clipped/behind ("it should be over, not under",
+              2026-09-28). Downward it stays inside the card's own content, above
+              which nothing competes, so `z-50` is enough and it is never cut.
           The purple is the ramp's DARK stop with white ink, which is the rule
           for a solid purple fill (5.66:1); the light stop under white text
           would fail AA. */}
@@ -207,7 +214,7 @@ export function TipButton({
         <span
           aria-hidden
           className={cn(
-            "pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden -translate-x-1/2",
+            "pointer-events-none absolute top-full left-1/2 z-50 mt-2 hidden -translate-x-1/2",
             "whitespace-nowrap rounded-lg bg-spotlight px-2.5 py-1 text-xs font-semibold text-white shadow-lg",
             // Pointer devices only. On touch there is no hover, and
             // `group-focus-within` fires on TAP — so the tooltip appeared
