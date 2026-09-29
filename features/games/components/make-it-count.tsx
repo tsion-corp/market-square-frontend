@@ -80,7 +80,14 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
   } | null>(null);
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /*
+    TWO ERRORS, NOT ONE. A failed claim and a failed verification are separate
+    events on separate controls, and sharing one slot printed "Couldn't claim
+    that name" underneath the verify button as well — which reads as both
+    things being broken at once.
+  */
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   const availability = checked && checked.name === name ? checked.result : null;
 
@@ -108,23 +115,23 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
 
   const onVerify = useCallback(async () => {
     setBusy(true);
-    setError(null);
+    setVerifyError(null);
     const result = await startVerification(returnTo);
     // On success the page is already navigating away, so `busy` deliberately
     // stays true — releasing it would flash an enabled button during the
     // handover.
     if (!result.ok) {
-      setError(result.error ?? "Could not start.");
+      setVerifyError(result.error ?? "Could not start.");
       setBusy(false);
     }
   }, [startVerification, returnTo]);
 
   const onClaim = useCallback(async () => {
     setBusy(true);
-    setError(null);
+    setClaimError(null);
     const result = await claimName(name);
     if (!result.ok) {
-      setError(result.error ?? "Could not claim that name.");
+      setClaimError(result.error ?? "Could not claim that name.");
       // The name may have gone while they typed, so anything we hold about it
       // is no longer worth showing.
       setChecked(null);
@@ -199,7 +206,9 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
             ? "Optional for now. Prove you're a real person and your games count on the leaderboard."
             : "Prove you're a real person once, and every game you play here counts on the leaderboard."}
       </p>
-      {error && <p className="mt-2 text-[13px] text-rose-300">{error}</p>}
+      {verifyError && (
+        <p className="mt-2 text-[13px] text-rose-300">{verifyError}</p>
+      )}
       <button
         type="button"
         disabled={busy}
@@ -254,7 +263,7 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
             // would be refused — and a long paste is trimmed once, here, rather
             // than silently becoming a different name later.
             setName(sanitiseName(event.target.value));
-            setError(null);
+            setClaimError(null);
           }}
           maxLength={USERNAME_MAX}
           autoCapitalize="none"
@@ -266,8 +275,8 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
         />
 
         <p className="mt-1.5 min-h-5 text-[13px]">
-          {error ? (
-            <span className="text-rose-300">{error}</span>
+          {claimError ? (
+            <span className="text-rose-300">{claimError}</span>
           ) : name && problem ? (
             <span className="text-white/45">{nameProblemMessage(problem)}</span>
           ) : checking && !availability ? (

@@ -232,23 +232,77 @@ export function usePlayerPass() {
         await refresh();
         return { ok: true };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        // The reverts a player can actually cause, said in their words rather
-        // than the contract's.
+        /*
+          THE REAL REASON IS LOGGED, ALWAYS.
+
+          The first version folded every failure into "Couldn't claim that
+          name. Try again.", which is the least useful sentence available: it
+          says a thing failed and takes away the one clue that would fix it.
+          The cause is written to the console verbatim, and an unrecognised one
+          is SHOWN rather than hidden, because a player who can tell us what it
+          said is worth more than a tidy screen.
+        */
+        console.error("[games] claim failed:", error);
+        const message =
+          error instanceof Error
+            ? [
+                error.message,
+                (error as { shortMessage?: string }).shortMessage,
+                String((error as { cause?: unknown }).cause ?? ""),
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : String(error);
+
+        // The reverts and refusals a player can actually cause, said in their
+        // words rather than the chain's.
         if (/username taken/i.test(message)) {
           return { ok: false, error: "That name just went. Pick another." };
         }
-        if (/already minted/i.test(message)) {
+        if (/already minted|already has/i.test(message)) {
           await refresh();
           return { ok: false, error: "You already have a name." };
         }
-        if (/insufficient funds/i.test(message)) {
+        if (
+          /user rejected|user denied|rejected the request|cancell?ed/i.test(
+            message,
+          )
+        ) {
           return {
             ok: false,
-            error: "Couldn't claim it yet — try again shortly.",
+            error: "You cancelled that. Tap again when ready.",
           };
         }
-        return { ok: false, error: "Couldn't claim that name. Try again." };
+        if (
+          /insufficient funds|exceeds the balance|gas required|out of gas|balance of the account/i.test(
+            message,
+          )
+        ) {
+          return {
+            ok: false,
+            error:
+              "Your account needs a small top-up before it can take a name. Proving you're a real person unlocks it.",
+          };
+        }
+        if (
+          /unsupported chain|unrecognized chain|chain not|switch/i.test(message)
+        ) {
+          return {
+            ok: false,
+            error: "Your wallet couldn't switch networks for this. Try again.",
+          };
+        }
+        /*
+          Unrecognised: show what it actually said, trimmed. A generic sentence
+          here is what turned a five-minute fix into a screenshot and a guess.
+        */
+        const detail = message.split("\n")[0].slice(0, 140);
+        return {
+          ok: false,
+          error: detail
+            ? `Couldn't claim that name — ${detail}`
+            : "Couldn't claim that name.",
+        };
       }
     },
     [send, refresh],
