@@ -36,6 +36,12 @@ const makeItCount = stripComments(
 const reportClient = stripComments(read("features/games/lib/report-score.ts"));
 const readChain = read("features/games/lib/pass-chain.ts");
 const providers = stripComments(read("app/providers.tsx"));
+/*
+  RAW, because stripComments deletes from "//" to end of line and a URL
+  contains "//" — the stripped copy truncates "https://forno.celo.org" to
+  "https:" and an assertion about an endpoint can never match it.
+*/
+const providersRaw = read("app/providers.tsx");
 const gamePass = stripComments(read("lib/game-pass.ts"));
 const evmSend = stripComments(read("hooks/use-evm-send.ts"));
 
@@ -366,6 +372,16 @@ describe("the wallet session may sign on Celo", () => {
     assert.match(providers, /"evm:42220"/);
     // Base must not be lost in the process — every payment in Square is there.
     assert.match(providers, /"evm:8453"/);
+  });
+
+  it("also gives it an endpoint, which declaring alone does not", () => {
+    /*
+      Decane carries its own RPC for the chains it ships with and refuses a
+      chain it has none for — "No RPC URL for evm:42220" — rather than
+      guessing. Declaring the chain and supplying its endpoint are two separate
+      gates, and the claim failed at the second after passing the first.
+    */
+    assert.match(providersRaw, /rpcUrls:\s*\{\s*"evm:42220":\s*"https:\/\/[^"]+"/);
   });
 
   it("uses the same chain id the claim is actually built for", () => {

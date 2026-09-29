@@ -69,6 +69,19 @@ function DecaneAuthProvider({ children }: { children: React.ReactNode }) {
           apiKey: decane.apiKey,
           authMethods: ["google", "email", "x"],
           chains: DECANE_CHAINS,
+          /*
+            CELO NEEDS AN ENDPOINT, NOT JUST A DECLARATION.
+
+            Decane carries its own RPC for the chains it ships with; Celo is
+            not one of them, and it refuses with "No RPC URL for evm:42220"
+            rather than guessing. The other three chains keep Decane's own
+            endpoints — only the one it has none for is supplied here.
+
+            Celo's public node, which is also what GameArena read through. No
+            key, nothing of ours on it, and it carries ONE transaction: the
+            claim that mints a player's game pass.
+          */
+          rpcUrls: { "evm:42220": "https://forno.celo.org" },
           showStatusOverlay: false,
           // The identity tier: no passkey, no password, nothing stored on the
           // device — ever. Square is a place people read and post first, and
