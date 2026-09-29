@@ -8,7 +8,7 @@ import { CELO_CHAIN_ID, mintCall } from "@/lib/game-pass";
 import { buildFvLink, fvMessage } from "@/lib/gooddollar-link";
 import {
   readPass,
-  readVerified,
+  readIdentity,
   waitForMint,
 } from "@/features/games/lib/pass-chain";
 
@@ -40,7 +40,16 @@ export interface PlayerPass {
   available: boolean;
   hasPass: boolean;
   username: string | null;
+  /** Verified right now — inside GoodDollar's reverification window. */
   verified: boolean;
+  /**
+   * Has been through the face check before, even if it has lapsed.
+   *
+   * The difference matters in words: somebody who verified last week and fell
+   * out of a three-day window should be asked to do it AGAIN, not told they
+   * have never done it.
+   */
+  everVerified: boolean;
 }
 
 const UNAVAILABLE: PlayerPass = {
@@ -49,6 +58,7 @@ const UNAVAILABLE: PlayerPass = {
   hasPass: false,
   username: null,
   verified: false,
+  everVerified: false,
 };
 
 /**
@@ -73,16 +83,17 @@ const UNAVAILABLE: PlayerPass = {
  * days.
  */
 async function loadPlayerPass(address: `0x${string}`): Promise<PlayerPass> {
-  const [pass, verified] = await Promise.all([
+  const [pass, identity] = await Promise.all([
     readPass(address),
-    readVerified(address),
+    readIdentity(address),
   ]);
   return {
     loading: false,
     available: true,
     hasPass: pass.hasPass,
     username: pass.username,
-    verified,
+    verified: identity.verified,
+    everVerified: identity.everVerified,
   };
 }
 

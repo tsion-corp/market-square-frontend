@@ -118,15 +118,23 @@ describe("verification is never cached, at any layer", () => {
       itself unavailable with a working chain, a working partner API and a
       correct key. `isWhitelisted` is the live question, window included.
     */
-    assert.match(passHook, /readVerified\(address\)/);
+    assert.match(passHook, /readIdentity\(address\)/);
     assert.match(passHook, /readPass\(address\)/);
-    assert.match(readChain, /functionName: "isWhitelisted"/);
+    /*
+      getWhitelistedRoot, NOT isWhitelisted. GoodDollar lets a wallet be linked
+      to a root identity, and only the root lookup resolves through that link —
+      so asking isWhitelisted about a linked wallet returns false and sends a
+      genuinely verified human through a face scan they have already passed.
+      This is how GameArena read it, and the reason is worth keeping.
+    */
+    assert.match(readChain, /functionName: "getWhitelistedRoot"/);
+    assert.doesNotMatch(readChain, /functionName: "isWhitelisted"/);
   });
 
   it("never treats a failed verification read as unverified", () => {
     // Saying "not verified" when the read failed sends somebody who already
     // verified back through a face scan.
-    assert.match(readChain, /A failed read is NOT "not verified"/);
+    assert.match(readChain, /A FAILED READ IS NOT "NOT VERIFIED"/);
   });
 
   it("is answered no-store by the route", () => {
@@ -274,5 +282,34 @@ describe("the GoodDollar signature is signed over hex", () => {
     // Sending a malformed signature moves the failure onto GoodDollar's screen,
     // where we can neither see it nor explain it to the player.
     assert.match(passHook, /\^0x\[0-9a-fA-F\]\{130\}\$/);
+  });
+});
+
+/*
+  A LAPSE IS NOT A BLANK.
+
+  GoodDollar's FIRST window is three days. Somebody who verified last week is
+  genuinely not verified now — and `isWhitelisted` collapses that into the same
+  false as never having verified at all. Telling them to prove they are a real
+  person "once" denies something they already did, which is how you lose the
+  person who was nearly through.
+*/
+describe("an expired verification is said differently from a missing one", () => {
+  it("distinguishes the two on chain rather than collapsing them", () => {
+    assert.match(readChain, /everVerified/);
+    assert.match(readChain, /reverifyDaysOptions/);
+  });
+
+  it("says verify AGAIN when they have been through it before", () => {
+    assert.match(makeItCount, /everVerified/);
+    assert.match(makeItCount, /Verify again/);
+    assert.match(makeItCount, /Your check expired/);
+  });
+
+  it("does not trust authenticationPeriod, which is the documented trap", () => {
+    // The contract stores it as unused_authenticationPeriod and its getter
+    // returns the LAST schedule entry, so an authCount-0 wallet reads 180 days
+    // when it really has three.
+    assert.doesNotMatch(readChain, /functionName: "authenticationPeriod"/);
   });
 });

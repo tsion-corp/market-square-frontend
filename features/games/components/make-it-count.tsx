@@ -35,6 +35,7 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
     hasPass,
     username,
     verified,
+    everVerified,
     startVerification,
     claimName,
   } = usePlayerPass();
@@ -160,9 +161,16 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
         <p className="text-[14px] font-semibold text-white">
           Make your scores count
         </p>
+        {/*
+          A LAPSE IS NOT A BLANK. GoodDollar's first window is three days, so
+          somebody who verified last week is not verified now — and telling
+          them to prove they are a real person "once" denies something they
+          already did. Same control, different sentence.
+        */}
         <p className="mt-1 text-[13px] leading-5 text-white/55">
-          Prove you&rsquo;re a real person once, and every game you play here
-          counts on the leaderboard.
+          {everVerified
+            ? "Your check expired — GoodDollar asks again after a few days. One more and your games count."
+            : "Prove you're a real person once, and every game you play here counts on the leaderboard."}
         </p>
         {error && <p className="mt-2 text-[13px] text-rose-300">{error}</p>}
         <button
@@ -171,7 +179,11 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
           onClick={() => void onVerify()}
           className="ws-press mt-2.5 w-full rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-black disabled:opacity-50"
         >
-          {busy ? "Opening…" : "Prove you're a real person"}
+          {busy
+            ? "Opening…"
+            : everVerified
+              ? "Verify again"
+              : "Prove you're a real person"}
         </button>
       </div>
     );
