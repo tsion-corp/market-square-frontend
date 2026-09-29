@@ -249,7 +249,7 @@ const guestStage = source("features/streams/hooks/use-stage.ts");
 const cockpit = source("features/streams/components/live-cockpit.tsx");
 const streamHooks = source("features/streams/hooks/use-streams.ts");
 const reactions = source("features/streams/hooks/use-live-reactions.ts");
-const giftSheet = source("features/streams/components/gift-sheet.tsx");
+const giftSheet = source("components/ui/gift-sheet.tsx");
 
 describe("the stage renderer, by construction", () => {
   it("maps over the slot list instead of picking one participant", () => {
@@ -1008,7 +1008,7 @@ describe("Gifting anybody in a gist room", () => {
       it until somebody walks in. Sending then would fly a gift addressed to no
       one, so the action has to refuse and say what is missing.
     */
-    const sheet = source("features/streams/components/gift-sheet.tsx");
+    const sheet = source("components/ui/gift-sheet.tsx");
     assert.match(sheet, /\{people\.length > 0 && \(/, "the picker hides itself when there is one person");
     assert.ok(
       s_includes(sheet, "Boolean(recipients) && people.length === 0"),

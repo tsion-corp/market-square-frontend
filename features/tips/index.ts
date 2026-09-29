@@ -2,7 +2,6 @@
 // `components/layout/*-screen.tsx` composes these into the feed and profile
 // through the same route-slot pattern `FollowPill` uses.
 export { TipButton } from "./components/tip-button";
-export { TipSheet } from "./components/tip-sheet";
 export {
   useSendTip,
   useTipCapability,
