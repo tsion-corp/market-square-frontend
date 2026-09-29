@@ -1,4 +1,4 @@
-import { createPublicClient, fallback, http } from "viem";
+import { createPublicClient, fallback, http, parseAbi } from "viem";
 import { celo } from "viem/chains";
 import { GAME_PASS_ABI, GAME_PASS_ADDRESS, nameProblem } from "@/lib/game-pass";
 
@@ -109,5 +109,37 @@ export async function waitForMint(
     // "failed" would invite a second mint, which reverts for a wallet that
     // already has a pass and costs the player twice.
     return "failed";
+  }
+}
+
+/**
+ * GoodDollar's Identity registry on Celo, and the one question we ask it.
+ *
+ * `isWhitelisted` is not a stored flag: it is `status == 1` AND
+ * `daysSince(dateAuthenticated) < reverifyDaysOptions[authCount]`, and on Celo
+ * that schedule is [3, 180] — a FIRST verification lapses after three days and
+ * only a second buys 180. Reading it live is therefore the only correct way to
+ * ask; anything remembered is wrong within days, which is exactly the bug
+ * GameArena's own players reported.
+ */
+const GD_IDENTITY = "0xC361A6E67822a0EDc17D899227dd9FC50BD62F42" as const;
+const GD_ABI = parseAbi([
+  "function isWhitelisted(address) view returns (bool)",
+]);
+
+export async function readVerified(address: `0x${string}`): Promise<boolean> {
+  try {
+    return Boolean(
+      await celoRead.readContract({
+        address: GD_IDENTITY,
+        abi: GD_ABI,
+        functionName: "isWhitelisted",
+        args: [address],
+      }),
+    );
+  } catch {
+    // A failed read is NOT "not verified": saying so would send somebody who
+    // is already verified back through a face scan.
+    return false;
   }
 }

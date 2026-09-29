@@ -13,20 +13,28 @@ import { describe, it } from "node:test";
  * behind a client gate, and the credential is meant to never reach a browser
  * at all.
  */
-const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path: string) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const stripComments = (source: string) =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 const scoreRoute = stripComments(read("app/api/gamearena/score/route.ts"));
 const profileRoute = stripComments(read("app/api/gamearena/profile/route.ts"));
 const serverConfig = stripComments(read("lib/server/gamearena.ts"));
-const host = stripComments(read("features/games/components/challenge-host.tsx"));
+const host = stripComments(
+  read("features/games/components/challenge-host.tsx"),
+);
 const card = stripComments(read("components/ui/challenge-slot.tsx"));
 const thread = stripComments(read("features/messages/components/thread.tsx"));
-const messagesScreen = stripComments(read("components/layout/messages-screen.tsx"));
+const messagesScreen = stripComments(
+  read("components/layout/messages-screen.tsx"),
+);
 const passHook = stripComments(read("features/games/hooks/use-player-pass.ts"));
-const makeItCount = stripComments(read("features/games/components/make-it-count.tsx"));
+const makeItCount = stripComments(
+  read("features/games/components/make-it-count.tsx"),
+);
 const reportClient = stripComments(read("features/games/lib/report-score.ts"));
+const readChain = read("features/games/lib/pass-chain.ts");
 
 /*
   THE PARTNER KEY IS THE WHOLE AUTHORITY UPSTREAM. Whoever holds it can write
@@ -80,7 +88,10 @@ describe("the wallet comes from the session, never the request", () => {
   });
 
   it("never reads a wallet out of the body", () => {
-    assert.doesNotMatch(scoreRoute, /body\.wallet|report\.wallet|\bparsed\.wallet/);
+    assert.doesNotMatch(
+      scoreRoute,
+      /body\.wallet|report\.wallet|\bparsed\.wallet/,
+    );
   });
 
   it("sends upstream the wallet it resolved, not one it was given", () => {
@@ -98,17 +109,31 @@ describe("the wallet comes from the session, never the request", () => {
   does not.
 */
 describe("verification is never cached, at any layer", () => {
-  it("is fetched no-store by the client", () => {
-    // Whitespace-tolerant: prettier decides where this call wraps, and the
-    // rule being pinned is "no-store on the profile fetch", not its formatting.
-    assert.match(
-      passHook,
-      /fetch\(\s*api\("\/api\/gamearena\/profile"\),\s*\{\s*cache:\s*"no-store",?\s*\}\s*\)/,
-    );
+  it("is read from the chain on every mount, not from a server that can fail", () => {
+    /*
+      The gating question used to travel through our BFF, which resolved the
+      wallet from the session and asked GameArena. Each hop is a way to fail
+      while the answer sits in public state the browser can read — and it DID
+      fail: the session wallet lookup broke locally and the whole step reported
+      itself unavailable with a working chain, a working partner API and a
+      correct key. `isWhitelisted` is the live question, window included.
+    */
+    assert.match(passHook, /readVerified\(address\)/);
+    assert.match(passHook, /readPass\(address\)/);
+    assert.match(readChain, /functionName: "isWhitelisted"/);
+  });
+
+  it("never treats a failed verification read as unverified", () => {
+    // Saying "not verified" when the read failed sends somebody who already
+    // verified back through a face scan.
+    assert.match(readChain, /A failed read is NOT "not verified"/);
   });
 
   it("is answered no-store by the route", () => {
-    assert.match(profileRoute, /"cache-control": "no-store, max-age=0, must-revalidate"/);
+    assert.match(
+      profileRoute,
+      /"cache-control": "no-store, max-age=0, must-revalidate"/,
+    );
   });
 
   it("reads the flag fresh rather than remembering it across a session", () => {
@@ -174,7 +199,8 @@ describe("the game outlives the list it was opened from", () => {
   their origin.
 */
 describe("the words are the player's, not the chain's", () => {
-  const CHAIN_WORDS = /\b(wallet|mint|gas|blockchain|crypto|token|Celo|on-chain|transaction)\b/i;
+  const CHAIN_WORDS =
+    /\b(wallet|mint|gas|blockchain|crypto|token|Celo|on-chain|transaction)\b/i;
 
   it("keeps them out of what the claim screen renders", () => {
     // Strings inside JSX text and button labels — the parts a player reads.
@@ -184,13 +210,23 @@ describe("the words are the player's, not the chain's", () => {
       .join("\n");
     const offenders = visible
       .split("\n")
-      .filter((line) => /(?:^|>)[^<>{}]*[a-z]{3}/.test(line) && CHAIN_WORDS.test(line));
-    assert.deepEqual(offenders, [], `chain vocabulary reached the player: ${offenders.join(" | ")}`);
+      .filter(
+        (line) =>
+          /(?:^|>)[^<>{}]*[a-z]{3}/.test(line) && CHAIN_WORDS.test(line),
+      );
+    assert.deepEqual(
+      offenders,
+      [],
+      `chain vocabulary reached the player: ${offenders.join(" | ")}`,
+    );
   });
 
   it("says the three things it is supposed to say", () => {
     assert.match(makeItCount, /Make your scores count/);
-    assert.match(makeItCount, /Prove you&rsquo;re a real person|Prove you're a real person/);
+    assert.match(
+      makeItCount,
+      /Prove you&rsquo;re a real person|Prove you're a real person/,
+    );
     assert.match(makeItCount, /Get your player name/);
   });
 });
@@ -224,7 +260,10 @@ describe("nothing is asked before somebody has played", () => {
 */
 describe("the GoodDollar signature is signed over hex", () => {
   it("hex-encodes the message before personal_sign", () => {
-    assert.match(passHook, /params:\s*\[toHex\(fvMessage\(address\)\), address\]/);
+    assert.match(
+      passHook,
+      /params:\s*\[toHex\(fvMessage\(address\)\), address\]/,
+    );
   });
 
   it("never passes the raw message with a cast instead", () => {

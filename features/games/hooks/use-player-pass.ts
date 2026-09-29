@@ -6,8 +6,11 @@ import { toHex, type EIP1193Provider } from "viem";
 import { useEvmSend } from "@/hooks/use-evm-send";
 import { CELO_CHAIN_ID, mintCall } from "@/lib/game-pass";
 import { buildFvLink, fvMessage } from "@/lib/gooddollar-link";
-import { api } from "@/lib/square-path";
-import { waitForMint } from "@/features/games/lib/pass-chain";
+import {
+  readPass,
+  readVerified,
+  waitForMint,
+} from "@/features/games/lib/pass-chain";
 
 /*
   WHERE A PLAYER STANDS WITH GAMEARENA, AND THE TWO STEPS THAT MOVE THEM ON.
@@ -49,32 +52,38 @@ const UNAVAILABLE: PlayerPass = {
 };
 
 /**
- * Read where the player stands, without touching React state.
+ * Read where the player stands, straight from Celo.
  *
- * Every failure returns UNAVAILABLE rather than throwing: not knowing is the
- * same as having nothing to offer, and an exception here would take down the
- * screen that was only ever going to show an optional invitation.
+ * ─── WHY THIS DOES NOT ASK OUR SERVER ───────────────────────────────────────
+ * It used to, through a BFF route that resolved the wallet from the session
+ * and asked GameArena. Every one of those hops is a way to fail while the
+ * ANSWER sits in public state on a chain the browser can already read: the
+ * pass and its name are on GamePass, and verification is GoodDollar's
+ * `isWhitelisted`. In practice the session's wallet lookup failed locally and
+ * the whole step reported itself unavailable, with a working chain, a working
+ * partner API and a correct key.
+ *
+ * So the gating question — has this wallet a pass, what name is on it, is this
+ * a verified human right now — is answered by reading the chain. The partner
+ * API is still where SCORES go, because a write has to be attributed to a
+ * session rather than to an address a browser named.
+ *
+ * Nothing is remembered: `isWhitelisted` encodes a reverification window that
+ * is three days on a first verification, so a cached answer is wrong within
+ * days.
  */
-async function loadPlayerPass(): Promise<PlayerPass> {
-  try {
-    const response = await fetch(api("/api/gamearena/profile"), {
-      cache: "no-store",
-    });
-    if (!response.ok) return UNAVAILABLE;
-    const body: unknown = await response.json().catch(() => null);
-    if (!body || typeof body !== "object") return UNAVAILABLE;
-    const record = body as Record<string, unknown>;
-    if (record.available !== true) return UNAVAILABLE;
-    return {
-      loading: false,
-      available: true,
-      hasPass: record.hasPass === true,
-      username: typeof record.username === "string" ? record.username : null,
-      verified: record.verified === true,
-    };
-  } catch {
-    return UNAVAILABLE;
-  }
+async function loadPlayerPass(address: `0x${string}`): Promise<PlayerPass> {
+  const [pass, verified] = await Promise.all([
+    readPass(address),
+    readVerified(address),
+  ]);
+  return {
+    loading: false,
+    available: true,
+    hasPass: pass.hasPass,
+    username: pass.username,
+    verified,
+  };
 }
 
 export function usePlayerPass() {
@@ -85,7 +94,13 @@ export function usePlayerPass() {
     loading: true,
   });
 
-  const refresh = useCallback(() => loadPlayerPass().then(setState), []);
+  const address = wallet.addresses?.evm as `0x${string}` | undefined;
+
+  const refresh = useCallback(
+    () =>
+      address ? loadPlayerPass(address).then(setState) : Promise.resolve(),
+    [address],
+  );
 
   /*
     The fetch is a plain function that RETURNS the next state rather than
@@ -95,14 +110,19 @@ export function usePlayerPass() {
     loading is ordinary data-fetching and the only writer is the continuation.
   */
   useEffect(() => {
+    // No wallet is a real state, not a failure — there is no address to ask
+    // about. It is DERIVED at the return below rather than written into state
+    // here, because setting state straight from an effect body is a cascading
+    // render, and the answer is already a pure function of `address`.
+    if (!address) return;
     let cancelled = false;
-    void loadPlayerPass().then((next) => {
+    void loadPlayerPass(address).then((next) => {
       if (!cancelled) setState(next);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [address]);
 
   /**
    * Send the player to GoodDollar, and arrange for them to come back.
@@ -223,5 +243,9 @@ export function usePlayerPass() {
     [send, refresh],
   );
 
-  return { ...state, refresh, startVerification, claimName };
+  // Derived, not stored: with no wallet there is nothing to offer, and that
+  // conclusion should not be able to go stale in state.
+  const resolved = address ? state : UNAVAILABLE;
+
+  return { ...resolved, refresh, startVerification, claimName };
 }
