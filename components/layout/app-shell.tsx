@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { captureVisitUtm } from "@/lib/analytics";
+import { captureVisitUtm, identifyForAnalytics } from "@/lib/analytics";
 import { refreshPushSubscription } from "@/lib/push-client";
 import { MenuRow } from "@/components/ui/menu-row";
 import { ArkChevron, ArkWordmark, BackToArk, goBackToArk } from "@/components/layout/ark-nav";
@@ -1874,6 +1874,25 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     captureVisitUtm();
   }, []);
+
+  /*
+    WHO THE EVENTS BELONG TO, set where the shell already keeps visit state.
+
+    Until this runs, events are filed under the SESSION — which is right, and
+    is what a signed-out visitor keeps for ever. Once the viewer resolves they
+    are filed under the person, and the analytics tool stitches the two so the
+    journey that started before sign-in is not orphaned from the one after it.
+
+    NULL ON SIGN-OUT, and that is the case that matters: on a shared device the
+    next person's events must not be filed under the last one's. `useMe` is
+    gated on an authenticated session, so `data` going undefined IS the
+    sign-out, and passing null here is not a reset-for-tidiness — it is the
+    whole reason this effect watches rather than runs once.
+  */
+  const viewerId = me.data?.id ?? null;
+  useEffect(() => {
+    identifyForAnalytics(viewerId);
+  }, [viewerId]);
   // Re-record this browser's push subscription while signed in, so the service
   // keeps its keys fresh and it follows whoever is signed in here.
   useEffect(() => {
