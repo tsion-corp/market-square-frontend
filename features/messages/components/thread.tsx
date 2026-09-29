@@ -52,8 +52,8 @@ import { dotScale } from "@/lib/voice-levels";
 import { isReplySwipe, SWIPE_TRIGGER, swipeCommits, swipeOffset } from "@/lib/swipe-reply";
 import { uploadFile } from "@/lib/api/upload";
 import { IconArrowLeft, IconCamera, IconDownload, IconFullscreen, IconHouses, IconMic, IconPlay, IconPause, IconPlus, IconQuote, IconSend, IconX } from "@/components/ui/icons";
-import { ChallengeCard, useChallengeSlot } from "@/components/ui/challenge-slot";
-import { challengeMessage, challengePath, parseChallenge } from "@/lib/game-challenge";
+import { ChallengeCard, ChallengeOutcomesContext, useChallengeSlot } from "@/components/ui/challenge-slot";
+import { challengeMessage, challengeOutcomes, challengePath, parseChallenge } from "@/lib/game-challenge";
 import { IconTrash } from "@/components/ui/thread-icons";
 import {
   useConversationMembers,
@@ -3436,6 +3436,26 @@ export function Thread({
   const days = groupMessagesByDay(items);
 
   /*
+    BOTH SIDES OF EVERY CHALLENGE IN THIS THREAD.
+
+    A card knows only its own message, so on its own it can only ever say
+    "beat this" — which is how somebody who has ALREADY beaten a score keeps
+    being shown a button asking them to beat it. The whole list is here, so the
+    pairing is computed here and published to the cards below.
+  */
+  const outcomes = challengeOutcomes(
+    items.flatMap((message) => {
+      const challenge = parseChallenge(message.text);
+      if (!challenge) return [];
+      return [{
+        seed: challenge.seed,
+        score: challenge.score,
+        mine: Boolean(me.data && message.senderId === me.data.id),
+      }];
+    })
+  );
+
+  /*
     WHERE THE STREAK NOTICE SITS — anchored to the day it began, woven into the
     river, so it stays put instead of trailing the newest message and appearing
     to move every time a post is sent (ogazboiz, 2026-09-21).
@@ -3624,6 +3644,7 @@ export function Thread({
           <ThreadWelcome conversation={conversation} group={group} />
         )}
 
+        <ChallengeOutcomesContext.Provider value={outcomes}>
         {days.map((day, dayIndex) => (
           <Fragment key={day.key}>
             {/* The streak began around here — the notice woven at its day. */}
@@ -3676,6 +3697,7 @@ export function Thread({
           </section>
           </Fragment>
         ))}
+        </ChallengeOutcomesContext.Provider>
 
         {/*
           THE STREAK NOTICE is woven at its start day above (see `streakAt`), the

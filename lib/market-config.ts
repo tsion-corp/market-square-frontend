@@ -4,6 +4,25 @@ export const MARKET_FLAGS = {
   vipAccess: process.env.NEXT_PUBLIC_MS_VIP_ACCESS_ENABLED === "true",
   liveGifts: process.env.NEXT_PUBLIC_MS_LIVE_GIFTS_ENABLED === "true",
   /**
+   * Let somebody claim a player name BEFORE proving they are a real person.
+   *
+   * OFF by default, which means verification is REQUIRED — that is the
+   * production rule and the reason the integration exists: a score only counts
+   * for GameArena when it belongs to a verified human, and their Month 3
+   * target is verified humans rather than wallets.
+   *
+   * ON reverses the order for testing, so the name claim can be exercised
+   * without standing through a face scan every time. It is deliberately a flag
+   * rather than a code change, so switching production back is one variable
+   * and nobody has to remember which branch the real rule lives on.
+   *
+   * ONE HONEST CONSEQUENCE of turning it on: claiming a name is a transaction,
+   * and its gas is funded on GameArena's side only for verified humans
+   * (FAUCET_REQUIRE_GOODDOLLAR). So an unverified claim can fail for want of
+   * gas. That is said at the point it happens rather than by hiding the field.
+   */
+  gamesVerifyOptional: process.env.NEXT_PUBLIC_MS_GAMES_VERIFY_OPTIONAL === "true",
+  /**
    * Replays: recorded playback of an ended stream.
    *
    * OFF because the capability does not exist yet, not because of policy.

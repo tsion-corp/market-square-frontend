@@ -136,3 +136,54 @@ export function challengePreview(
   const challenge = parseChallenge(text);
   return challenge ? `Simon · ${challenge.score} — beat it` : null;
 }
+
+/** One challenge message, reduced to what deciding a result needs. */
+export interface ChallengeEntry {
+  seed: string;
+  score: number;
+  /** Sent by the reader, rather than by the other person. */
+  mine: boolean;
+}
+
+/** Both sides of one challenge. `null` is "has not played it", which is not
+    the same as having scored zero — zero is a real result. */
+export interface ChallengeOutcome {
+  mine: number | null;
+  theirs: number | null;
+}
+
+/**
+ * Pair up the two sides of every challenge in a thread.
+ *
+ * A challenge and its answer are two messages carrying the SAME seed, because
+ * answering replays that exact sequence — which is also what makes the two
+ * scores comparable. Without pairing them the thread reads as a wall of
+ * unanswered challenges: the person who already beat your score is still
+ * being asked to beat it.
+ *
+ * The FIRST score from each side is kept. A challenge is answered once; a
+ * later replay of the same seed is a new attempt at a settled thing, and
+ * letting it overwrite the answer would silently rewrite a result the other
+ * person already saw.
+ */
+export function challengeOutcomes(
+  entries: readonly ChallengeEntry[],
+): Map<string, ChallengeOutcome> {
+  const out = new Map<string, ChallengeOutcome>();
+  for (const entry of entries) {
+    const current = out.get(entry.seed) ?? { mine: null, theirs: null };
+    if (entry.mine) {
+      if (current.mine === null) current.mine = entry.score;
+    } else if (current.theirs === null) {
+      current.theirs = entry.score;
+    }
+    out.set(entry.seed, current);
+  }
+  return out;
+}
+
+/** Whether both sides have played, so a result can be stated rather than a
+    challenge repeated. */
+export function isSettled(outcome: ChallengeOutcome | undefined): boolean {
+  return Boolean(outcome && outcome.mine !== null && outcome.theirs !== null);
+}

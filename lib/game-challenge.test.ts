@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 import { newSeed } from "./simon.ts";
 import {
   challengeMessage,
+  challengeOutcomes,
   challengePath,
   challengePreview,
   isSameChallenge,
+  isSettled,
   parseChallenge,
 } from "./game-challenge.ts";
 
@@ -160,5 +162,65 @@ describe("how a challenge reads in an inbox row", () => {
   it("falls through for an ordinary message", () => {
     assert.equal(challengePreview("see you at 6"), null);
     assert.equal(challengePreview(null), null);
+  });
+});
+
+/*
+  A THREAD OF UNANSWERED CHALLENGES IS A BUG IN THE READING, NOT IN THE GAME.
+
+  A challenge and its answer are two messages carrying the same seed. Without
+  pairing them, somebody who has already beaten your score is still being shown
+  a button asking them to beat it, and neither person can see who won.
+*/
+describe("pairing the two sides of a challenge", () => {
+  const entry = (seed: string, score: number, mine: boolean) => ({ seed, score, mine });
+
+  it("puts both scores together when both have played", () => {
+    const out = challengeOutcomes([entry("s1", 40, false), entry("s1", 30, true)]);
+    assert.deepEqual(out.get("s1"), { mine: 30, theirs: 40 });
+    assert.ok(isSettled(out.get("s1")));
+  });
+
+  it("is unsettled while only one side has played", () => {
+    const out = challengeOutcomes([entry("s1", 40, false)]);
+    assert.deepEqual(out.get("s1"), { mine: null, theirs: 40 });
+    assert.ok(!isSettled(out.get("s1")));
+  });
+
+  it("keeps the FIRST score from each side, not the latest", () => {
+    // A replay of a settled seed is a new attempt at something the other
+    // person has already seen; letting it overwrite rewrites their result.
+    const out = challengeOutcomes([
+      entry("s1", 40, false),
+      entry("s1", 30, true),
+      entry("s1", 90, true),
+    ]);
+    assert.deepEqual(out.get("s1"), { mine: 30, theirs: 40 });
+  });
+
+  it("keeps separate challenges separate", () => {
+    const out = challengeOutcomes([
+      entry("s1", 40, false),
+      entry("s2", 10, false),
+      entry("s1", 30, true),
+    ]);
+    assert.deepEqual(out.get("s1"), { mine: 30, theirs: 40 });
+    assert.deepEqual(out.get("s2"), { mine: null, theirs: 10 });
+  });
+
+  /*
+    ZERO IS A REAL RESULT — failing the first round. Treating it as "has not
+    played" would leave a genuine loss looking like an unanswered challenge
+    forever.
+  */
+  it("treats a score of zero as played, not as absent", () => {
+    const out = challengeOutcomes([entry("s1", 40, false), entry("s1", 0, true)]);
+    assert.deepEqual(out.get("s1"), { mine: 0, theirs: 40 });
+    assert.ok(isSettled(out.get("s1")));
+  });
+
+  it("says nothing about a seed it has never seen", () => {
+    assert.equal(challengeOutcomes([]).get("nope"), undefined);
+    assert.ok(!isSettled(undefined));
   });
 });

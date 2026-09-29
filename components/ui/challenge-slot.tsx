@@ -1,7 +1,11 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { SimonChallenge } from "@/lib/game-challenge";
+import {
+  isSettled,
+  type ChallengeOutcome,
+  type SimonChallenge,
+} from "@/lib/game-challenge";
 
 /**
  * The seam between a chat thread and the game that can be played inside it.
@@ -72,6 +76,21 @@ export function useChallengeSlot(): ChallengeSlot {
 }
 
 /**
+ * Both sides of every challenge in the open thread, keyed by seed.
+ *
+ * A card knows its own message and nothing else, so on its own it can only
+ * ever say "beat this" — which is how a thread ends up showing a Beat it
+ * button to somebody who already beat it. The thread has the whole list and
+ * publishes the pairing here.
+ *
+ * Empty by default, so a card outside a thread simply shows the challenge
+ * rather than breaking.
+ */
+export const ChallengeOutcomesContext = createContext<
+  Map<string, ChallengeOutcome>
+>(new Map());
+
+/**
  * A Simon challenge as it appears in a thread.
  *
  * It REPLACES the message's text rather than sitting beside it. The raw
@@ -87,6 +106,9 @@ export function ChallengeCard({
   mine: boolean;
 }) {
   const { openChallenge, available } = useChallengeSlot();
+  const outcomes = useContext(ChallengeOutcomesContext);
+  const outcome = outcomes.get(challenge.seed) ?? { mine: null, theirs: null };
+  const settled = isSettled(outcome);
 
   return (
     /*
@@ -112,16 +134,44 @@ export function ChallengeCard({
       </div>
 
       {/* The score is the point of the card, so it is the biggest thing on it. */}
-      <p className="mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
-        {challenge.score}
-      </p>
-      <p className="mt-1 text-[13px] text-white/55">
-        {mine ? "your score — waiting for them" : "to beat"}
-      </p>
+      {settled ? (
+        /*
+          BOTH HAVE PLAYED, SO THE CARD STATES A RESULT RATHER THAN REPEATING
+          A CHALLENGE. Asking somebody to beat a score they have already beaten
+          is the thread failing to notice its own history.
+        */
+        <>
+          <div className="mt-2 flex items-baseline gap-4">
+            <span className="text-[28px] font-bold leading-none tabular-nums text-white">
+              {outcome.mine}
+            </span>
+            <span className="text-[13px] text-white/40">vs</span>
+            <span className="text-[28px] font-bold leading-none tabular-nums text-white/70">
+              {outcome.theirs}
+            </span>
+          </div>
+          <p className="mt-1.5 text-[13px] font-semibold text-white/80">
+            {outcome.mine === outcome.theirs
+              ? "Draw"
+              : (outcome.mine ?? 0) > (outcome.theirs ?? 0)
+                ? "You won"
+                : "They won"}
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
+            {challenge.score}
+          </p>
+          <p className="mt-1 text-[13px] text-white/55">
+            {mine ? "your score — waiting for them" : "to beat"}
+          </p>
+        </>
+      )}
 
       {/* No button on your own challenge: replaying your own seed would let you
           overwrite the very number your opponent is answering. */}
-      {!mine && available && (
+      {!mine && available && !settled && (
         <button
           type="button"
           onClick={() =>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePlayerPass } from "@/features/games/hooks/use-player-pass";
+import { MARKET_FLAGS } from "@/lib/market-config";
 import {
   checkName,
   type NameAvailability,
@@ -147,107 +148,128 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
     );
   }
 
+  /*
+    THE ORDER IS A FLAG, NOT A DECISION MADE HERE.
+
+    In production verification is REQUIRED: a score only counts for GameArena
+    when it belongs to a verified human, which is the whole point of the
+    integration. `gamesVerifyOptional` reverses it for testing so the name
+    claim can be exercised without standing through a face scan every time.
+
+    Keeping it as a flag means switching production back is one variable, and
+    nobody has to remember which branch the real rule lives on.
+  */
+  const verifyOffer = (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left">
+      <p className="text-[14px] font-semibold text-white">
+        {everVerified ? "Verify again" : "Make your scores count"}
+      </p>
+      {/*
+        A LAPSE IS NOT A BLANK. GoodDollar's first window is three days, so
+        somebody who verified last week is not verified now — and telling them
+        to prove they are a real person "once" denies what they already did.
+      */}
+      <p className="mt-1 text-[13px] leading-5 text-white/55">
+        {everVerified
+          ? "Your check expired — GoodDollar asks again after a few days. One more and your games count."
+          : MARKET_FLAGS.gamesVerifyOptional
+            ? "Optional for now. Prove you're a real person and your games count on the leaderboard."
+            : "Prove you're a real person once, and every game you play here counts on the leaderboard."}
+      </p>
+      {error && <p className="mt-2 text-[13px] text-rose-300">{error}</p>}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void onVerify()}
+        className="ws-press mt-2.5 w-full rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-black disabled:opacity-50"
+      >
+        {busy
+          ? "Opening…"
+          : everVerified
+            ? "Verify again"
+            : "Prove you're a real person"}
+      </button>
+    </div>
+  );
+
   if (hasPass) {
     return (
-      <p className="text-[13px] text-white/45">
-        Your scores count{username ? ` as ${username}` : ""}.
-      </p>
-    );
-  }
-
-  if (!verified) {
-    return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left">
-        <p className="text-[14px] font-semibold text-white">
-          Make your scores count
+      <div className="space-y-2">
+        <p className="text-[13px] text-white/45">
+          {verified
+            ? `Your scores count${username ? ` as ${username}` : ""}.`
+            : `You're ${username ?? "set up"} — verify to make your scores count.`}
         </p>
-        {/*
-          A LAPSE IS NOT A BLANK. GoodDollar's first window is three days, so
-          somebody who verified last week is not verified now — and telling
-          them to prove they are a real person "once" denies something they
-          already did. Same control, different sentence.
-        */}
-        <p className="mt-1 text-[13px] leading-5 text-white/55">
-          {everVerified
-            ? "Your check expired — GoodDollar asks again after a few days. One more and your games count."
-            : "Prove you're a real person once, and every game you play here counts on the leaderboard."}
-        </p>
-        {error && <p className="mt-2 text-[13px] text-rose-300">{error}</p>}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void onVerify()}
-          className="ws-press mt-2.5 w-full rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-black disabled:opacity-50"
-        >
-          {busy
-            ? "Opening…"
-            : everVerified
-              ? "Verify again"
-              : "Prove you're a real person"}
-        </button>
+        {!verified && verifyOffer}
       </div>
     );
   }
+
+  // The production rule: no name until they are a verified human.
+  if (!verified && !MARKET_FLAGS.gamesVerifyOptional) return verifyOffer;
 
   const problem = nameProblem(name);
   const canClaim = problem === null && availability === "available" && !busy;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left">
-      <p className="text-[14px] font-semibold text-white">
-        Get your player name
-      </p>
-      <p className="mt-1 text-[13px] leading-5 text-white/55">
-        This is the name on the leaderboard. Each one can only be taken once.
-      </p>
+    <div className="space-y-2">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left">
+        <p className="text-[14px] font-semibold text-white">
+          Get your player name
+        </p>
+        <p className="mt-1 text-[13px] leading-5 text-white/55">
+          This is the name on the leaderboard. Each one can only be taken once.
+        </p>
 
-      <input
-        id="player-name"
-        value={name}
-        onChange={(event) => {
-          // Shaped as they type, so the field can never hold a name that
-          // would be refused — and a long paste is trimmed once, here, rather
-          // than silently becoming a different name later.
-          setName(sanitiseName(event.target.value));
-          setError(null);
-        }}
-        maxLength={USERNAME_MAX}
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        placeholder="yourname"
-        aria-label="Your player name"
-        className="mt-2.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[15px] text-white outline-none placeholder:text-white/25 focus:border-white/25"
-      />
+        <input
+          id="player-name"
+          value={name}
+          onChange={(event) => {
+            // Shaped as they type, so the field can never hold a name that
+            // would be refused — and a long paste is trimmed once, here, rather
+            // than silently becoming a different name later.
+            setName(sanitiseName(event.target.value));
+            setError(null);
+          }}
+          maxLength={USERNAME_MAX}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="yourname"
+          aria-label="Your player name"
+          className="mt-2.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[15px] text-white outline-none placeholder:text-white/25 focus:border-white/25"
+        />
 
-      <p className="mt-1.5 min-h-5 text-[13px]">
-        {error ? (
-          <span className="text-rose-300">{error}</span>
-        ) : name && problem ? (
-          <span className="text-white/45">{nameProblemMessage(problem)}</span>
-        ) : checking && !availability ? (
-          <span className="text-white/35">Checking…</span>
-        ) : availability === "available" ? (
-          <span className="text-emerald-300">{name} is free</span>
-        ) : availability === "taken" ? (
-          <span className="text-amber-300">Taken — pick another</span>
-        ) : availability === "unknown" ? (
-          // Never claim a name is free when the check failed: that ends in a
-          // refusal the player waited for and cannot learn anything from.
-          <span className="text-white/45">
-            Couldn&rsquo;t check that just now
-          </span>
-        ) : null}
-      </p>
+        <p className="mt-1.5 min-h-5 text-[13px]">
+          {error ? (
+            <span className="text-rose-300">{error}</span>
+          ) : name && problem ? (
+            <span className="text-white/45">{nameProblemMessage(problem)}</span>
+          ) : checking && !availability ? (
+            <span className="text-white/35">Checking…</span>
+          ) : availability === "available" ? (
+            <span className="text-emerald-300">{name} is free</span>
+          ) : availability === "taken" ? (
+            <span className="text-amber-300">Taken — pick another</span>
+          ) : availability === "unknown" ? (
+            // Never claim a name is free when the check failed: that ends in a
+            // refusal the player waited for and cannot learn anything from.
+            <span className="text-white/45">
+              Couldn&rsquo;t check that just now
+            </span>
+          ) : null}
+        </p>
 
-      <button
-        type="button"
-        disabled={!canClaim}
-        onClick={() => void onClaim()}
-        className="ws-press mt-1 w-full rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-black disabled:opacity-50"
-      >
-        {busy ? "Getting it…" : "Get this name"}
-      </button>
+        <button
+          type="button"
+          disabled={!canClaim}
+          onClick={() => void onClaim()}
+          className="ws-press mt-1 w-full rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-black disabled:opacity-50"
+        >
+          {busy ? "Getting it…" : "Get this name"}
+        </button>
+      </div>
+      {!verified && verifyOffer}
     </div>
   );
 }
