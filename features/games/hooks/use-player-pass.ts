@@ -7,10 +7,13 @@ import { useEvmSend } from "@/hooks/use-evm-send";
 import { CELO_CHAIN_ID, mintCall } from "@/lib/game-pass";
 import { buildFvLink, fvMessage } from "@/lib/gooddollar-link";
 import {
-  readPass,
+  readBalance,
   readIdentity,
+  readPass,
+  waitForGas,
   waitForMint,
 } from "@/features/games/lib/pass-chain";
+import { requestGas } from "@/features/games/lib/report-score";
 
 /*
   WHERE A PLAYER STANDS WITH GAMEARENA, AND THE TWO STEPS THAT MOVE THEM ON.
@@ -96,6 +99,25 @@ async function loadPlayerPass(address: `0x${string}`): Promise<PlayerPass> {
     everVerified: identity.everVerified,
   };
 }
+
+/** Every place viem hides a reason: the message, the short one, and the
+    chain's own words in the cause. Matching only `message` is why
+    "insufficient funds" never matched the first time. */
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  return [
+    error.message,
+    (error as { shortMessage?: string }).shortMessage,
+    String((error as { cause?: unknown }).cause ?? ""),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** The node refusing a transaction the wallet cannot pay for. Nothing is
+    broadcast, so this costs the player nothing and is safe to provoke. */
+const IS_OUT_OF_GAS =
+  /insufficient funds|exceeds the balance|intrinsic transaction cost|balance of the account|INSUFFICIENT_FUNDS/i;
 
 export function usePlayerPass() {
   const wallet = useSocialWallet();
@@ -221,8 +243,45 @@ export function usePlayerPass() {
    */
   const claimName = useCallback(
     async (name: string): Promise<{ ok: boolean; error?: string }> => {
+      /*
+        NO GAS IS ASKED FOR UNTIL THE CLAIM ACTUALLY NEEDS IT.
+
+        The mint is attempted first. A wallet that cannot pay is refused by the
+        node BEFORE anything is broadcast, so the failed attempt costs nothing
+        — which makes it a better test than guessing a threshold, and means a
+        player who already has gas never triggers a drip at all.
+
+        Only then is a top-up requested, and the balance is WAITED for: the
+        faucet answering means it sent, not that the money has landed, and
+        minting against a balance still in flight fails exactly as before —
+        which would read as the top-up having done nothing.
+      */
+      const attemptMint = () => send(mintCall(name));
+
       try {
-        const hash = await send(mintCall(name));
+        let hash: `0x${string}`;
+        try {
+          hash = await attemptMint();
+        } catch (error) {
+          if (!IS_OUT_OF_GAS.test(describeError(error)) || !address)
+            throw error;
+          const gas = await requestGas();
+          if (!gas.funded && !gas.already) {
+            return {
+              ok: false,
+              error:
+                "Your account needs a small top-up before it can take a name. Proving you're a real person unlocks it.",
+            };
+          }
+          const before = await readBalance(address);
+          if (!(await waitForGas(address, before > 0n ? before + 1n : 1n))) {
+            return {
+              ok: false,
+              error: "Still waiting on your top-up. Try again in a moment.",
+            };
+          }
+          hash = await attemptMint();
+        }
         if ((await waitForMint(hash)) !== "claimed") {
           return {
             ok: false,
@@ -305,7 +364,10 @@ export function usePlayerPass() {
         };
       }
     },
-    [send, refresh],
+    // `address` is load-bearing here, not incidental: the top-up is aimed at
+    // it and the balance is watched on it, so a stale one would fund a wallet
+    // the player has left and then wait forever on a balance that never moves.
+    [send, refresh, address],
   );
 
   // Derived, not stored: with no wallet there is nothing to offer, and that

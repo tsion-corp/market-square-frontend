@@ -34,6 +34,7 @@ const makeItCount = stripComments(
   read("features/games/components/make-it-count.tsx"),
 );
 const reportClient = stripComments(read("features/games/lib/report-score.ts"));
+const faucetRoute = stripComments(read("app/api/gamearena/faucet/route.ts"));
 const readChain = read("features/games/lib/pass-chain.ts");
 const providers = stripComments(read("app/providers.tsx"));
 /*
@@ -410,5 +411,54 @@ describe("paying your own gas is actually honoured", () => {
     // embedded wallet funded with USDC alone has no ETH for gas.
     assert.match(evmSend, /const sponsored = payOwnGas \? null/);
     assert.doesNotMatch(evmSend, /const sponsored = null/);
+  });
+});
+
+/*
+  THE FAUCET MOVES MONEY, SO IT IS THE STRICTEST ROUTE IN THE SET.
+
+  A wallet taken from the request body would let anyone signed in aim a drip at
+  an address they do not own — a drain dressed as an onboarding step, repeatable
+  as fast as accounts can be made.
+*/
+describe("asking for gas cannot be aimed at somebody else", () => {
+  it("resolves the wallet from the session and reads nothing from the body", () => {
+    assert.match(faucetRoute, /await getRequestWallet\(req, claims\)/);
+    assert.doesNotMatch(faucetRoute, /body\.wallet|\bjson\(\)/);
+  });
+
+  it("sends upstream only the wallet it resolved", () => {
+    assert.match(faucetRoute, /JSON\.stringify\(\{ wallet \}\)/);
+  });
+
+  it("refuses a signed-out caller outright", () => {
+    assert.match(faucetRoute, /if \(!claims\) return NextResponse\.json\(\s*\{ error: "sign in first" \}/);
+  });
+
+  it("carries the partner key through the shared helper, never its own header", () => {
+    assert.match(faucetRoute, /gameArenaFetch\(/);
+    assert.doesNotMatch(faucetRoute, /x-partner-key/);
+  });
+});
+
+/*
+  A DRIP IS ONLY EVER REQUESTED BY A CLAIM THAT NEEDED ONE.
+
+  The mint is attempted first: a wallet that cannot pay is refused by the node
+  before anything is broadcast, so the attempt costs nothing and a player who
+  already has gas never triggers a drip.
+*/
+describe("gas is asked for only when the claim actually failed for it", () => {
+  it("attempts the mint before asking", () => {
+    assert.ok(
+      passHook.indexOf("attemptMint()") < passHook.indexOf("requestGas()"),
+      "a drip must never be requested before the claim has been tried",
+    );
+  });
+
+  it("waits for the money to land before minting again", () => {
+    // The faucet answering means it SENT. Minting against a balance still in
+    // flight fails exactly as before and reads as the top-up doing nothing.
+    assert.ok(passHook.indexOf("waitForGas(") < passHook.lastIndexOf("attemptMint()"));
   });
 });

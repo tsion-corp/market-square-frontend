@@ -219,3 +219,33 @@ export async function readIdentity(address: `0x${string}`): Promise<Identity> {
 }
 
 export { LEGACY_AUTHCOUNT_CUTOFF, DAY_MS };
+
+/** What this wallet can spend on Celo, in wei. */
+export async function readBalance(address: `0x${string}`): Promise<bigint> {
+  try {
+    return await withTimeout(celoRead.getBalance({ address }));
+  } catch {
+    return 0n;
+  }
+}
+
+/**
+ * Wait for a gas drip to actually arrive.
+ *
+ * The faucet answering 200 means it SENT, not that the money is there — the
+ * transaction still has to be mined, and minting against a balance that has
+ * not landed fails exactly as it did before, which would read to the player as
+ * the top-up having done nothing.
+ */
+export async function waitForGas(
+  address: `0x${string}`,
+  atLeast: bigint,
+  timeoutMs = 45_000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if ((await readBalance(address)) >= atLeast) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+}

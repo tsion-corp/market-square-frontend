@@ -52,3 +52,33 @@ export async function reportScore(
     return { reported: false, onchain: false };
   }
 }
+
+/**
+ * Ask GameArena to fund this player's one Celo transaction.
+ *
+ * Nothing identifying is sent: the wallet is resolved from the session on our
+ * server, because this call MOVES MONEY and a browser-named address would be a
+ * drain dressed as an onboarding step.
+ *
+ * "already" is distinct from a refusal on purpose — it means the wallet has had
+ * its one drip, so the gas may well be sitting there and the claim is worth
+ * attempting rather than abandoning.
+ */
+export type GasRequest = { funded: boolean; already: boolean };
+
+export async function requestGas(): Promise<GasRequest> {
+  try {
+    const response = await fetch(api("/api/gamearena/faucet"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      cache: "no-store",
+    });
+    if (!response.ok) return { funded: false, already: false };
+    const body: unknown = await response.json().catch(() => null);
+    const record = (body ?? {}) as Record<string, unknown>;
+    return { funded: record.funded === true, already: record.reason === "already" };
+  } catch {
+    return { funded: false, already: false };
+  }
+}
