@@ -130,6 +130,7 @@ export function mintCall(name: string): {
   to: `0x${string}`;
   data: `0x${string}`;
   chainId: number;
+  payOwnGas: true;
 } {
   const problem = nameProblem(name);
   if (problem) throw new RangeError(`not a claimable name: ${problem}`);
@@ -141,5 +142,13 @@ export function mintCall(name: string): {
       args: [name],
     }),
     chainId: CELO_CHAIN_ID,
+    /*
+      NOT ON SQUARE'S GAS POLICY. Celo is in the sponsored registry, so without
+      this the claim is submitted as a sponsored userOperation through Square's
+      own bundler — spending Square's gas policy on GameArena's players, and
+      failing besides, since that policy is not provisioned for Celo. Gas here
+      is funded on their side, for verified humans.
+    */
+    payOwnGas: true,
   };
 }

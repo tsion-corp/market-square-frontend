@@ -42,6 +42,19 @@ export interface EvmSendInput {
   /** Native value in wei. Sponsorship covers gas only; this is still theirs. */
   value?: bigint;
   chainId: number;
+  /**
+   * Send as an ordinary transaction even on a chain Square CAN sponsor.
+   *
+   * Sponsorship spends Square's own gas policy, so it is only ever right for
+   * Square's own payments. The game pass is claimed on Celo, where the gas
+   * belongs to GameArena and is funded on their side — sponsoring it would
+   * quietly put their users' transactions on our bill.
+   *
+   * It is also what actually happens: Celo is in the sponsored registry, so
+   * without this the claim went to our bundler proxy and failed there, naming
+   * neither the chain nor the reason.
+   */
+  payOwnGas?: boolean;
 }
 
 export interface EvmSend {
@@ -101,7 +114,7 @@ function useDecaneEvmSend(): EvmSend {
   const wallet = useSocialWallet();
 
   const send = useCallback(
-    async ({ to, data, value, chainId }: EvmSendInput): Promise<`0x${string}`> => {
+    async ({ to, data, value, chainId, payOwnGas }: EvmSendInput): Promise<`0x${string}`> => {
       // A Decane session has exactly one EVM wallet, the only one this app
       // ever sends from.
       const address = wallet.addresses?.evm as `0x${string}` | undefined;
@@ -113,7 +126,7 @@ function useDecaneEvmSend(): EvmSend {
       await ensureWalletProtected(wallet, askToProtectWallet, SQUARE_WALLET_PROTECTION);
       await ensureUnlocked(wallet);
 
-      const sponsored = getSponsoredEvmChainById(chainId);
+      const sponsored = payOwnGas ? null : getSponsoredEvmChainById(chainId);
       if (sponsored) {
         const accessToken = wallet.getAccessToken();
         // The bundler proxy is session-gated, because it spends the platform's

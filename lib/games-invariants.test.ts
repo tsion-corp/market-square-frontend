@@ -37,6 +37,7 @@ const reportClient = stripComments(read("features/games/lib/report-score.ts"));
 const readChain = read("features/games/lib/pass-chain.ts");
 const providers = stripComments(read("app/providers.tsx"));
 const gamePass = stripComments(read("lib/game-pass.ts"));
+const evmSend = stripComments(read("hooks/use-evm-send.ts"));
 
 /*
   THE PARTNER KEY IS THE WHOLE AUTHORITY UPSTREAM. Whoever holds it can write
@@ -373,5 +374,25 @@ describe("the wallet session may sign on Celo", () => {
     // message that names neither.
     assert.match(gamePass, /CELO_CHAIN_ID = 42220/);
     assert.match(gamePass, /chainId: CELO_CHAIN_ID/);
+  });
+});
+
+/*
+  THE OPT-OUT HAS TO BE HONOURED, NOT JUST DECLARED.
+
+  mintCall asking to pay its own gas is worth nothing if the send path ignores
+  it: the claim goes back onto Square's sponsored policy, spends Square's money
+  on another product's players, and fails in our bundler proxy.
+*/
+describe("paying your own gas is actually honoured", () => {
+  it("skips the sponsored path when the caller asks to", () => {
+    assert.match(evmSend, /payOwnGas \? null : getSponsoredEvmChainById\(chainId\)/);
+  });
+
+  it("still sponsors by default, so Square's own payments are untouched", () => {
+    // Every payment in Square is USDC on Base and MUST stay sponsored — an
+    // embedded wallet funded with USDC alone has no ETH for gas.
+    assert.match(evmSend, /const sponsored = payOwnGas \? null/);
+    assert.doesNotMatch(evmSend, /const sponsored = null/);
   });
 });

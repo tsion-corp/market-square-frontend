@@ -188,3 +188,25 @@ describe("the transaction that claims a name", () => {
     }
   });
 });
+
+/*
+  SQUARE DOES NOT PAY FOR GAMEARENA'S PLAYERS.
+
+  Celo sits in Square's sponsored-networks registry, so a claim submitted the
+  ordinary way becomes a SPONSORED userOperation on Square's own gas policy.
+  Two things wrong with that: it spends Square's money on another product's
+  users, and it does not even work, because that policy is not provisioned for
+  Celo — the claim died in our bundler proxy naming neither the chain nor the
+  reason.
+*/
+describe("the claim is not on Square's gas policy", () => {
+  it("asks to pay its own gas", () => {
+    assert.equal(mintCall("ogazboiz").payOwnGas, true);
+  });
+
+  it("says so for every name, not just one", () => {
+    for (const name of ["abc", "OgazBoiz", "a_9", "x".repeat(16)]) {
+      assert.equal(mintCall(name).payOwnGas, true, name);
+    }
+  });
+});
