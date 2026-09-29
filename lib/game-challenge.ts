@@ -83,20 +83,26 @@ export function challengeMessage(absoluteUrl: string, score: number): string {
  * and a message that is not a challenge is the overwhelmingly common case, not
  * an error.
  */
-export function parseChallenge(text: string | null | undefined): SimonChallenge | null {
+export function parseChallenge(
+  text: string | null | undefined,
+): SimonChallenge | null {
   if (typeof text !== "string" || text.length === 0) return null;
 
   // Match the path anywhere in the message, with or without an origin and with
   // or without the `/square` mount prefix. The score is required: a link with
   // no score is not a challenge anyone can answer.
-  const match = /(?:^|[\s(<])(?:\S*?)\/g\/simon\/([A-Za-z0-9_-]{8,128})\?s=(\d{1,6})\b/.exec(text);
+  const match =
+    /(?:^|[\s(<])(?:\S*?)\/g\/simon\/([A-Za-z0-9_-]{8,128})\?s=(\d{1,6})\b/.exec(
+      text,
+    );
   if (!match) return null;
 
   const [, seed, rawScore] = match;
   if (!SEED_PATTERN.test(seed)) return null;
 
   const score = Number(rawScore);
-  if (!Number.isInteger(score) || score < 0 || score > MAX_SIMON_SCORE) return null;
+  if (!Number.isInteger(score) || score < 0 || score > MAX_SIMON_SCORE)
+    return null;
 
   return { seed, score };
 }
@@ -110,4 +116,23 @@ export function parseChallenge(text: string | null | undefined): SimonChallenge 
  */
 export function isSameChallenge(a: SimonChallenge, b: SimonChallenge): boolean {
   return a.seed === b.seed;
+}
+
+/**
+ * How a challenge reads in an inbox row, a notification, or anywhere else a
+ * message is summarised as one line.
+ *
+ * Without this the preview is the raw message — sentence AND url — so the
+ * inbox shows "Simon · 120 — beat it https://square.tsionark.com/g/simon/…"
+ * truncated mid-link. The card hides the url inside the thread; this is what
+ * hides it everywhere else.
+ *
+ * Returns null for anything that is not a challenge, so a caller falls
+ * straight through to the message's own text.
+ */
+export function challengePreview(
+  text: string | null | undefined,
+): string | null {
+  const challenge = parseChallenge(text);
+  return challenge ? `Simon · ${challenge.score} — beat it` : null;
 }

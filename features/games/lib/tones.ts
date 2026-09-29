@@ -27,7 +27,8 @@ function audioContext(): AudioContext | null {
     // Safari needs the prefixed constructor; both are absent in a test runner.
     const Ctor =
       window.AudioContext ??
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
     if (!Ctor) return null;
     context ??= new Ctor();
     return context;

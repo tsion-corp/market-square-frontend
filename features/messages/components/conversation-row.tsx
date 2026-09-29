@@ -1,5 +1,6 @@
 "use client";
 
+import { challengePreview } from "@/lib/game-challenge";
 import { cn } from "@/lib/cn";
 import { asset } from "@/lib/square-path";
 import { inboxTime } from "@/lib/inbox-time";
@@ -197,10 +198,18 @@ function Preview({ conversation, meId }: { conversation: Conversation; meId?: st
   const sender =
     mine ? "You" : conversation.kind === "group" ? conversation.lastSender?.displayName : null;
 
+  /*
+    A GAME CHALLENGE READS AS THE GAME, NOT AS ITS LINK.
+
+    The message a challenge travels as is a sentence and a url, because the
+    url is what it must degrade to if the card fails to draw. Here there is no
+    card, so the raw body would put "…/g/simon/9f3c…?s=120" into the row and
+    truncate mid-link. The preview keeps the sentence and drops the address.
+  */
   return (
     <span className="truncate">
       {sender && <span className="text-white/70">{sender}: </span>}
-      {body}
+      {challengePreview(body) ?? body}
     </span>
   );
 }

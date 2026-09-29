@@ -55,29 +55,49 @@ export async function POST(req: NextRequest) {
   // Not configured is not an error the player should see. Their game was
   // played and their card is already correct; only the leaderboard write is
   // absent, and that is an operator's problem, not theirs.
-  if (!configured()) return NextResponse.json({ reported: false, reason: "off" }, { status: 200 });
+  if (!configured())
+    return NextResponse.json(
+      { reported: false, reason: "off" },
+      { status: 200 },
+    );
 
   const claims = await verifyRequest(req);
-  if (!claims) return NextResponse.json({ error: "sign in first" }, { status: 401 });
+  if (!claims)
+    return NextResponse.json({ error: "sign in first" }, { status: 401 });
 
   const wallet = await getRequestWallet(req, claims);
   // A signed-in player with no resolvable wallet is a real state, not a fault:
   // there is simply no address to credit, so nothing is reported and the game
   // is unaffected.
-  if (!wallet) return NextResponse.json({ reported: false, reason: "no-wallet" }, { status: 200 });
+  if (!wallet)
+    return NextResponse.json(
+      { reported: false, reason: "no-wallet" },
+      { status: 200 },
+    );
 
   // Read at most one body's worth before parsing, so an enormous POST is
   // refused by length rather than buffered in full and then rejected.
   const raw = await req.text();
   const report = parseScoreReport(raw.slice(0, MAX_REPORT_BODY + 1));
-  if (!report.ok) return NextResponse.json({ error: report.error }, { status: report.status });
+  if (!report.ok)
+    return NextResponse.json(
+      { error: report.error },
+      { status: report.status },
+    );
   const { score, handle } = report;
 
   try {
     const upstream = await fetch(`${GAMEARENA_API}/api/partner/score`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-partner-key": PARTNER_KEY },
-      body: JSON.stringify({ wallet, score, ...(handle ? { name: handle } : {}) }),
+      headers: {
+        "content-type": "application/json",
+        "x-partner-key": PARTNER_KEY,
+      },
+      body: JSON.stringify({
+        wallet,
+        score,
+        ...(handle ? { name: handle } : {}),
+      }),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       cache: "no-store",
     });
@@ -86,12 +106,17 @@ export async function POST(req: NextRequest) {
       // Logged, not echoed: an upstream refusal may name their internals, and
       // a score that failed to post is not something the player can act on.
       console.error("[gamearena] score rejected upstream:", upstream.status);
-      return NextResponse.json({ reported: false, reason: "upstream" }, { status: 200 });
+      return NextResponse.json(
+        { reported: false, reason: "upstream" },
+        { status: 200 },
+      );
     }
 
     const result: unknown = await upstream.json().catch(() => null);
     const onchain =
-      !!result && typeof result === "object" && (result as Record<string, unknown>).onchain === true;
+      !!result &&
+      typeof result === "object" &&
+      (result as Record<string, unknown>).onchain === true;
 
     // `onchain` is the honest distinction: every score reaches their board, but
     // it only becomes a transaction once that wallet holds a GamePass. The
@@ -103,6 +128,9 @@ export async function POST(req: NextRequest) {
       "[gamearena] could not reach the partner API:",
       error instanceof Error ? error.message : String(error),
     );
-    return NextResponse.json({ reported: false, reason: "unreachable" }, { status: 200 });
+    return NextResponse.json(
+      { reported: false, reason: "unreachable" },
+      { status: 200 },
+    );
   }
 }

@@ -7,14 +7,18 @@ import {
   MAX_PADS,
   MAX_GAME_MS,
   POINTS_PER_ROUND,
+  darkMs,
   flashMs,
-  gapMs,
   judgePress,
   padsForRound,
   scoreForFailedRound,
   sequenceFor,
 } from "@/lib/simon";
-import { playPadTone, playWrongTone, primeTones } from "@/features/games/lib/tones";
+import {
+  playPadTone,
+  playWrongTone,
+  primeTones,
+} from "@/features/games/lib/tones";
 
 /**
  * GameArena's Simon, played inside a Square thread.
@@ -58,7 +62,8 @@ const PADS = [
   { name: "purple", lit: "bg-violet-400", rest: "bg-violet-500/20" },
 ] as const;
 
-const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export function SimonGame({ seed, targetScore, onFinished, onClose }: Props) {
   const [phase, setPhase] = useState<Phase>("ready");
@@ -114,7 +119,8 @@ export function SimonGame({ seed, targetScore, onFinished, onClose }: Props) {
     const run = (runRef.current += 1);
     const sequence = sequenceFor(seed, round);
     const flash = flashMs(round);
-    const dark = gapMs(round);
+    // The DARK stretch, not the interval — gapMs measures start-to-start.
+    const dark = darkMs(round);
 
     void (async () => {
       // A beat before the first flash, so the round change registers as its
@@ -149,7 +155,10 @@ export function SimonGame({ seed, targetScore, onFinished, onClose }: Props) {
     if (phase === "ready" || phase === "over") return;
     startedAtRef.current ??= Date.now();
     const elapsed = Date.now() - (startedAtRef.current ?? Date.now());
-    const timer = setTimeout(() => finish(round), Math.max(0, MAX_GAME_MS - elapsed));
+    const timer = setTimeout(
+      () => finish(round),
+      Math.max(0, MAX_GAME_MS - elapsed),
+    );
     return () => clearTimeout(timer);
   }, [phase, round, finish]);
 
@@ -172,7 +181,10 @@ export function SimonGame({ seed, targetScore, onFinished, onClose }: Props) {
       const soFar = pressedRef.current;
       const verdict = judgePress(seed, round, soFar, pad);
       setLit(pad);
-      setTimeout(() => setLit((current) => (current === pad ? null : current)), 160);
+      setTimeout(
+        () => setLit((current) => (current === pad ? null : current)),
+        160,
+      );
 
       if (verdict === "wrong") {
         finish(round);
@@ -279,7 +291,9 @@ export function SimonGame({ seed, targetScore, onFinished, onClose }: Props) {
 
         {phase === "showing" && (
           <p className="py-4 text-[15px] text-white/50" aria-live="polite">
-            {round === FIFTH_PAD_ROUND ? "Purple is in play now — watch" : "Watch…"}
+            {round === FIFTH_PAD_ROUND
+              ? "Purple is in play now — watch"
+              : "Watch…"}
           </p>
         )}
 
@@ -348,7 +362,11 @@ function Pad({
       className={[
         "touch-manipulation select-none rounded-2xl transition-[background-color,transform] duration-100",
         wide ? "h-[18%] min-h-16" : "aspect-square",
-        !inPlay ? "bg-white/[0.03]" : lit ? `${pad.lit} scale-[0.98]` : pad.rest,
+        !inPlay
+          ? "bg-white/[0.03]"
+          : lit
+            ? `${pad.lit} scale-[0.98]`
+            : pad.rest,
         inPlay && live ? "cursor-pointer" : "cursor-default",
       ].join(" ")}
     />

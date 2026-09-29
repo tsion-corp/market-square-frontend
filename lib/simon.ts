@@ -55,21 +55,45 @@ export const MAX_ROUNDS = 64;
  * How many pads are in play for a given round — four, then five from round 5.
  */
 export function padsForRound(round: number): number {
-  if (!Number.isInteger(round) || round < 1) throw new RangeError(`not a round: ${round}`);
+  if (!Number.isInteger(round) || round < 1)
+    throw new RangeError(`not a round: ${round}`);
   return round >= FIFTH_PAD_ROUND ? MAX_PADS : BASE_PADS;
 }
 
 /**
- * How long a pad stays lit, and the gap between flashes — both accelerate as
- * the rounds climb and then stop. GameArena's exact curves and floors.
+ * How long a pad stays lit, and how often a flash STARTS — both accelerate as
+ * the rounds climb, then stop. GameArena's exact curves and floors.
+ *
+ * `gapMs` is the interval between one flash beginning and the next beginning,
+ * NOT the dark stretch between them. That distinction is the whole rhythm of
+ * the game: read as dark time, round one would run 470 lit + 665 dark for a
+ * 1135ms cycle, nearly twice the real 665ms. A player who practised on their
+ * site would find Square's Simon slow and easy under the same score, which is
+ * exactly the incomparability that matching their constants was meant to
+ * prevent. Use `darkMs` for the pause; never `gapMs`.
  */
 export function flashMs(round: number): number {
-  if (!Number.isInteger(round) || round < 1) throw new RangeError(`not a round: ${round}`);
+  if (!Number.isInteger(round) || round < 1)
+    throw new RangeError(`not a round: ${round}`);
   return Math.max(200, 500 - round * 30);
 }
 export function gapMs(round: number): number {
-  if (!Number.isInteger(round) || round < 1) throw new RangeError(`not a round: ${round}`);
+  if (!Number.isInteger(round) || round < 1)
+    throw new RangeError(`not a round: ${round}`);
   return Math.max(350, 700 - round * 35);
+}
+
+/**
+ * The dark stretch between one pad going out and the next lighting.
+ *
+ * Derived rather than given, because it is `gapMs` minus the lit window and
+ * deriving it is what stops the two being confused at a call site. It stays
+ * positive across the whole curve — the floors are 200 lit against a 350
+ * interval — so pads never overlap, and a test pins that rather than trusting
+ * the arithmetic to hold at every round.
+ */
+export function darkMs(round: number): number {
+  return Math.max(0, gapMs(round) - flashMs(round));
 }
 
 /**
@@ -103,13 +127,16 @@ function padsAtPosition(index: number): number {
  */
 export function padAt(seed: string, index: number): number {
   if (!seed) throw new RangeError("a challenge needs a seed");
-  if (!Number.isInteger(index) || index < 0) throw new RangeError(`not a position: ${index}`);
+  if (!Number.isInteger(index) || index < 0)
+    throw new RangeError(`not a position: ${index}`);
 
   const pads = padsAtPosition(index);
   const limit = Math.floor(256 / pads) * pads; // largest whole multiple of `pads`
 
   for (let attempt = 0; attempt < 64; attempt++) {
-    const hash = keccak256(toHex(attempt === 0 ? `${seed}:${index}` : `${seed}:${index}:${attempt}`));
+    const hash = keccak256(
+      toHex(attempt === 0 ? `${seed}:${index}` : `${seed}:${index}:${attempt}`),
+    );
     // Skip the leading "0x", then read the 32 bytes as hex pairs.
     for (let byteIndex = 0; byteIndex < 32; byteIndex++) {
       const start = 2 + byteIndex * 2;
@@ -134,13 +161,17 @@ export function padAt(seed: string, index: number): number {
  * issued. Everything else in the game stays as it is.
  */
 export function sequenceFor(seed: string, length: number): number[] {
-  if (!Number.isInteger(length) || length < 0) throw new RangeError(`not a length: ${length}`);
-  if (length > MAX_ROUNDS) throw new RangeError(`sequence beyond ${MAX_ROUNDS} rounds`);
+  if (!Number.isInteger(length) || length < 0)
+    throw new RangeError(`not a length: ${length}`);
+  if (length > MAX_ROUNDS)
+    throw new RangeError(`sequence beyond ${MAX_ROUNDS} rounds`);
   return Array.from({ length }, (_, i) => padAt(seed, i));
 }
 
 /** A fresh challenge id. */
-export function newSeed(random: () => string = () => globalThis.crypto.randomUUID()): string {
+export function newSeed(
+  random: () => string = () => globalThis.crypto.randomUUID(),
+): string {
   return `${random()}${random()}`.replace(/-/g, "");
 }
 
@@ -159,9 +190,12 @@ export function judgePress(
   pressedSoFar: readonly number[],
   press: number,
 ): InputVerdict {
-  if (!Number.isInteger(round) || round < 1) throw new RangeError(`not a round: ${round}`);
-  if (pressedSoFar.length >= round) throw new RangeError("round already finished");
-  if (!Number.isInteger(press) || press < 0 || press >= padsForRound(round)) return "wrong";
+  if (!Number.isInteger(round) || round < 1)
+    throw new RangeError(`not a round: ${round}`);
+  if (pressedSoFar.length >= round)
+    throw new RangeError("round already finished");
+  if (!Number.isInteger(press) || press < 0 || press >= padsForRound(round))
+    return "wrong";
   if (padAt(seed, pressedSoFar.length) !== press) return "wrong";
   return pressedSoFar.length + 1 === round ? "round-complete" : "correct";
 }
@@ -174,7 +208,8 @@ export function judgePress(
  * achievement as a 120 there.
  */
 export function scoreForFailedRound(round: number): number {
-  if (!Number.isInteger(round) || round < 1) throw new RangeError(`not a round: ${round}`);
+  if (!Number.isInteger(round) || round < 1)
+    throw new RangeError(`not a round: ${round}`);
   return (round - 1) * POINTS_PER_ROUND;
 }
 

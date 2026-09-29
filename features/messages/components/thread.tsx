@@ -52,6 +52,8 @@ import { dotScale } from "@/lib/voice-levels";
 import { isReplySwipe, SWIPE_TRIGGER, swipeCommits, swipeOffset } from "@/lib/swipe-reply";
 import { uploadFile } from "@/lib/api/upload";
 import { IconArrowLeft, IconCamera, IconDownload, IconFullscreen, IconHouses, IconMic, IconPlay, IconPause, IconPlus, IconQuote, IconSend, IconX } from "@/components/ui/icons";
+import { ChallengeCard, useChallengeSlot } from "@/components/ui/challenge-slot";
+import { challengeMessage, challengePath, parseChallenge } from "@/lib/game-challenge";
 import { IconTrash } from "@/components/ui/thread-icons";
 import {
   useConversationMembers,
@@ -827,6 +829,18 @@ function BubbleText({
   mine: boolean;
   className?: string;
 }) {
+  /*
+    A CHALLENGE REPLACES THE WORDS.
+
+    The message a challenge is sent as is a sentence and a link — which is
+    exactly what it should degrade to if this card ever fails to draw — so
+    rendering both would say the same thing twice. Hooked in here because this
+    is the ONE renderer for message text, so a bubble, a caption and a reply
+    preview all get it without a handler threaded to each of them.
+  */
+  const challenge = parseChallenge(message.text);
+  if (challenge) return <ChallengeCard challenge={challenge} mine={mine} />;
+
   if (!message.text) return null;
   return (
     <PostText
@@ -2403,6 +2417,7 @@ function Composer({
   // The "+" tray: one door to the camera and the file picker, so the row
   // carries a single control instead of two glyphs side by side.
   const [addOpen, setAddOpen] = useState(false);
+  const { startNewChallenge, available: gamesAvailable } = useChallengeSlot();
   // The uploaded-but-not-yet-sent attachment. It is already IN storage by the
   // time it lands here — the panel finishes the upload before it closes — so
   // this holds a URL the service will accept, not a File still to be pushed.
@@ -3058,6 +3073,33 @@ function Composer({
                   <Image src={asset("/messages/attach.svg")} alt="" width={20} height={20} />
                   Attach a file
                 </button>
+                {/*
+                  A GAME IS A THIRD DOOR IN THE SAME TRAY, not a button of its
+                  own beside the composer — the tray exists precisely so one
+                  "+" holds everything that can be put into a thread.
+
+                  Hidden rather than disabled when no host is mounted: a row
+                  that cannot do anything is worse than a row that is not
+                  there, and it would still be reachable by keyboard.
+                */}
+                {gamesAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddOpen(false);
+                      startNewChallenge();
+                    }}
+                    className="ws-press flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] text-white transition-colors hover:bg-white/10"
+                  >
+                    <span
+                      aria-hidden
+                      className="inline-flex h-5 w-5 items-center justify-center"
+                    >
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                    </span>
+                    Play Simon
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -3225,6 +3267,27 @@ export function Thread({
   const markRead = useMarkConversationRead();
   const reducedMotion = useReducedMotion();
   const [membersOpen, setMembersOpen] = useState(false);
+  /*
+    HOW A FINISHED GAME BECOMES A MESSAGE.
+
+    The game overlay is mounted above this screen, so that scrolling the
+    message list cannot destroy a round in progress. That puts it out of reach
+    of this conversation's id, so the thread registers the sender and the host
+    calls it — and withdraws it on the way out, so a score finished after the
+    reader left cannot post into a thread they are no longer in.
+
+    The score written here comes from the play session, never from a parsed
+    message: anybody can type a number into a chat.
+  */
+  const challengeSend = useSendMessage(conversation.id);
+  const { registerSender } = useChallengeSlot();
+  useEffect(() => {
+    registerSender((seed, score) => {
+      const url = `${window.location.origin}${sq(challengePath(seed, score))}`;
+      challengeSend.mutate({ text: challengeMessage(url, score) });
+    });
+    return () => registerSender(null);
+  }, [registerSender, challengeSend, conversation.id]);
   /*
     THE REPLY TARGET, keyed by conversation rather than reset in an effect:
     a target chosen in one thread must not survive into the next, and

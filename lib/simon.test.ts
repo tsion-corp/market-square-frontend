@@ -7,6 +7,7 @@ import {
   MAX_ROUNDS,
   POINTS_PER_ROUND,
   challengeWinner,
+  darkMs,
   flashMs,
   gapMs,
   judgePress,
@@ -40,6 +41,26 @@ describe("the game is GameArena's, to the number", () => {
     assert.equal(gapMs(5), 525);
     assert.equal(gapMs(10), 350);
     assert.equal(gapMs(30), 350);
+  });
+
+  /*
+    GAP IS THE INTERVAL BETWEEN FLASH STARTS, NOT THE DARK TIME. Read the
+    other way, round one runs a 1135ms cycle instead of 665ms — a visibly
+    slower, easier game carrying the same score as theirs, which is precisely
+    the incomparability that copying their constants was meant to avoid.
+  */
+  it("treats the gap as the interval between flash starts", () => {
+    assert.equal(darkMs(1), 665 - 470);
+    assert.equal(darkMs(10), 350 - 200);
+  });
+
+  it("never lets two pads be lit at once, at any round", () => {
+    // The lit window must fit inside the interval for the whole curve, floors
+    // included: 200 lit inside a 350 interval is the tightest it ever gets.
+    for (let round = 1; round <= MAX_ROUNDS; round++) {
+      assert.ok(flashMs(round) < gapMs(round), `round ${round} overlaps pads`);
+      assert.ok(darkMs(round) > 0, `round ${round} has no dark gap`);
+    }
   });
 
   it("speeds up every round until the floor", () => {

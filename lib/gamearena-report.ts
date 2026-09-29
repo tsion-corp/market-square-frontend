@@ -34,7 +34,8 @@ export type ReportParse =
  * and "not a number" into one 500.
  */
 export function parseScoreReport(raw: string): ReportParse {
-  if (raw.length > MAX_REPORT_BODY) return { ok: false, status: 413, error: "too large" };
+  if (raw.length > MAX_REPORT_BODY)
+    return { ok: false, status: 413, error: "too large" };
 
   let body: Record<string, unknown>;
   try {
@@ -70,7 +71,9 @@ export function parseScoreReport(raw: string): ReportParse {
   */
   const rawHandle = body.handle;
   const handle =
-    typeof rawHandle === "string" && rawHandle.trim() ? rawHandle.trim().slice(0, MAX_HANDLE) : undefined;
+    typeof rawHandle === "string" && rawHandle.trim()
+      ? rawHandle.trim().slice(0, MAX_HANDLE)
+      : undefined;
 
   return handle ? { ok: true, score, handle } : { ok: true, score };
 }

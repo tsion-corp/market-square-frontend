@@ -23,6 +23,7 @@ import {
   useOpenConversation,
   type NewChatPickerProps,
 } from "@/features/messages";
+import { ChallengeHost } from "@/features/games/components/challenge-host";
 import type { Profile } from "@/lib/api/schemas";
 
 /**
@@ -35,39 +36,56 @@ import type { Profile } from "@/lib/api/schemas";
  */
 export function MessagesScreen() {
   return (
-    <MessagesPage
-      // A GROUP thread's header offers "Create Gist Room" (node 76:8239). The
-      // composer is node 59:7544 and lives in the houses slice, so it is
-      // joined here rather than imported across slices — the same reason the
-      // people picker is a slot.
-      renderGistRoom={({ open, onClose, houseConversationId }) => (
-        <OpenHouseSheet
-          open={open}
-          onClose={onClose}
-          houseConversationId={houseConversationId}
-        />
-      )}
-      // The announcement card a gist room posts into its house group
-      // (node 225:3873). Composed here because it reads three slices at once —
-      // the room, the topic vocabulary and this group's roster.
-      renderRoomCard={({ streamId, conversationId }) => (
-        <GistRoomCard streamId={streamId} conversationId={conversationId} />
-      )}
-      // Block and Report inside a 1:1's overflow menu (node 77:8287). Both
-      // belong to the profile slice, so the rows are composed here and drawn
-      // by the menu — see `ThreadSafetyRows`.
-      renderThreadSafety={(peer) => <ThreadSafetyRows peer={peer} />}
-      // "Add / Invite gist partners" (78:8527, 78:8345). Choosing a person is
-      // the discovery slice's directory, exactly as the inbox's own `+` is.
-      renderAddMembers={(props) => <AddMembersSheet {...props} />}
-      renderNewChat={(props) =>
-        // Two designs, two components. Create Group is a two-STEP flow (choose
-        // people, then name and describe the room) and folding it into the
-        // one-step gist picker as a mode was what made that picker start
-        // growing a second personality.
-        props.mode === "group" ? <CreateGroupFlow {...props} /> : <NewChatSheet {...props} />
-      }
-    />
+    /*
+      The game a thread can carry lives in the games slice, and messages never
+      imports it — same rule as the people picker and the gist-room composer
+      above. The host is mounted HERE, around the whole screen, for a reason
+      beyond tidiness: the game is a full-screen overlay, and rendered inside
+      the message list it would be destroyed and recreated as the list
+      virtualises, taking a round in progress with it.
+
+      The open thread registers how a finished score becomes a message, since
+      only it knows which conversation that is.
+    */
+    <ChallengeHost>
+      <MessagesPage
+        // A GROUP thread's header offers "Create Gist Room" (node 76:8239). The
+        // composer is node 59:7544 and lives in the houses slice, so it is
+        // joined here rather than imported across slices — the same reason the
+        // people picker is a slot.
+        renderGistRoom={({ open, onClose, houseConversationId }) => (
+          <OpenHouseSheet
+            open={open}
+            onClose={onClose}
+            houseConversationId={houseConversationId}
+          />
+        )}
+        // The announcement card a gist room posts into its house group
+        // (node 225:3873). Composed here because it reads three slices at once —
+        // the room, the topic vocabulary and this group's roster.
+        renderRoomCard={({ streamId, conversationId }) => (
+          <GistRoomCard streamId={streamId} conversationId={conversationId} />
+        )}
+        // Block and Report inside a 1:1's overflow menu (node 77:8287). Both
+        // belong to the profile slice, so the rows are composed here and drawn
+        // by the menu — see `ThreadSafetyRows`.
+        renderThreadSafety={(peer) => <ThreadSafetyRows peer={peer} />}
+        // "Add / Invite gist partners" (78:8527, 78:8345). Choosing a person is
+        // the discovery slice's directory, exactly as the inbox's own `+` is.
+        renderAddMembers={(props) => <AddMembersSheet {...props} />}
+        renderNewChat={(props) =>
+          // Two designs, two components. Create Group is a two-STEP flow (choose
+          // people, then name and describe the room) and folding it into the
+          // one-step gist picker as a mode was what made that picker start
+          // growing a second personality.
+          props.mode === "group" ? (
+            <CreateGroupFlow {...props} />
+          ) : (
+            <NewChatSheet {...props} />
+          )
+        }
+      />
+    </ChallengeHost>
   );
 }
 
@@ -108,14 +126,14 @@ function NewChatSheet({ open, onClose, onStarted }: NewChatPickerProps) {
   const people = usePeople(query, "followers", open);
   const sentinel = useInfiniteScroll(
     () => people.fetchNextPage(),
-    Boolean(people.hasNextPage && !people.isFetchingNextPage)
+    Boolean(people.hasNextPage && !people.isFetchingNextPage),
   );
 
   const items = (people.data?.pages.flatMap((page) => page.items) ?? []).filter(
     // You are not someone you can message. Same rule the People directory
     // applies, and for the same reason: a row that cannot do the thing every
     // other row does reads as broken rather than deliberate.
-    (profile) => !me.data || profile.id !== me.data.id
+    (profile) => !me.data || profile.id !== me.data.id,
   );
 
   const pick = (profile: Profile) => {
@@ -146,7 +164,12 @@ function NewChatSheet({ open, onClose, onStarted }: NewChatPickerProps) {
       <div className="flex flex-col gap-3 p-4">
         <h2 className="text-[14px] font-bold leading-5 text-white">New Gist</h2>
 
-        <InboxSearch value={query} onChange={setQuery} id="new-chat-search" label="Search people" />
+        <InboxSearch
+          value={query}
+          onChange={setQuery}
+          id="new-chat-search"
+          label="Search people"
+        />
 
         <div className="flex max-h-[46vh] flex-col gap-3 overflow-y-auto">
           {people.isPending && [0, 1, 2].map((i) => <RowSkeleton key={i} />)}
@@ -164,7 +187,9 @@ function NewChatSheet({ open, onClose, onStarted }: NewChatPickerProps) {
               glyph="◇"
               title={query.trim() ? "No matches" : "Nobody to show yet"}
               body={
-                query.trim() ? "No one here matches that name." : "The directory is empty right now."
+                query.trim()
+                  ? "No one here matches that name."
+                  : "The directory is empty right now."
               }
             />
           )}
@@ -183,10 +208,17 @@ function NewChatSheet({ open, onClose, onStarted }: NewChatPickerProps) {
                 className="ws-press flex h-[54.5px] items-center gap-[9px] rounded-xl border border-white/10 bg-white/[0.03] px-3 text-left transition-colors hover:bg-white/[0.06] disabled:opacity-60"
               >
                 <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[25%] border border-white/20 bg-white/10">
-                  <Avatar name={name} seed={profile.id} src={profile.avatarUrl} size={38} />
+                  <Avatar
+                    name={name}
+                    seed={profile.id}
+                    src={profile.avatarUrl}
+                    size={38}
+                  />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-[12px] font-bold leading-4 text-white">{name}</span>
+                  <span className="truncate text-[12px] font-bold leading-4 text-white">
+                    {name}
+                  </span>
                   <span className="truncate text-[11px] leading-[16.5px] text-white/50">
                     {/* The file shows a follower count on the rows that have
                         one and a handle on the rest. "0 followers" tells a
@@ -249,14 +281,16 @@ function AddMembersSheet({
   const people = usePeople(query, "followers", open);
   const sentinel = useInfiniteScroll(
     () => people.fetchNextPage(),
-    Boolean(people.hasNextPage && !people.isFetchingNextPage)
+    Boolean(people.hasNextPage && !people.isFetchingNextPage),
   );
 
   const already = new Set(
-    (members.data?.items ?? []).flatMap((row) => (row.profile ? [row.profile.id] : []))
+    (members.data?.items ?? []).flatMap((row) =>
+      row.profile ? [row.profile.id] : [],
+    ),
   );
   const items = (people.data?.pages.flatMap((page) => page.items) ?? []).filter(
-    (profile) => profile.id !== me.data?.id && !already.has(profile.id)
+    (profile) => profile.id !== me.data?.id && !already.has(profile.id),
   );
 
   const close = () => {
@@ -272,7 +306,7 @@ function AddMembersSheet({
         : // The contract caps a single call at twenty.
           current.length >= 20
           ? current
-          : [...current, profile]
+          : [...current, profile],
     );
 
   return (
@@ -283,9 +317,16 @@ function AddMembersSheet({
       panelClassName="border border-white/[0.18] bg-[#101012]/[0.62] backdrop-blur-[7px] sm:max-w-[347px] sm:rounded-[22px]"
     >
       <div className="flex flex-col gap-3 p-4">
-        <h2 className="text-[14px] font-bold leading-5 text-white">Add gist partners</h2>
+        <h2 className="text-[14px] font-bold leading-5 text-white">
+          Add gist partners
+        </h2>
 
-        <InboxSearch value={query} onChange={setQuery} id="add-members-search" label="Search people" />
+        <InboxSearch
+          value={query}
+          onChange={setQuery}
+          id="add-members-search"
+          label="Search people"
+        />
 
         <div className="flex max-h-[46vh] flex-col gap-3 overflow-y-auto">
           {people.isPending && [0, 1, 2].map((i) => <RowSkeleton key={i} />)}
@@ -321,14 +362,21 @@ function AddMembersSheet({
                 onClick={() => toggle(profile)}
                 className={cn(
                   "ws-press flex h-[54.5px] items-center gap-[9px] rounded-xl border bg-white/[0.03] px-3 text-left transition-colors hover:bg-white/[0.06]",
-                  on ? "border-white/40" : "border-white/10"
+                  on ? "border-white/40" : "border-white/10",
                 )}
               >
                 <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[25%] border border-white/20 bg-white/10">
-                  <Avatar name={name} seed={profile.id} src={profile.avatarUrl} size={38} />
+                  <Avatar
+                    name={name}
+                    seed={profile.id}
+                    src={profile.avatarUrl}
+                    size={38}
+                  />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-[12px] font-bold leading-4 text-white">{name}</span>
+                  <span className="truncate text-[12px] font-bold leading-4 text-white">
+                    {name}
+                  </span>
                   <span className="truncate text-[11px] leading-[16.5px] text-white/50">
                     {profile.followerCount > 0
                       ? `${profile.followerCount.toLocaleString()} followers`
@@ -339,7 +387,7 @@ function AddMembersSheet({
                   aria-hidden
                   className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
-                    on ? "border-white bg-white text-black" : "border-white/40"
+                    on ? "border-white bg-white text-black" : "border-white/40",
                   )}
                 >
                   {on && "✓"}
@@ -362,7 +410,7 @@ function AddMembersSheet({
           onClick={() =>
             add.mutate(
               picked.map((profile) => profile.id),
-              { onSuccess: close }
+              { onSuccess: close },
             )
           }
         >

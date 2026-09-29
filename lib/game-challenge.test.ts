@@ -4,6 +4,7 @@ import { newSeed } from "./simon.ts";
 import {
   challengeMessage,
   challengePath,
+  challengePreview,
   isSameChallenge,
   parseChallenge,
 } from "./game-challenge.ts";
@@ -144,5 +145,20 @@ describe("pairing a challenge with its answer", () => {
     const a = { seed: SEED, score: 120 };
     assert.ok(isSameChallenge(a, { seed: SEED, score: 130 }));
     assert.ok(!isSameChallenge(a, { seed: newSeed(), score: 130 }));
+  });
+});
+
+describe("how a challenge reads in an inbox row", () => {
+  it("says the game and the score, and never the link", () => {
+    const text = `Simon · 120 — beat it\nhttps://square.tsionark.com/g/simon/${SEED}?s=120`;
+    const preview = challengePreview(text);
+    assert.equal(preview, "Simon · 120 — beat it");
+    assert.ok(!preview?.includes("http"), "a preview must not carry the url");
+    assert.ok(!preview?.includes("/g/simon"), "a preview must not carry the path");
+  });
+
+  it("falls through for an ordinary message", () => {
+    assert.equal(challengePreview("see you at 6"), null);
+    assert.equal(challengePreview(null), null);
   });
 });
