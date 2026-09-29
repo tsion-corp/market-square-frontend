@@ -23,8 +23,20 @@ import {
  * The chains the embedded wallet holds value on, in Decane's chain-id format.
  * Base is where every Square payment happens; mainnet and Solana are there so
  * one Decane identity is the same wallet set it is in wsws.
+ *
+ * CELO IS HERE FOR THE GAME PASS, AND FOR NOTHING ELSE. A player who claims a
+ * name in a chat signs `mint(username)` on Celo, where GameArena's pass lives.
+ * Square holds no value there and pays no gas there — that is GameArena's
+ * side — but the chain has to be DECLARED or the session refuses to sign for
+ * it at all. It refuses with "Request exceeds defined limit", which reads like
+ * a spending cap and is really "you never asked for this chain", so it is
+ * written down here rather than rediscovered.
+ *
+ * The set is declared when a session OPENS, so adding one only reaches readers
+ * whose session is opened after this ships — an existing session keeps the set
+ * it was created with until it is renewed.
  */
-const DECANE_CHAINS = ["evm:8453", "evm:1", "solana:mainnet"];
+const DECANE_CHAINS = ["evm:8453", "evm:1", "evm:42220", "solana:mainnet"];
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
   if (DEMO_AUTH) return <>{children}</>;

@@ -35,6 +35,8 @@ const makeItCount = stripComments(
 );
 const reportClient = stripComments(read("features/games/lib/report-score.ts"));
 const readChain = read("features/games/lib/pass-chain.ts");
+const providers = stripComments(read("app/providers.tsx"));
+const gamePass = stripComments(read("lib/game-pass.ts"));
 
 /*
   THE PARTNER KEY IS THE WHOLE AUTHORITY UPSTREAM. Whoever holds it can write
@@ -346,5 +348,30 @@ describe("the player name is suggested, not assumed", () => {
     // A seeded name is not a trusted one: it goes through the same contract
     // check, so a taken handle is refused rather than attempted.
     assert.match(makeItCount, /availability === "available"/);
+  });
+});
+
+/*
+  THE SESSION MUST BE ALLOWED TO SIGN ON CELO.
+
+  The chain set is declared when a wallet session opens, and a chain outside it
+  cannot be signed for at all. Claiming a player name is a Celo transaction, so
+  dropping 42220 from that list breaks the claim — and it fails with "Request
+  exceeds defined limit", which reads like a spending cap rather than a missing
+  chain, so nobody would look here.
+*/
+describe("the wallet session may sign on Celo", () => {
+  it("declares 42220 alongside the chains Square actually spends on", () => {
+    assert.match(providers, /"evm:42220"/);
+    // Base must not be lost in the process — every payment in Square is there.
+    assert.match(providers, /"evm:8453"/);
+  });
+
+  it("uses the same chain id the claim is actually built for", () => {
+    // The claim is assembled in lib/game-pass.ts; a session allowed on one
+    // chain while the transaction targets another fails at the wallet with a
+    // message that names neither.
+    assert.match(gamePass, /CELO_CHAIN_ID = 42220/);
+    assert.match(gamePass, /chainId: CELO_CHAIN_ID/);
   });
 });
