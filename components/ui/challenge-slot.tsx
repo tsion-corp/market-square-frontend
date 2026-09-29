@@ -89,7 +89,18 @@ export function ChallengeCard({
   const { openChallenge, available } = useChallengeSlot();
 
   return (
-    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+    /*
+      A SOLID DARK TILE, NOT A TINT.
+
+      This card is drawn INSIDE a chat bubble, and the bubble is white when the
+      message is yours and purple when it is theirs. A translucent surface with
+      white ink therefore rendered white-on-white on the sender's own side —
+      the card was there, correct and completely invisible, with only a green
+      dot showing. So the tile carries its own opaque ground and does not
+      inherit anything from the bubble behind it, which also makes a game read
+      as a distinct object in the thread rather than as a coloured message.
+    */
+    <div className="min-w-0 rounded-2xl border border-white/15 bg-[#151518] p-3">
       <div className="flex items-center gap-2">
         <span
           aria-hidden
@@ -100,11 +111,12 @@ export function ChallengeCard({
         </span>
       </div>
 
-      <p className="mt-1.5 text-[15px] font-semibold tabular-nums text-white">
+      {/* The score is the point of the card, so it is the biggest thing on it. */}
+      <p className="mt-2 text-[28px] font-bold leading-none tabular-nums text-white">
         {challenge.score}
-        <span className="ml-1.5 text-[13px] font-normal text-white/50">
-          {mine ? "— your score" : "to beat"}
-        </span>
+      </p>
+      <p className="mt-1 text-[13px] text-white/55">
+        {mine ? "your score — waiting for them" : "to beat"}
       </p>
 
       {/* No button on your own challenge: replaying your own seed would let you
@@ -118,7 +130,7 @@ export function ChallengeCard({
               targetScore: challenge.score,
             })
           }
-          className="ws-press mt-2.5 w-full rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-black"
+          className="ws-press mt-3 w-full rounded-full bg-white px-4 py-2.5 text-[14px] font-semibold text-black"
         >
           Beat it
         </button>
