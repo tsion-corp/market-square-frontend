@@ -8,7 +8,7 @@ import { useEndStream, useStageSlots } from "@/features/streams";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DestructiveConfirmSheet } from "@/components/ui/destructive-confirm-sheet";
-import { IconFullscreen, IconRefresh, IconVolume, IconX } from "@/components/ui/icons";
+import { IconMediaExpand, IconRefresh, IconVolume, IconX } from "@/components/ui/icons";
 import { IconRoomLeave, IconRoomMic, IconRoomMicOff } from "@/components/ui/room-icons";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/cn";
@@ -378,8 +378,9 @@ function PlayerBody({
               >
                 {/* An EXPAND glyph — this restores the minimised room to its
                     full page. A chevron-up read as "scroll up"/"collapse", not
-                    "open this back up" (ogazboiz, 2026-09-28). */}
-                <IconFullscreen className="h-4 w-4" />
+                    "open this back up" (ogazboiz, 2026-09-28). The mark is the
+                    supplied media-expand icon (2026-09-29). */}
+                <IconMediaExpand className="h-4 w-4" />
               </RoundButton>
             )}
             <HangUp session={session} streamId={streamId} />
