@@ -74,7 +74,6 @@ const DESIGN_LOCKED = new Set<string>([
     built on `Sheet`), and the chevrons only walk a catalogue the grid behind
     them already lists in full, one tap away.
   */
-  "components/layout/buy-gift-sheet.tsx",
 ]);
 
 // Lower this as batches migrate. Target: 0. Raise ONLY by adding to

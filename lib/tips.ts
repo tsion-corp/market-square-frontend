@@ -158,3 +158,39 @@ export function isSameTipAmount(a: string, b: string): boolean {
   if (!left.ok || !right.ok) return false;
   return left.amountKash === right.amountKash;
 }
+
+/**
+ * SQUARE COINS ARE THE UNIT PEOPLE SEE. KASH IS THE UNIT THE RAIL TAKES.
+ *
+ * A coin is one thousandth of a KASH (`COINS_PER_KASH`), so the conversion is
+ * exact in both directions and is done on the decimal STRING rather than
+ * through a float — 30 coins is "0.03", never 0.030000000000000002.
+ *
+ * ─── WHY THIS EXISTS ─────────────────────────────────────────────────────────
+ * The gift tiles have always been priced in coins, and the tray in a room
+ * quotes coins. The tip sheet's free-amount field did not: it asked for KASH
+ * beside gifts priced in coins, so one sheet quoted two currencies and the
+ * reader had to know the rate to compare a typed amount with a tile. ogazboiz:
+ * "it show kash instead of those square coin".
+ *
+ * Coins are WHOLE. A fraction of a coin is not a thing anybody can hold, and
+ * allowing "0.5" would put the sheet back to asking for a unit nobody quotes.
+ */
+export function kashFromCoins(coins: string): string {
+  const whole = coins.trim();
+  if (!/^\d+$/.test(whole)) return "";
+  const padded = whole.padStart(4, "0");
+  const int = padded.slice(0, -3).replace(/^0+(?=\d)/, "");
+  const frac = padded.slice(-3).replace(/0+$/, "");
+  return frac ? `${int}.${frac}` : int;
+}
+
+/**
+ * Keystroke filter for a COIN field: digits only, and bounded so a typo cannot
+ * become a fortune. `50_000` is the dearest gift in the catalogue, so five
+ * digits is the whole ladder with room above it.
+ */
+export function acceptsCoinKeystroke(next: string): boolean {
+  if (next === "") return true;
+  return /^\d{1,6}$/.test(next);
+}

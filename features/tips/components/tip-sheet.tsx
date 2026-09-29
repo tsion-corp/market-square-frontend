@@ -16,8 +16,9 @@ import { LIVE_GIFTS } from "@/lib/gifts";
 import { formatKash } from "@/lib/format";
 import { errorCode, errorMessage } from "@/lib/api/envelope";
 import {
+  acceptsCoinKeystroke,
+  kashFromCoins,
   DEFAULT_TIP_KASH,
-  acceptsTipKeystroke,
   parseTipAmount,
   tipAmountMessage,
 } from "@/lib/tips";
@@ -168,7 +169,13 @@ export function TipSheet({
         : selectedGift;
 
   const chosen = custom.trim() ? custom : effectiveAmount;
-  const parsed = parseTipAmount(chosen);
+  /*
+    `chosen` is either a gift's KASH price or a COIN amount the reader typed.
+    Converted here, at the one place the two meet, so everything downstream —
+    validation, the balance comparison, the send — keeps working in the rail's
+    own unit and nothing else has to know about coins.
+  */
+  const parsed = parseTipAmount(selectedGift ? chosen : kashFromCoins(chosen));
   /**
    * The server's own bounds, checked BEFORE the confirm step rather than at
    * the end of it. `parseTipAmount` says whether the text is an amount; this
@@ -223,7 +230,17 @@ export function TipSheet({
       // back — a back arrow that dismisses the dialog is a different control
       // wearing the same glyph.
       onClose={stage === "confirm" ? () => setStage("amount") : onClose}
-      title={stage === "sent" ? "Tip sent" : "Tip your creator"}
+      /*
+        "SEND A GIFT", NOT "TIP YOUR CREATOR".
+
+        This sheet opens on a post, on a profile and on a person in a gist
+        room, and in two of those three the recipient is not anybody's creator
+        — they are a peer. ogazboiz: "not everything is tip your creator". The
+        room's own tray already says "Send a gift" wherever the relationship is
+        not a broadcast's, so this is the same words for the same act rather
+        than a second vocabulary.
+      */
+      title={stage === "sent" ? "Gift sent" : "Send a gift"}
       back={stage === "confirm"}
     >
       {/* Who is being tipped — on every step, because "confirm" with no name
@@ -322,23 +339,38 @@ export function TipSheet({
               {/* `ws-field` is the WRAPPER, per its definition — it owns the pill
                 and the focus-within treatment, and the input inside it is
                 bare. */}
+              {/*
+                COINS, NOT KASH — one sheet, one currency.
+
+                The tiles above have always been priced in coins and the room's
+                tray quotes coins; this field asked for KASH, so a reader had to
+                know the rate to compare what they typed with the tile they had
+                just looked at. Coins are what this product quotes.
+
+                WHOLE COINS ONLY: a fraction of a coin is not a thing anybody
+                holds. `kashFromCoins` converts on the decimal STRING, so 30
+                coins is "0.03" and never 0.030000000000000002.
+
+                The floor is TEN coins, and it is not arbitrary — the rail
+                carries two decimal places, so one coin (0.001) is refused as
+                too precise, and ten coins is exactly the Rose. The catalogue's
+                cheapest gift and the rail's smallest amount already agree.
+              */}
               <label className="ws-field flex h-11 items-center gap-2 px-4">
                 <KashCoin size={16} className="shrink-0" />
                 <input
-                  inputMode="decimal"
+                  inputMode="numeric"
                   value={custom}
                   placeholder="0"
                   onChange={(e) => {
                     setSelectedGift(null);
-                    // Filtered per keystroke so an amount that could never be
-                    // sent cannot be typed — and half-typed ones still can.
-                    if (acceptsTipKeystroke(e.target.value))
+                    if (acceptsCoinKeystroke(e.target.value))
                       setCustom(e.target.value);
                   }}
                   className="min-w-0 flex-1 bg-transparent tnum text-[15px] text-white outline-none placeholder:text-white/30"
-                  aria-label="Tip amount in KASH"
+                  aria-label="Amount in Square Coins"
                 />
-                <span className="shrink-0 text-[13px] text-white/40">KASH</span>
+                <span className="shrink-0 text-[13px] text-white/40">coins</span>
               </label>
             </div>
 
