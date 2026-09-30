@@ -22,14 +22,20 @@ const stripComments = (source: string) =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 const page = stripComments(read("features/profile/components/profile-page.tsx"));
-const gallery = stripComments(read("components/layout/profile-gift-gallery.tsx"));
 const screen = stripComments(read("components/layout/profile-screen.tsx"));
 
 describe("the profile's account section is own-profile only", () => {
-  it("mounts the strip and gallery behind the ownership check", () => {
+  it("mounts the account strip behind the ownership check", () => {
+    /*
+      The gate used to read `giftGallerySlot`, which was doing two jobs:
+      mounting the gallery, and standing in for "the account panels exist".
+      Removing the Gift Gallery would have taken Earnings, Badges and Replays
+      with it, so the gate moved to the other own-profile slot rather than
+      being deleted with the tab.
+    */
     assert.match(
       page,
-      /\{isMe && giftGallerySlot && \(/,
+      /\{isMe && earningsSlot && \(/,
       "the account strip lost its own-profile gate — it would render on strangers"
     );
   });
@@ -39,18 +45,17 @@ describe("the profile's account section is own-profile only", () => {
     assert.match(page, /profile\.data\.id === me\.data\.id/);
   });
 
-  it("the gallery cannot be handed a fabricated ownership claim", () => {
-    /*
-      It used to take an `isMe` prop and the call site passed a hardcoded one,
-      true only because the page already refused to mount it elsewhere. Moving
-      the slot out of that gate would have left the prop still saying "yes" —
-      and the component would print the VIEWER's gift counts under somebody
-      else's name. The prop is gone; the gate lives only where the comparison
-      is.
-    */
-    assert.doesNotMatch(gallery, /isMe/, "the gallery must not take an ownership prop");
-    assert.doesNotMatch(screen, /ProfileGiftGallery isMe/, "no hardcoded ownership at the slot");
-  });
+  /*
+    REMOVED WITH THE GIFT GALLERY. It pinned that the gallery took no `isMe`
+    prop, because an earlier version did and the call site passed a hardcoded
+    `true` — which would have printed the VIEWER's gift counts under somebody
+    else's name the moment the slot moved out of the gate.
+
+    The rule survives in the assertion above and in "derives ownership by
+    COMPARING ids": ownership is decided by the page, from `useMe`, and is
+    never a prop a caller can assert. There is simply no gallery to point at
+    any more, and a test that reads a deleted file is not a test.
+  */
 
   it("never ships a tab that HAS a panel as disabled", () => {
     /*
@@ -86,50 +91,16 @@ describe("the profile's account section is own-profile only", () => {
     }
   });
 
-  it("reads the caller's OWN tips and nothing else", () => {
-    const api = stripComments(read("features/tips/lib/api.ts"));
-    assert.match(api, /"\/me\/tips\/received"/, "the counts must come from the /me route");
-    // There is no route for another person's tips; a path built from a
-    // username here would be a phantom that 404s.
-    assert.doesNotMatch(api, /tips\/received\/\$\{/);
-  });
+  /*
+    THE GALLERY'S OWN RULES WENT WITH IT — reading only the caller's own tips,
+    counting only CONFIRMED ones, and showing no number for a gift nobody has
+    sent rather than a zero.
 
-  it("counts only CONFIRMED tips", () => {
-    /*
-      The service's own words on `pending`: it "must never be presented to a
-      user as though the money arrived". A gift counted before it settles is
-      exactly that, and a tip that later fails would have to be counted back
-      down.
-    */
-    assert.match(
-      gallery,
-      /tip\.status !== "confirmed"/,
-      "pending or failed tips must not be counted as gifts received"
-    );
-  });
-
-  it("shows a zero for what you OWN and no number for what you were SENT", () => {
-    /*
-      The asymmetry is the whole rule, and it was one-sided before there was
-      anything to own.
-
-      "YOU OWN NONE" IS A FACT WITH AN ACTION ATTACHED — the `+` beside it is
-      how you fix it, and node 1285:79134 draws that 0 explicitly on two
-      tiles. Hiding it would remove the reason the control is there.
-
-      "NOBODY HAS SENT YOU ONE" is closer to unknown, and a confident 0 states
-      something about other people we would rather not claim — the same rule
-      the balance chip and the house member line follow.
-
-      So the count renders whenever it is a number, and WHICH number it is
-      decides whether a zero can occur: owned falls back to 0, received falls
-      back to null.
-    */
-    assert.match(gallery, /count !== null &&/, "an uncounted gift must render no number");
-    assert.match(
-      gallery,
-      /economy === true \? \(owned\.get\(gift\.id\) \?\? 0\) : \(counts\.get\(gift\.id\) \?\? null\)/,
-      "owned and received no longer differ on whether a zero is drawn"
-    );
-  });
+    Two of the three are not lost: "only confirmed tips are counted" is the
+    service's own rule and is pinned where money is actually rendered
+    (`lib/format.test.ts`, and the Earnings panel's own tests), and "absent
+    rather than zero" is pinned on the balance chip and the house member line.
+    The third — counting received tips by `giftId` — had no other surface and
+    goes with the feature.
+  */
 });

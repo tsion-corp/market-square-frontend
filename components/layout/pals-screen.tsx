@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { HomeTopRow } from "@/components/layout/home-top-row";
 import { HomeSearch } from "@/components/layout/home-search";
 import { PalsInRooms } from "@/components/layout/pals-in-rooms";
-import { POST_SLOTS } from "@/components/layout/home-screen";
+import { usePostSlots } from "@/components/layout/home-screen";
 import { FeedPage, StoriesRow, TopicTabs, type TopicTab } from "@/features/feed";
 import { useTopics } from "@/features/discovery";
 import { useAuth } from "@/hooks/use-auth";
@@ -60,6 +60,7 @@ const NO_TOPICS: readonly string[] = [];
  * past it.
  */
 export function PalsScreen() {
+  const postSlots = usePostSlots();
   // The strip is who you follow, so it exists only for someone signed in —
   // the same gate Home put on it.
   const { authenticated } = useAuth();
@@ -92,7 +93,7 @@ export function PalsScreen() {
       <FeedPage
         mode="pals"
         topics={topics}
-        {...POST_SLOTS}
+        {...postSlots}
         searchSlot={searching ? <HomeSearch query={query} /> : undefined}
         headSlot={
           <>

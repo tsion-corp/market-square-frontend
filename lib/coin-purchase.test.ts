@@ -51,7 +51,7 @@ describe("being short of coins buys coins", () => {
     // The overwhelmingly common reason to open this is that ONE gift was a
     // specific number of coins out of reach. Arriving at a generic pack list
     // makes the buyer do that subtraction themselves.
-    const tray = read("features/streams/components/gift-sheet.tsx");
+    const tray = read("components/ui/gift-sheet.tsx");
     assert.match(tray, /onTopUp\?: \(needed: number\) => void;/u, "the tray asks for no amount");
     assert.match(tray, /onTopUp\(total\)/u, "the Get more door forgets what was needed");
     assert.match(tray, /onTopUp\?\.\(total\)/u, "the Send button forgets what was needed");
@@ -172,7 +172,7 @@ describe("a deployment with no treasury says so", () => {
 describe("sending spends coins, in one call", () => {
   const room = read("features/houses/components/house-room.tsx");
   const roomCode = code("features/houses/components/house-room.tsx");
-  const trayCode = code("features/streams/components/gift-sheet.tsx");
+  const trayCode = code("components/ui/gift-sheet.tsx");
   const gridCode = code("components/ui/gift-grid.tsx");
 
   it("buys nothing before sending — the send is the whole gesture", () => {

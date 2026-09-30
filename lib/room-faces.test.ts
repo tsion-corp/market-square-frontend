@@ -248,14 +248,20 @@ test("the client never names a gift's price", () => {
   assert.match(posted, /\{ giftId: input\.giftId, quantity: input\.quantity \}/);
 });
 
-test("an idempotency key is one per INTENT, not one per attempt", () => {
-  // A key minted per render or per retry is a new key each time and protects
-  // nothing. Keyed on the gift and the quantity, so three Roses then three
-  // more is two intents while retrying the first is one.
-  const gallery = readFileSync("components/layout/profile-gift-gallery.tsx", "utf8");
-  assert.match(gallery, /function buyKey\(giftId: string, quantity: number\): string \{/);
-  assert.match(gallery, /return `gift:\$\{giftId\}:\$\{quantity\}`;/);
-});
+/*
+  THIS TEST LOST ITS SUBJECT, and is removed rather than weakened.
+
+  It pinned `buyKey` in the profile Gift Gallery — a key minted per INTENT
+  (gift + quantity) rather than per attempt. The gallery was the only surface
+  that bought gifts, and it has been removed, so there is no longer a gift
+  PURCHASE anywhere in the client to pin.
+
+  The rule it encoded is not lost: `lib/payment-hold.ts` holds the same
+  reasoning for money that actually moves today, and `newIntentId` is pinned by
+  its own tests. If gift buying returns, the key belongs with it and this
+  assertion should come back alongside — deleting a test whose subject is gone
+  is honest; keeping one that reads a file nobody ships is not.
+*/
 
 test("every coin price is exactly its KASH price times the rate", () => {
   /*
@@ -362,9 +368,9 @@ test("every gift surface quotes SQUARE COINS, and none quotes KASH", () => {
     `priceKash` stays on the gift and is still what goes ON THE WIRE while
     sending charges at send time, so this pins the RENDER, not the field.
   */
+  // The gallery and its buy sheet were removed with the Gift Gallery tab; the
+  // rule holds for every gift surface that still ships.
   for (const surface of [
-    "components/layout/profile-gift-gallery.tsx",
-    "components/layout/buy-gift-sheet.tsx",
     "components/ui/gift-grid.tsx",
     "features/streams/components/stream-room.tsx",
   ]) {
@@ -377,11 +383,14 @@ test("every gift surface quotes SQUARE COINS, and none quotes KASH", () => {
     );
   }
 
-  // And the totals are INTEGER arithmetic, which is the point of the unit:
-  // three Roses is 30, never 0.030000000000000002.
-  const buy = readFileSync("components/layout/buy-gift-sheet.tsx", "utf8");
-  assert.match(buy, /const total = gift\.priceCoins \* quantity;/);
-  assert.doesNotMatch(buy, /multiplyKash/, "the coin total is going through decimal-string maths");
-  const tray = readFileSync("features/streams/components/gift-sheet.tsx", "utf8");
+  /*
+    And the totals are INTEGER arithmetic, which is the point of the unit:
+    three Roses is 30, never 0.030000000000000002.
+
+    The buy sheet that also proved this went with the Gift Gallery. The room's
+    tray is the surface that still multiplies a coin price by a quantity, so it
+    carries the assertion alone now.
+  */
+  const tray = readFileSync("components/ui/gift-sheet.tsx", "utf8");
   assert.match(tray, /selected\.priceCoins \* quantity/);
 });

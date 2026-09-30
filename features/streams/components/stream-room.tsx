@@ -59,7 +59,7 @@ import { useHeartbeat, usePlaybackToken } from "@/features/streams/hooks/use-pla
 import { HlsPlayer, type QualityApi } from "@/features/streams/components/hls-player";
 import { LiveKitPlayer } from "@/features/streams/components/livekit-player";
 import { ChatPanel } from "@/features/streams/components/chat-panel";
-import { GiftSheet } from "@/features/streams/components/gift-sheet";
+import { GiftSheet } from "@/components/ui/gift-sheet";
 import { CoinBuySheet } from "@/features/gifts";
 import { useCoinBalance } from "@/features/gifts";
 import { LIVE_GIFTS, giftsArePriced, type LiveGift } from "@/lib/gifts";
