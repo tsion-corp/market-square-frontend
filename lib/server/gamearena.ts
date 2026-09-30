@@ -22,6 +22,17 @@ const KEY = process.env.GAMEARENA_PARTNER_KEY ?? "";
 export const GAMEARENA_TIMEOUT_MS = 5000;
 
 /**
+ * The faucet needs far longer, because it is not a read.
+ *
+ * It BROADCASTS a transfer — submits a transaction and waits on a node — and
+ * five seconds is not enough. The request succeeded and the money arrived,
+ * while we abandoned the response and told the player their account could not
+ * be funded as 0.1 CELO was landing in it. A timeout shorter than the work
+ * reports a failure that did not happen.
+ */
+export const GAMEARENA_WRITE_TIMEOUT_MS = 45_000;
+
+/**
  * Whether the integration is switched on at all.
  *
  * Unset config is NOT an error state. Their own partner routes stay inert
@@ -41,15 +52,16 @@ export function gameArenaConfigured(): boolean {
  */
 export function gameArenaFetch(
   path: string,
-  init?: RequestInit,
+  init?: RequestInit & { timeoutMs?: number },
 ): Promise<Response> {
+  const { timeoutMs, ...rest } = init ?? {};
   return fetch(`${API}${path}`, {
-    ...init,
+    ...rest,
     headers: {
-      ...(init?.headers ?? {}),
+      ...(rest.headers ?? {}),
       "x-partner-key": KEY,
     },
-    signal: AbortSignal.timeout(GAMEARENA_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs ?? GAMEARENA_TIMEOUT_MS),
     cache: "no-store",
   });
 }

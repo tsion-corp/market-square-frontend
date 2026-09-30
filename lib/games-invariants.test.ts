@@ -35,6 +35,7 @@ const makeItCount = stripComments(
 );
 const reportClient = stripComments(read("features/games/lib/report-score.ts"));
 const faucetRoute = stripComments(read("app/api/gamearena/faucet/route.ts"));
+const gaConfig = stripComments(read("lib/server/gamearena.ts"));
 const readChain = read("features/games/lib/pass-chain.ts");
 const providers = stripComments(read("app/providers.tsx"));
 /*
@@ -499,5 +500,26 @@ describe("the faucet is called the way GameArena documented it", () => {
 
   it("never forwards an unknown upstream reason to a player as copy", () => {
     assert.match(reportClient, /KNOWN_OUTCOMES\.has\(reason\)/);
+  });
+});
+
+/*
+  A TIMEOUT SHORTER THAN THE WORK REPORTS A FAILURE THAT DID NOT HAPPEN.
+
+  The faucet BROADCASTS a transfer — it submits a transaction and waits on a
+  node — so it cannot answer within the timeout used for reads. It shipped at
+  five seconds: the request succeeded, 0.1 CELO landed, and the player was told
+  their account could not be funded while the money was arriving in it.
+*/
+describe("the faucet is given time to actually send", () => {
+  it("uses a write-length timeout, not the read one", () => {
+    assert.match(faucetRoute, /timeoutMs: GAMEARENA_WRITE_TIMEOUT_MS/);
+    assert.match(gaConfig, /GAMEARENA_WRITE_TIMEOUT_MS = 45_000/);
+  });
+
+  it("keeps reads on the short timeout, so a slow board never holds a screen", () => {
+    assert.match(gaConfig, /GAMEARENA_TIMEOUT_MS = 5000/);
+    assert.doesNotMatch(scoreRoute, /timeoutMs/);
+    assert.doesNotMatch(profileRoute, /timeoutMs/);
   });
 });

@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getRequestWallet, verifyRequest } from "@/lib/server/auth";
-import { gameArenaConfigured, gameArenaFetch } from "@/lib/server/gamearena";
+import {
+  GAMEARENA_WRITE_TIMEOUT_MS,
+  gameArenaConfigured,
+  gameArenaFetch,
+} from "@/lib/server/gamearena";
 
 /**
  * Asks GameArena to put enough gas in this player's wallet to claim a name.
@@ -49,6 +53,9 @@ export async function POST(req: NextRequest) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ address: wallet }),
+      // A transfer, not a read: it broadcasts and waits on a node. The default
+      // five seconds abandoned a request that had already sent the money.
+      timeoutMs: GAMEARENA_WRITE_TIMEOUT_MS,
     });
 
     const body: unknown = await upstream.json().catch(() => null);
