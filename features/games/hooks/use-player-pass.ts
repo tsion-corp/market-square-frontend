@@ -362,9 +362,18 @@ export function usePlayerPass() {
         if (/username taken/i.test(message)) {
           return { ok: false, error: "That name just went. Pick another." };
         }
+        /*
+          "ALREADY MINTED" IS A SUCCESS WEARING AN ERROR'S CLOTHES.
+
+          The player pressed again — usually because the first press gave them
+          no sign it had worked — and the contract refused a duplicate, which
+          is correct. But the thing they wanted is TRUE: they hold the pass.
+          Reporting a failure over an accomplished fact is how somebody ends up
+          pressing a third time.
+        */
         if (/already minted|already has/i.test(message)) {
           await refresh();
-          return { ok: false, error: "You already have a name." };
+          return { ok: true };
         }
         if (
           /user rejected|user denied|rejected the request|cancell?ed/i.test(

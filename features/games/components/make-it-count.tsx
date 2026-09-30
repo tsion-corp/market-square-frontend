@@ -81,6 +81,16 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
   /*
+    THE MOMENT IT WORKED.
+
+    Without this the only sign of a successful claim was the card quietly
+    changing into a different card — which nobody reads as "done", so they
+    press again, the contract refuses a duplicate, and the one visible
+    feedback they get from the whole thing is an error over a name they
+    already own.
+  */
+  const [justClaimed, setJustClaimed] = useState<string | null>(null);
+  /*
     TWO ERRORS, NOT ONE. A failed claim and a failed verification are separate
     events on separate controls, and sharing one slot printed "Couldn't claim
     that name" underneath the verify button as well — which reads as both
@@ -130,6 +140,7 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
     setBusy(true);
     setClaimError(null);
     const result = await claimName(name);
+    if (result.ok) setJustClaimed(name);
     if (!result.ok) {
       setClaimError(result.error ?? "Could not claim that name.");
       // The name may have gone while they typed, so anything we hold about it
@@ -227,6 +238,16 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
   if (hasPass) {
     return (
       <div className="space-y-2">
+        {justClaimed && (
+          <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-left">
+            <p className="text-[15px] font-semibold text-emerald-300">
+              {justClaimed} is yours
+            </p>
+            <p className="mt-0.5 text-[13px] text-white/60">
+              That name is on the leaderboard now — nobody else can take it.
+            </p>
+          </div>
+        )}
         <p className="text-[13px] text-white/45">
           {verified
             ? `Your scores count${username ? ` as ${username}` : ""}.`

@@ -559,3 +559,24 @@ describe("whether the gas arrived is decided by the chain", () => {
     }
   });
 });
+
+/*
+  A CLAIM THAT WORKED MUST SAY SO.
+
+  The first real mint succeeded and showed the player nothing: the card
+  quietly became a different card, which nobody reads as "done". So they
+  pressed again, the contract refused the duplicate, and the only visible
+  feedback from the entire flow was an error over a name they already owned.
+*/
+describe("claiming a name has a visible success", () => {
+  it("records the moment and names the name", () => {
+    assert.match(makeItCount, /setJustClaimed\(name\)/);
+    assert.match(makeItCount, /\{justClaimed\} is yours/);
+  });
+
+  it("treats a duplicate as done, not as a failure", () => {
+    // The player holds the pass; reporting a failure over an accomplished
+    // fact is how somebody presses a third time.
+    assert.match(passHook, /already minted[\s\S]{0,300}?return \{ ok: true \}/);
+  });
+});
