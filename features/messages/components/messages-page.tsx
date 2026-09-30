@@ -23,6 +23,7 @@ import type { Profile } from "@/lib/api/schemas";
 import { Spinner } from "@/components/ui/button";
 import { RowSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
+import { useCircuit } from "@/lib/api/circuit-store";
 import { useAnswerRequest, useConversations } from "@/features/messages/hooks/use-messages";
 import { type Conversation } from "@/features/messages/lib/types";
 
@@ -66,6 +67,10 @@ function Inbox({
   const conversations = useConversations(tab);
   const requests = useAnswerRequest();
   const me = useMe();
+  // A global outage is already announced once by the connection banner, so the
+  // inbox does not repeat it — see the error block below.
+  const circuit = useCircuit();
+  const outage = circuit.state !== "closed";
   const [query, setQuery] = useState("");
   const sentinel = useInfiniteScroll(
     () => conversations.fetchNextPage(),
@@ -117,8 +122,13 @@ function Inbox({
       <div className="flex flex-col gap-4 px-6 pb-28 pt-6">
         {conversations.isPending && [0, 1, 2, 3].map((i) => <RowSkeleton key={i} />)}
 
-        {conversations.isError && (
+        {/* On a GLOBAL outage the connection banner already says it — so the
+            inbox stays quiet rather than stacking a second, alarming box in the
+            middle of the list. Any OTHER failure gets one calm inline line, not
+            the full bordered panel (ogazboiz, 2026-09-30). */}
+        {conversations.isError && !outage && (
           <ErrorState
+            quiet
             error={conversations.error}
             fallback="Couldn't load your messages."
             onRetry={() => conversations.refetch()}

@@ -22,6 +22,7 @@ const PUBLIC_ID = "uploads/did:privy:cmu1n88rs00fv0dky3lyzhxnz/image/01a0a16c-b3
 const UPLOADED = `${CLOUD}/image/upload/f_auto,q_auto,w_1280,c_limit/${PUBLIC_ID}`;
 const POST_T = "c_fill,g_auto,w_1200,h_630,f_jpg,q_auto:good";
 const AVATAR_T = "c_fill,g_face,w_400,h_400,f_jpg,q_auto:good";
+const BANNER_T = "c_fill,g_auto,w_912,h_260,f_jpg,q_auto:good";
 const SHORT = "0Bs5Ry4ePkLgYnMHsVJd2y";
 
 const author = {
@@ -36,6 +37,7 @@ describe("og images come only from our own cloud", () => {
   it("replaces the upload transformation rather than stacking a second one, keeping colons in the id", () => {
     assert.equal(ogImageUrl(UPLOADED, "post"), `${CLOUD}/image/upload/${POST_T}/${PUBLIC_ID}`);
     assert.equal(ogImageUrl(UPLOADED, "avatar"), `${CLOUD}/image/upload/${AVATAR_T}/${PUBLIC_ID}`);
+    assert.equal(ogImageUrl(UPLOADED, "banner"), `${CLOUD}/image/upload/${BANNER_T}/${PUBLIC_ID}`);
     const out = ogImageUrl(UPLOADED, "post")!;
     assert.equal(out.match(/\/upload\//g)?.length, 1);
     assert.equal(out.includes("w_1280"), false);
