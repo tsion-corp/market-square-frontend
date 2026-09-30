@@ -523,3 +523,39 @@ describe("the faucet is given time to actually send", () => {
     assert.doesNotMatch(profileRoute, /timeoutMs/);
   });
 });
+
+/*
+  A TIMED-OUT FAUCET CALL IS NOT A FAILED ONE.
+
+  It broadcasts a transfer, so "slow" and "refused" are indistinguishable from
+  the client. Treating them the same is what told a player their account could
+  not be funded while 0.1 CELO was landing in it — and burned their one drip,
+  since theirs is one per wallet ever.
+
+  The reply decides only whether money COULD be coming. Whether it arrived is
+  answered by the balance, which cannot be wrong.
+*/
+describe("whether the gas arrived is decided by the chain", () => {
+  it("reads the balance BEFORE asking, so an arrival can be recognised", () => {
+    assert.ok(
+      passHook.indexOf("const before = await readBalance(address)") <
+        passHook.indexOf("const gas = await requestGas()"),
+      "the starting balance must be taken before the request, or a drip that lands fast is missed",
+    );
+  });
+
+  it("still waits on the balance when the request itself was ambiguous", () => {
+    // "refused" and "unreachable" include a request that went through and was
+    // simply not heard, so neither may short-circuit the wait.
+    assert.doesNotMatch(passHook, /outcome === "refused"[\s\S]{0,120}?return \{/);
+    assert.doesNotMatch(passHook, /outcome === "unreachable"[\s\S]{0,120}?return \{/);
+  });
+
+  it("does not wait on a definitive no", () => {
+    // Nothing was sent and nothing will arrive, so watching the balance would
+    // just spend the timeout.
+    for (const reason of ["unverified", "already_claimed", "daily_cap", "faucet_empty"]) {
+      assert.match(passHook, new RegExp(`outcome === "${reason}"`), reason);
+    }
+  });
+});
