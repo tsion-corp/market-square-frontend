@@ -27,11 +27,11 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       decane-connect-kit:
-        specifier: ^2.30.0
-        version: 2.30.0(bufferutil@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(utf-8-validate@6.0.6)
+        specifier: ^2.29.2
+        version: 2.29.2(bufferutil@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(utf-8-validate@6.0.6)
       decane-node:
-        specifier: ^1.6.0
-        version: 1.6.0
+        specifier: ^1.5.0
+        version: 1.5.0
       hls.js:
         specifier: ^1.6.5
         version: 1.7.1
@@ -2395,14 +2395,14 @@ packages:
     resolution: {integrity: sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA==}
     engines: {node: '>=0.10.0'}
 
-  decane-connect-kit@2.30.0:
-    resolution: {integrity: sha512-V7ahMM7ST2XPNbmv0EgNONqHrlZsJkuZ8u6ADCYqS8uzlhiAeJYYe9XNE42bAAQoKtMDnjgndFmI1DszsIIugA==}
+  decane-connect-kit@2.29.2:
+    resolution: {integrity: sha512-GJOBmWiHt6A7Nrmizbd2PyjCIyEedee60Ff3ev/qTQVv1UtOS3J47+l2TDp7a3/z0f0cN2mgK4sT+NxljdEmGg==}
     peerDependencies:
       react: '>=18.0.0'
       react-dom: '>=18.0.0'
 
-  decane-node@1.6.0:
-    resolution: {integrity: sha512-wpMvnCP2KY6ESy0ksF8EAwUHDRpbe5kPdGR4km0RsL9u3QCapnUk6AphMGWjrRFlad/LN0asrc3JDd3gYeEAkQ==}
+  decane-node@1.5.0:
+    resolution: {integrity: sha512-ux8tb0lV9V2tD8XrFeHhFlFfI5QmJJfQzWhq2KvNHUw5yvk2gKd1h8oQzg4OriRd5qy0ys5L7ZYie+uVE98/TQ==}
     engines: {node: '>=18'}
 
   decode-uri-component@0.2.2:
@@ -8655,7 +8655,7 @@ snapshots:
 
   decamelize@1.2.0: {}
 
-  decane-connect-kit@2.30.0(bufferutil@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(utf-8-validate@6.0.6):
+  decane-connect-kit@2.29.2(bufferutil@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(utf-8-validate@6.0.6):
     dependencies:
       '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
@@ -8677,7 +8677,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  decane-node@1.6.0:
+  decane-node@1.5.0:
     dependencies:
       jose: 5.10.0
 
