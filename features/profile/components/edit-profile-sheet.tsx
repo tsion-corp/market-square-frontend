@@ -1,6 +1,8 @@
 "use client";
 
 import { BackgroundPicker } from "@/features/profile/components/background-picker";
+import { AvatarStudioSheet } from "@/features/profile/components/avatar-studio-sheet";
+import { avatarImageUrl, codeFromAvatarUrl } from "@/lib/arkplay-avatar";
 import { GENDER_OPTIONS, normalizeGender } from "@/lib/gender";
 import { useState } from "react";
 import { resolveHandles } from "@/lib/api/mentions";
@@ -33,6 +35,16 @@ export function EditProfileSheet({
   /* The cover's BACKGROUND. Null is a real value here and means "the ARK
      sweep" — see BackgroundPicker for why that is sent rather than a URL. */
   const [coverUrl, setCoverUrl] = useState<string | null>(me.coverUrl);
+  const [studioOpen, setStudioOpen] = useState(false);
+  /*
+    The character being edited, as a share code.
+
+    Recovered from the picture itself: a generated avatar's URL contains the
+    code that made it, so reopening the studio continues from where they left
+    off instead of starting over. Null means the picture is a photograph or a
+    placeholder — nothing to continue from, so the studio opens on a fresh one.
+  */
+  const avatarCode = codeFromAvatarUrl(avatarUrl);
   /* Self-declared, all three, and all optional. `?? ""` because null is the
      real "hasn't said" and an input cannot hold it. */
   const [city, setCity] = useState(me.city ?? "");
@@ -53,6 +65,19 @@ export function EditProfileSheet({
           circular
           label="Avatar"
         />
+        {/*
+          BUILDING A CHARACTER SITS BESIDE UPLOADING A PICTURE, not instead of
+          it. Somebody who wants their own photograph should not have to
+          decline an editor first, and somebody who wants a character should
+          not have to find one behind a file dialog.
+        */}
+        <button
+          type="button"
+          onClick={() => setStudioOpen(true)}
+          className="ws-press ws-btn-silver ws-btn-md w-full rounded-full text-[14px] font-semibold"
+        >
+          {avatarCode ? "Edit your character" : "Build a character"}
+        </button>
         <BackgroundPicker value={coverUrl} onChange={setCoverUrl} />
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold text-grey-400">
@@ -236,6 +261,20 @@ export function EditProfileSheet({
           Save
         </Button>
       </div>
+      <AvatarStudioSheet
+        open={studioOpen}
+        code={avatarCode}
+        onClose={() => setStudioOpen(false)}
+        onSaved={(code) =>
+          /*
+            Saving sets the PICTURE, which is how a character reaches every
+            surface in Square without one of them changing: the feed, a chat,
+            a comment and a roster all render avatarUrl already. The code
+            rides inside that URL, which is what makes it editable later.
+          */
+          setAvatarUrl(avatarImageUrl(code, { crop: "portrait", size: 256 }))
+        }
+      />
     </Sheet>
   );
 }
