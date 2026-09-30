@@ -175,6 +175,20 @@ export async function updateMe(input: {
   website?: string | null;
   avatarUrl?: string;
   /**
+   * The profile cover.
+   *
+   * IT WAS ALWAYS WRITABLE. This type omitted it while the service accepted
+   * it, so the cover was hard-coded on our side with a comment explaining that
+   * user covers were unavailable — they were available the whole time, and the
+   * only thing missing was a line here.
+   *
+   * Read `/v1/market-square/openapi.json` rather than this file when a field
+   * looks absent: a stale local copy of a contract is indistinguishable from a
+   * service that does not support something, and it reads as the service's
+   * fault.
+   */
+  coverUrl?: string | null;
+  /**
    * The self-declared place and gender.
    *
    * ABSENT leaves the field alone; explicit `null` clears it — the same
