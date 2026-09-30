@@ -203,7 +203,13 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
   const verifyOffer = (
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left">
       <p className="text-[14px] font-semibold text-white">
-        {everVerified ? "Verify again" : "Make your scores count"}
+        {hasPass
+          ? everVerified
+            ? "Verify again"
+            : "Get the verified badge"
+          : everVerified
+            ? "Verify again"
+            : "Make your scores count"}
       </p>
       {/*
         A LAPSE IS NOT A BLANK. GoodDollar's first window is three days, so
@@ -212,10 +218,12 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
       */}
       <p className="mt-1 text-[13px] leading-5 text-white/55">
         {everVerified
-          ? "Your check expired — GoodDollar asks again after a few days. One more and your games count."
-          : MARKET_FLAGS.gamesVerifyOptional
-            ? "Optional for now. Prove you're a real person and your games count on the leaderboard."
-            : "Prove you're a real person once, and every game you play here counts on the leaderboard."}
+          ? "Your check expired — GoodDollar asks again after a few days."
+          : hasPass
+            ? "Optional. Verified players are marked as real people on the leaderboard."
+            : MARKET_FLAGS.gamesVerifyOptional
+              ? "Optional for now. Prove you're a real person and your games count on the leaderboard."
+              : "Prove you're a real person once, and every game you play here counts on the leaderboard."}
       </p>
       {verifyError && (
         <p className="mt-2 text-[13px] text-rose-300">{verifyError}</p>
@@ -248,10 +256,19 @@ export function MakeItCount({ returnTo }: { returnTo: string }) {
             </p>
           </div>
         )}
+        {/*
+          THIS LINE USED TO BE UNTRUE, and it was verified as untrue on chain:
+          recordScore checks only that the pass EXISTS, never that anyone is
+          verified. An unverified player with a pass produced bestScore 10 on
+          gameType 5 — so telling them to verify "to make your scores count"
+          asked for something their scores did not need, over an achievement
+          they had already earned.
+
+          Verification is a different claim: a verified HUMAN on GameArena's
+          boards. Worth offering, never worth misdescribing.
+        */}
         <p className="text-[13px] text-white/45">
-          {verified
-            ? `Your scores count${username ? ` as ${username}` : ""}.`
-            : `You're ${username ?? "set up"} — verify to make your scores count.`}
+          Your scores count{username ? ` as ${username}` : ""}.
         </p>
         {!verified && verifyOffer}
       </div>

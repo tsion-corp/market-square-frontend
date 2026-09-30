@@ -15,9 +15,15 @@
   broken game. Every call is guarded and returns nothing on failure.
 */
 
-/** One tone per pad. A major pentatonic run, so a sequence is never dissonant
-    however the pads fall — the real Simon's tones are chosen the same way. */
-const PAD_HZ = [329.63, 261.63, 392.0, 440.0, 523.25];
+/**
+ * One tone per pad — GameArena's own, so the game SOUNDS the same as theirs.
+ *
+ * C4, E4, G4, C5 and E5 for the fifth: a major arpeggio, which is why a
+ * sequence never sounds wrong however the pads fall. Taken from their Simon
+ * rather than chosen here, because a player who knows their game by ear should
+ * recognise this one.
+ */
+const PAD_HZ = [261.63, 329.63, 392.0, 523.25, 659.25];
 
 let context: AudioContext | null = null;
 
