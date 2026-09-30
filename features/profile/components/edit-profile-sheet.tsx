@@ -1,5 +1,6 @@
 "use client";
 
+import { BackgroundPicker } from "@/features/profile/components/background-picker";
 import { GENDER_OPTIONS, normalizeGender } from "@/lib/gender";
 import { useState } from "react";
 import { resolveHandles } from "@/lib/api/mentions";
@@ -29,11 +30,16 @@ export function EditProfileSheet({
   const [username, setUsername] = useState(me.username);
   const [bio, setBio] = useState(me.bio);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(me.avatarUrl);
+  /* The cover's BACKGROUND. Null is a real value here and means "the ARK
+     sweep" — see BackgroundPicker for why that is sent rather than a URL. */
+  const [coverUrl, setCoverUrl] = useState<string | null>(me.coverUrl);
   /* Self-declared, all three, and all optional. `?? ""` because null is the
      real "hasn't said" and an input cannot hold it. */
   const [city, setCity] = useState(me.city ?? "");
   const [region, setRegion] = useState(me.region ?? "");
-  const [gender, setGender] = useState<string>(normalizeGender(me.gender) ?? "");
+  const [gender, setGender] = useState<string>(
+    normalizeGender(me.gender) ?? "",
+  );
   const [website, setWebsite] = useState(me.website ?? "");
 
   const usernameTaken = errorCode(update.error) === "CONFLICT";
@@ -41,24 +47,51 @@ export function EditProfileSheet({
   return (
     <Sheet open={open} onClose={onClose} title="Edit profile">
       <div className="space-y-4">
-        <UploadField value={avatarUrl} onChange={setAvatarUrl} circular label="Avatar" />
+        <UploadField
+          value={avatarUrl}
+          onChange={setAvatarUrl}
+          circular
+          label="Avatar"
+        />
+        <BackgroundPicker value={coverUrl} onChange={setCoverUrl} />
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-grey-400">Display name</span>
-          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={50} className={inputClass} />
+          <span className="mb-1.5 block text-xs font-semibold text-grey-400">
+            Display name
+          </span>
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            maxLength={50}
+            className={inputClass}
+          />
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-grey-400">Username</span>
+          <span className="mb-1.5 block text-xs font-semibold text-grey-400">
+            Username
+          </span>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value.toLowerCase())}
             maxLength={20}
             className={cn(inputClass, usernameTaken && "ws-invalid")}
           />
-          {usernameTaken && <p className="mt-1 text-xs text-down">Username taken — try another.</p>}
+          {usernameTaken && (
+            <p className="mt-1 text-xs text-down">
+              Username taken — try another.
+            </p>
+          )}
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-grey-400">Bio</span>
-          <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} maxLength={280} className={inputClass} />
+          <span className="mb-1.5 block text-xs font-semibold text-grey-400">
+            Bio
+          </span>
+          <textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            rows={3}
+            maxLength={280}
+            className={inputClass}
+          />
         </label>
 
         {/*
@@ -76,7 +109,9 @@ export function EditProfileSheet({
         */}
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-grey-400">City</span>
+            <span className="mb-1.5 block text-xs font-semibold text-grey-400">
+              City
+            </span>
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
@@ -99,8 +134,14 @@ export function EditProfileSheet({
           </label>
         </div>
         <div className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-grey-400">Gender</span>
-          <div role="radiogroup" aria-label="Gender" className="grid grid-cols-2 gap-2">
+          <span className="mb-1.5 block text-xs font-semibold text-grey-400">
+            Gender
+          </span>
+          <div
+            role="radiogroup"
+            aria-label="Gender"
+            className="grid grid-cols-2 gap-2"
+          >
             {GENDER_OPTIONS.map((option) => {
               const on = gender === option.value;
               return (
@@ -114,7 +155,7 @@ export function EditProfileSheet({
                     "ws-press ws-inset flex items-center justify-center px-4 py-2.5 text-sm transition-colors",
                     on
                       ? "bg-create/15 text-white shadow-[inset_0_0_0_1px_var(--color-create)]"
-                      : "text-grey-300 hover:text-white"
+                      : "text-grey-300 hover:text-white",
                   )}
                 >
                   {option.label}
@@ -126,7 +167,9 @@ export function EditProfileSheet({
         {/* 545:47631 — the link row on the profile. The service accepts
             http(s) only and clears on null. */}
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-grey-400">Website</span>
+          <span className="mb-1.5 block text-xs font-semibold text-grey-400">
+            Website
+          </span>
           <input
             value={website}
             onChange={(e) => setWebsite(e.target.value)}
@@ -138,11 +181,14 @@ export function EditProfileSheet({
           />
         </label>
         <p className="text-xs leading-4 text-grey-500">
-          Your place, gender and website are public, and place and gender are what the People
-          filters match on. Leave a field empty to remove it.
+          Your place, gender and website are public, and place and gender are
+          what the People filters match on. Leave a field empty to remove it.
         </p>
         {update.isError && !usernameTaken && (
-          <InlineError error={update.error} fallback="Couldn't save your profile." />
+          <InlineError
+            error={update.error}
+            fallback="Couldn't save your profile."
+          />
         )}
         <Button
           className="w-full"
@@ -166,10 +212,15 @@ export function EditProfileSheet({
             update.mutate(
               {
                 displayName: displayName.trim() || undefined,
-                username: username.trim() !== me.username ? username.trim() : undefined,
+                username:
+                  username.trim() !== me.username ? username.trim() : undefined,
                 bio,
                 bioMentions,
                 avatarUrl: avatarUrl ?? undefined,
+                /* Sent even when null, unlike avatarUrl: null is how somebody
+                   returns to the ARK sweep, and `?? undefined` would make that
+                   choice unsendable — the field would simply be left alone. */
+                coverUrl,
                 // Sent as typed, blank included: an omitted field means "leave
                 // it" and somebody who emptied the box meant "clear it". The
                 // service reads a blank string as a clear.
@@ -178,7 +229,7 @@ export function EditProfileSheet({
                 website: website.trim() || null,
                 gender: gender.trim(),
               },
-              { onSuccess: onClose }
+              { onSuccess: onClose },
             );
           }}
         >
@@ -210,24 +261,35 @@ export function ClaimUsernameSheet({
       <div className="space-y-4">
         <p className="text-sm text-grey-400">
           {me.usernameUnclaimed ? (
-            <>Welcome to the square, {me.displayName}. Pick a name people can find you by.</>
+            <>
+              Welcome to the square, {me.displayName}. Pick a name people can
+              find you by.
+            </>
           ) : (
             <>
-              You&apos;re currently <span className="text-grey-200">@{me.username}</span>. Pick a
-              name people can find you by.
+              You&apos;re currently{" "}
+              <span className="text-grey-200">@{me.username}</span>. Pick a name
+              people can find you by.
             </>
           )}
         </p>
         <input
           value={username}
-          onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+          onChange={(e) =>
+            setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))
+          }
           maxLength={20}
           placeholder="username"
           className={cn(inputClass, usernameTaken && "ws-invalid")}
         />
-        {usernameTaken && <p className="text-xs text-down">Username taken — try another.</p>}
+        {usernameTaken && (
+          <p className="text-xs text-down">Username taken — try another.</p>
+        )}
         {update.isError && !usernameTaken && (
-          <InlineError error={update.error} fallback="Couldn't claim that username." />
+          <InlineError
+            error={update.error}
+            fallback="Couldn't claim that username."
+          />
         )}
         <Button
           className="w-full"
@@ -241,7 +303,7 @@ export function ClaimUsernameSheet({
                   onClose();
                   onClaimed?.(updated.username);
                 },
-              }
+              },
             )
           }
         >

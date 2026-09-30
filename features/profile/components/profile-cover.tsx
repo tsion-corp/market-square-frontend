@@ -11,6 +11,7 @@ import { canGoBack } from "@/lib/nav-history";
 import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
+import { coverBackgroundUrl } from "@/lib/profile-backgrounds";
 
 /**
  * THE PROFILE COVER — node 435:27500, redrawn as 1021:20229 (live file,
@@ -83,17 +84,27 @@ export function ProfileCover({
   /* The picture open full screen, if any: the profile picture or the cover. */
   const [viewing, setViewing] = useState<{ src: string; alt: string } | null>(null);
   /*
-    THE COVER IS HARD-CODED FOR NOW — node 2102:18362 (2026-09-28): the ARK
-    mascot standing on the orange checkered sweep, composed from the node's own
-    raster layers at its exact geometry (bg crop offset −300.94/−118.02, the
-    1024² mascot cut-out at 293² @ 133.5,63) and baked at 3x to
-    `public/profile/ark-cover.jpg`. EVERY profile wears it — `coverUrl` is
-    deliberately not read — until the avatar system ogazboiz's teammate is
-    building ships and profiles get generated covers of their own. The person's
-    own PROFILE PICTURE (the rounded tile below) is untouched and still theirs
-    to change. To restore user covers: `profile.coverUrl ?? asset(…)` again.
+    THE BACKGROUND IS THE PERSON'S NOW — node 2102:18362 (2026-09-28) supplied
+    the composition and the geometry, and the mascot still stands exactly where
+    it drew him. What changed is the ground under him: `coverUrl` is read
+    again, so a profile wears the background its owner picked and falls back to
+    the ARK sweep when they have picked none.
+
+    It was hard-coded because this repo's own PATCH input omitted `coverUrl`
+    while the service accepted it all along — the field was never missing, only
+    the line that declared it. See features/profile/lib/api.ts.
+
+    The MASCOT is still everyone's. He becomes the person's own character when
+    the avatar engine lands; the layering here is what makes that a swap of one
+    image rather than a rebuild of the card.
   */
-  const coverSrc = asset("/profile/ark-cover.jpg");
+  /*
+    Opening the cover full screen shows the BACKGROUND, not the baked
+    composite. The composite is a picture of a card that no longer exists once
+    the ground is the person's own — a viewer showing somebody the ARK sweep
+    while their card renders violet is showing them another profile's cover.
+  */
+  const coverSrc = coverBackgroundUrl(profile.coverUrl);
   const avatarSrc = profile.avatarUrl ?? artworkForSeed(resolveSeed({ id: profile.id, name }));
   useLayoutEffect(() => {
     const el = cardRef.current;
@@ -130,7 +141,7 @@ export function ProfileCover({
           file does). Layer 3 (coming): the per-seed HEAD overlay. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={asset("/profile/ark-cover-bg.jpg")}
+        src={coverBackgroundUrl(profile.coverUrl)}
         alt=""
         aria-hidden
         className="absolute inset-0 h-full w-full object-cover"
