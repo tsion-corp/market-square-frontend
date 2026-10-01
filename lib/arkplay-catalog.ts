@@ -181,30 +181,29 @@ export async function renderPreview(
 /* ── Keeping the result ──────────────────────────────────────────────────── */
 
 /**
- * ─── THE TWO ROUTES THAT DO NOT EXIST YET ───────────────────────────────────
+ * ─── THE TWO ROUTES ARE OURS, FOR NOW ───────────────────────────────────────
  *
  * Square stores an avatar as a URL, and a render URL needs a SHARE CODE: the
- * ~250-character string that is the avatar's canonical form. Only the engine
- * makes one, and the engine is ArkPlay's — not on npm, not in this bundle.
+ * ~250-character string that is the avatar's canonical form. The service has
+ * no public route that makes one — probed, and `POST /codes`, `/encode`,
+ * `/share`, `/dna` and `GET /codes/{code}`, `/decode/{code}` all 404, while
+ * `POST /me/avatars` (which would return one) 401s for an ArkPlay sign-in a
+ * Square reader has no way to hold.
  *
- * Probed against the live service, every candidate answers 404:
- *   POST /codes, /encode, /share, /dna        — DNA to code
- *   GET  /codes/{code}, /decode/{code}        — code back to DNA
- * and `POST /me/avatars`, which WOULD return a code, answers 401: it wants a
- * bearer token for an ArkPlay account, which a Square reader does not have.
- *
- * So these two call routes that are asked for and not yet shipped. They are
- * written against the agreed shape rather than worked around, because a
- * workaround here means either a copy of somebody else's proprietary engine
- * drifting out of step with their frozen defaults, or an avatar nobody can
- * reopen. The studio reports the failure plainly instead of pretending.
+ * Asked for, and not waited on: Square runs the codec itself, server-side, at
+ * `/api/avatar/codes`. The shapes below are deliberately the ones asked of
+ * ArkPlay, so the day they ship theirs this becomes a change of base URL and
+ * nothing else. See vendor/arkplay-dna/README.md for what is borrowed and how
+ * it is kept honest.
  */
+const CODEC = "/api/avatar/codes";
+
 export class AvatarCodecUnavailable extends Error {
   constructor(readonly status: number) {
     super(
-      status === 404
-        ? "Saving avatars is waiting on the avatar service — it cannot turn a look into a shareable code yet."
-        : `The avatar service could not answer (${status}).`,
+      status === 400
+        ? "That avatar couldn't be saved — it isn't a shape the encoder recognises."
+        : "Couldn't reach the avatar encoder. Try again in a moment.",
     );
     this.name = "AvatarCodecUnavailable";
   }
@@ -212,7 +211,7 @@ export class AvatarCodecUnavailable extends Error {
 
 /** DNA to the share code Square stores. */
 export async function encodeDna(dna: AvatarDNA, signal?: AbortSignal): Promise<string> {
-  const res = await fetch(`${API}/codes`, {
+  const res = await fetch(CODEC, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dna }),
@@ -226,7 +225,7 @@ export async function encodeDna(dna: AvatarDNA, signal?: AbortSignal): Promise<s
 
 /** A saved code back to the document, so editing continues rather than restarts. */
 export async function decodeCode(code: string, signal?: AbortSignal): Promise<AvatarDNA> {
-  const res = await fetch(`${API}/codes/${encodeURIComponent(code)}`, { signal });
+  const res = await fetch(`${CODEC}/${encodeURIComponent(code)}`, { signal });
   if (!res.ok) throw new AvatarCodecUnavailable(res.status);
   const body = (await res.json()) as { dna?: AvatarDNA };
   if (!body.dna) throw new AvatarCodecUnavailable(res.status);

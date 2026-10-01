@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sheet } from "@/components/ui/sheet";
 import { asset } from "@/lib/square-path";
+import { ENGINE_VERSION } from "@/vendor/arkplay-dna/version.ts";
 import {
   AvatarCodecUnavailable,
   type AvatarDNA,
@@ -10,6 +11,7 @@ import {
   type CatalogItem,
   type CatalogSlot,
   clearSlot,
+  decodeCode,
   encodeDna,
   fetchCatalog,
   itemsForSlot,
@@ -33,13 +35,14 @@ import {
  * lib/arkplay-catalog.ts). That is what makes a studio of our own possible
  * without the engine: we change the object, they draw it.
  *
- * ─── WHAT IS NOT FINISHED, AND WHY IT SAYS SO ───────────────────────────────
- * Saving needs the document turned into a share code, and the service has no
- * route that does it (`POST /codes` 404; `POST /me/avatars` 401 — it wants an
- * ArkPlay account a Square reader does not have). Asked for. Until it lands,
- * Save reports that plainly rather than failing silently or being hidden:
- * a control that is missing is indistinguishable from one that was never
- * built, and the person has just spent minutes dressing a character.
+ * ─── SAVING RUNS ON OUR OWN SERVER, FOR NOW ─────────────────────────────────
+ * A profile stores a render URL, which needs the share code only the codec
+ * makes, and the service publishes no route that makes one (`POST /codes`
+ * 404s; the account route that would 401s for a sign-in a Square reader has no
+ * way to hold). Asked for, and not waited on: Square runs the codec on its own
+ * server at `/api/avatar/codes`, so saving and reopening both work today. The
+ * day ArkPlay ships theirs it is a change of base URL — see
+ * vendor/arkplay-dna/README.md.
  */
 
 /* ── The file's numbers ───────────────────────────────────────────────────── */
@@ -109,17 +112,38 @@ export function AvatarStudioSheet({
         setCatalog(cat);
         setStarters(starterBody.starters);
         /*
-          Reopening on an existing avatar would start from THAT character, but
-          recovering it needs `GET /codes/{code}`, which the service does not
-          serve yet. Rather than silently restart somebody's avatar from
-          scratch and let them discover it, this says so.
+          THE GUARD ON A BORROWED CODEC. The wardrobe is fetched live, the
+          encoder is a copy pinned at one engine version, and encoding walks
+          the item schema — so if ArkPlay adds an item, the catalog would offer
+          something our copy cannot write, and the failure would land at the
+          end, on Save, after the work. Saying it up front is the difference
+          between a known limitation and a lost outfit.
         */
-        setDna((current) => current ?? starterBody.starters[0]?.dna ?? null);
-        if (code) {
+        if (cat.engineVersion !== ENGINE_VERSION) {
           setProblem(
-            "Starting from a fresh character — the avatar service can't reopen a saved one yet.",
+            `The wardrobe has moved on (${cat.engineVersion}) from the encoder here (${ENGINE_VERSION}). Newer items may not save.`,
           );
         }
+        /*
+          REOPEN ON THE AVATAR THEY HAVE, not a stranger. The code the profile
+          already stores decodes straight back into the document, so coming
+          back continues the character rather than starting a new one. If it
+          cannot be read the studio says so and offers a starter, because
+          silently handing somebody a different face is the one outcome they
+          would not notice until after they had saved it.
+        */
+        let opening: AvatarDNA | null = null;
+        if (code) {
+          try {
+            opening = await decodeCode(code, ac.signal);
+          } catch {
+            if (!ac.signal.aborted) {
+              setProblem("Couldn't reopen your saved avatar — starting from a fresh character.");
+            }
+          }
+        }
+        if (ac.signal.aborted) return;
+        setDna((current) => current ?? opening ?? starterBody.starters[0]?.dna ?? null);
       } catch {
         if (!ac.signal.aborted) {
           setProblem("The avatar service didn't answer. Check your connection and try again.");
