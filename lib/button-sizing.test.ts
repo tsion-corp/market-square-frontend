@@ -72,7 +72,7 @@ const DESIGN_LOCKED = new Set<string>([
     it is not a lone route out — the studio is built on `Sheet`, so Escape and
     the backdrop close it too, and the header's Back does the same job.
   */
-  "features/profile/components/avatar-studio-sheet.tsx",
+  "features/profile/components/avatar-studio-screen.tsx",
   /*
     Buy-a-gift (1285:83137). Its ACTION uses the scale — `ws-btn-lg` is
     exactly the node's 48 at 16px — but the dialog's three other controls sit

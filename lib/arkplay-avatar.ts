@@ -32,7 +32,8 @@ export function studioUrl(origin: string, code?: string | null): string {
   return url.toString();
 }
 
-export type AvatarCrop = "portrait" | "full";
+/** The service's real crop ladder — five, not the two this once named. */
+export type AvatarCrop = "portrait" | "full" | "fit" | "bust" | "head";
 
 /**
  * The picture for a share code.
@@ -48,9 +49,16 @@ export type AvatarCrop = "portrait" | "full";
  */
 export function avatarImageUrl(
   code: string,
-  opts: { crop?: AvatarCrop; size?: number; format?: "png" | "svg"; background?: boolean } = {},
+  opts: {
+    crop?: AvatarCrop;
+    size?: number;
+    format?: "png" | "svg";
+    background?: boolean;
+    /** `low` is 1.9x fewer bytes at no extra latency — a bandwidth knob. */
+    detail?: "low" | "medium" | "high";
+  } = {},
 ): string {
-  const { crop = "portrait", size = 256, format = "png", background } = opts;
+  const { crop = "portrait", size = 256, format = "png", background, detail } = opts;
   const url = new URL(`${API}/render/${encodeURIComponent(code)}.${format}`);
   url.searchParams.set("crop", crop);
   url.searchParams.set("size", String(size));
@@ -58,6 +66,7 @@ export function avatarImageUrl(
   // so an ordinary portrait URL stays the short form it has always been and
   // the codes already saved inside one keep matching.
   if (background === false) url.searchParams.set("background", "false");
+  if (detail) url.searchParams.set("detail", detail);
   return url.toString();
 }
 

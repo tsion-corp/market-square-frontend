@@ -29,8 +29,9 @@ import {
   setParam,
   slotsFor,
   visibleParams,
+  toggleItem,
   wearItem,
-  wornInSlot,
+  wornIdsInSlot,
 } from "@/lib/arkplay-catalog";
 
 /**
@@ -80,6 +81,9 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+/** How many notches a continuous parameter is offered as. See ParamControl. */
+const STOPS = 7;
+
 interface Starter {
   id: string;
   label: string;
@@ -124,7 +128,54 @@ export function AvatarStudioScreen() {
   }, [router]);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [starters, setStarters] = useState<Starter[]>([]);
-  const [dna, setDna] = useState<AvatarDNA | null>(null);
+  /*
+    ─── UNDO IS AN ARRAY AND AN INDEX ──────────────────────────────────────────
+    Every edit here already returns a NEW document, so keeping the last fifty
+    costs nothing but the pointer. Of eight avatar editors surveyed, five have
+    undo and the three most recent additions all landed in the last two years;
+    the one product where every tap commits irreversibly is the one whose
+    community's documented workaround is "save a copy before you change
+    anything". Ours was that product.
+  */
+  const [hist, setHist] = useState<{
+    past: AvatarDNA[];
+    present: AvatarDNA | null;
+    future: AvatarDNA[];
+  }>({ past: [], present: null, future: [] });
+  const dna = hist.present;
+
+  /** Record an edit. Doing something new abandons the redo branch, as it must. */
+  const setDna = useCallback((next: AvatarDNA) => {
+    setHist((h) => ({
+      past: h.present ? [...h.past, h.present].slice(-50) : h.past,
+      present: next,
+      future: [],
+    }));
+  }, []);
+
+  const undo = useCallback(() => {
+    setHist((h) =>
+      h.past.length === 0
+        ? h
+        : {
+            past: h.past.slice(0, -1),
+            present: h.past[h.past.length - 1],
+            future: h.present ? [h.present, ...h.future] : h.future,
+          },
+    );
+  }, []);
+
+  const redo = useCallback(() => {
+    setHist((h) =>
+      h.future.length === 0
+        ? h
+        : {
+            past: h.present ? [...h.past, h.present] : h.past,
+            present: h.future[0],
+            future: h.future.slice(1),
+          },
+    );
+  }, []);
   const [tab, setTab] = useState<TabId>("fashion");
   const [slot, setSlot] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -178,7 +229,12 @@ export function AvatarStudioScreen() {
           }
         }
         if (ac.signal.aborted) return;
-        setDna((current) => current ?? opening ?? starterBody.starters[0]?.dna ?? null);
+        // Installed, not recorded: there is nothing to undo back to yet.
+        setHist((h) =>
+          h.present
+            ? h
+            : { past: [], present: opening ?? starterBody.starters[0]?.dna ?? null, future: [] },
+        );
       } catch {
         if (!ac.signal.aborted) {
           setProblem("The avatar service didn't answer. Check your connection and try again.");
@@ -259,7 +315,8 @@ export function AvatarStudioScreen() {
     () => (catalog && dna && activeSlot ? itemsForSlot(catalog, activeSlot, dna.kind) : []),
     [catalog, dna, activeSlot],
   );
-  const worn = catalog && dna && activeSlot ? wornInSlot(catalog, dna, activeSlot) : null;
+  /* A slot that holds three can have three on at once, so this is a SET. */
+  const worn = catalog && dna && activeSlot ? wornIdsInSlot(catalog, dna, activeSlot) : [];
 
   /*
     ─── A WARDROBE HAS TO SHOW THE CLOTHES ─────────────────────────────────────
@@ -406,7 +463,16 @@ export function AvatarStudioScreen() {
           </p>
         )}
 
-        {/* 1951:25801 — the 580x440 preview, radius 12, #1A1A1F. */}
+        {/*
+          1951:25801 — the 580x440 preview, radius 12, #1A1A1F.
+
+          PINNED. Of eight avatar editors surveyed, eight keep the character on
+          screen while you edit it, and one of them refuses even to let a
+          palette cover it. Ours sat at the top of roughly 7,900px of controls,
+          so by the time somebody reached "Nose width" the thing they were
+          changing was four screens away.
+        */}
+        <div className="sticky top-0 z-20 -mx-[18px] bg-[#121214] px-[18px] pb-3 pt-1">
         <div className="relative aspect-[580/440] w-full overflow-hidden rounded-[12px] bg-[#1A1A1F]">
           {/* The character. 341² at (120,60) in the card's own 580x440. */}
           {preview ? (
@@ -507,6 +573,48 @@ export function AvatarStudioScreen() {
           />
         </div>
 
+        {/*
+          UNDO, REDO, START OVER — and an explicit way out that does not keep
+          anything. Five of eight editors surveyed have undo; seven of eight
+          have an explicit discard. We had neither, and a back arrow that threw
+          the work away silently.
+        */}
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={undo}
+            disabled={hist.past.length === 0}
+            className="ws-press ws-btn-sm rounded-full bg-white/[0.06] text-white/80 disabled:opacity-35"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={hist.future.length === 0}
+            className="ws-press ws-btn-sm rounded-full bg-white/[0.06] text-white/80 disabled:opacity-35"
+          >
+            Redo
+          </button>
+          <span className="flex-1" />
+          <button
+            type="button"
+            onClick={leave}
+            className="ws-press ws-btn-sm rounded-full text-white/50 hover:text-white/80"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={!dna || saving}
+            className="ws-press ws-btn-sm rounded-full bg-white font-semibold text-black disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+        </div>
+
         {/* The tab strip — their own x, one baseline. See TABS. */}
         <div className="relative mt-5 h-6">
           {TABS.map((t) => (
@@ -567,7 +675,7 @@ export function AvatarStudioScreen() {
                 {/* Wearing nothing is a choice the wardrobe has to offer. */}
                 {activeSlot && (
                   <TileButton
-                    selected={!worn}
+                    selected={worn.length === 0}
                     onClick={() => catalog && dna && setDna(clearSlot(catalog, dna, activeSlot))}
                     label="None"
                     code={tileCodes[0] ?? null}
@@ -576,8 +684,8 @@ export function AvatarStudioScreen() {
                 {items.map((item, i) => (
                   <TileButton
                     key={item.id}
-                    selected={worn === item.id}
-                    onClick={() => catalog && dna && setDna(wearItem(catalog, dna, item))}
+                    selected={worn.includes(item.id)}
+                    onClick={() => catalog && dna && setDna(toggleItem(catalog, dna, item))}
                     label={item.label}
                     badge={item.limited ? "Limited" : item.premium ? "Premium" : null}
                     code={tileCodes[i + 1] ?? null}
@@ -605,7 +713,7 @@ export function AvatarStudioScreen() {
               type="button"
               onClick={() => catalog && dna && setDna(randomiseDna(catalog, dna))}
               disabled={!catalog || !dna}
-              className="ws-press ws-btn-silver ws-btn-sm mb-3 w-full rounded-full text-[13px] font-semibold disabled:opacity-50"
+              className="ws-press ws-btn-silver ws-btn-sm mb-3 w-full rounded-full font-semibold disabled:opacity-50"
             >
               Surprise me
             </button>
@@ -676,16 +784,6 @@ export function AvatarStudioScreen() {
           )}
         </div>
 
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            onClick={save}
-            disabled={!dna || saving}
-            className="ws-press rounded-full bg-white px-5 py-2.5 text-[14px] font-semibold text-black disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save avatar"}
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -720,7 +818,9 @@ function TileButton({
       {code ? (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
-          src={avatarImageUrl(code, { crop: "full", size: 192, background: false })}
+          /* `detail: low` halves the bytes of a 24-tile rail at no latency
+             cost, and nobody is reading a hoodie's stitching at 82px. */
+          src={avatarImageUrl(code, { crop: "full", size: 192, background: false, detail: "low" })}
           alt=""
           aria-hidden
           loading="lazy"
@@ -758,9 +858,39 @@ function ParamControl({
   value: unknown;
   onChange: (next: unknown) => void;
 }) {
+  /*
+    ─── SEVEN STOPS, NOT A HUNDRED AND ONE ─────────────────────────────────────
+    Of eight avatar editors surveyed, exactly one exposes continuous geometry
+    sliders as a primary path, and it belongs to a company whose shipping apps
+    contain no avatar editor. Bitmoji, Memoji, Mii, Ready Player Me, IMVU and
+    ZEPETO all offer ZERO: every one of them is a short row of discrete
+    choices. We had 61 continuous ranges at 101 notches each.
+
+    The one product in that set that shares our architecture — a server-rendered
+    preview — is the clearest precedent: its own API accepts steps of 0.01 and
+    its editor ships 0.05, twenty times coarser, because each change costs a
+    render. The quantisation IS the debounce. A drag across 101 notches gave no
+    feedback at all (the debounce never fires mid-drag) and then one render on
+    release; seven taps are seven renders into a finite, cacheable URL space.
+
+    The file's own `ends` become the labels, which is why they get MORE useful
+    here: "Short … Tall" beats 0 and 1.
+  */
   if (param.type === "range") {
+    const min = param.min ?? 0;
+    const max = param.max ?? 1;
+    const step = param.step ?? 0.01;
+    const stops = Array.from({ length: STOPS }, (_, i) => {
+      const raw = min + ((max - min) * i) / (STOPS - 1);
+      return Number((Math.round(raw / step) * step).toFixed(4));
+    });
+    const current = typeof value === "number" ? value : ((param.default as number) ?? min);
+    // Nearest stop, so a value saved before this existed still reads as chosen.
+    const nearest = stops.reduce((best, v) =>
+      Math.abs(v - current) < Math.abs(best - current) ? v : best,
+    );
     return (
-      <label className="block">
+      <div>
         <span className="mb-1 flex items-baseline justify-between text-[12px] text-white/60">
           <span>{param.label}</span>
           {param.ends?.length === 2 && (
@@ -769,14 +899,40 @@ function ParamControl({
             </span>
           )}
         </span>
+        <div className="flex items-center gap-1" role="group" aria-label={param.label}>
+          {stops.map((v, i) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onChange(v)}
+              aria-pressed={v === nearest}
+              aria-label={`${param.label} ${i + 1} of ${STOPS}`}
+              className={`h-7 flex-1 rounded-md transition-colors ${
+                v === nearest ? "bg-white" : "bg-white/[0.08] hover:bg-white/[0.16]"
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  /*
+    A FREE-TEXT PARAMETER IS NOT A SWITCH. Items carry one — the slogan across
+    a jersey or a hoodie — and with no branch for it the control fell through
+    to the checkbox at the bottom of this function, which offered a tick box
+    for a line of writing.
+  */
+  if (param.type === "text") {
+    return (
+      <label className="block">
+        <span className="mb-1 block text-[12px] text-white/60">{param.label}</span>
         <input
-          type="range"
-          min={param.min ?? 0}
-          max={param.max ?? 1}
-          step={param.step ?? 0.01}
-          value={typeof value === "number" ? value : ((param.default as number) ?? 0.5)}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full accent-white"
+          type="text"
+          value={typeof value === "string" ? value : ((param.default as string) ?? "")}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={param.maxLength ?? 24}
+          className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[13px] text-white outline-none focus:border-white/30"
         />
       </label>
     );

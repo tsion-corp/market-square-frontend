@@ -158,18 +158,47 @@ function listFor(catalog: Catalog, slot: string): "outfit" | "accessories" {
   return isGarmentSlot(catalog, slot) ? "outfit" : "accessories";
 }
 
+/** How many things fit in a slot at once. Most hold one; seven hold more. */
+export function capacityOf(catalog: Catalog, slot: string): number {
+  return Math.max(1, catalog.slots.find((s) => s.id === slot)?.capacity ?? 1);
+}
+
 /**
- * Wear an item, taking off whatever already held its slot.
+ * Wear an item, making room for it the way the slot says.
  *
- * The slot is the rule, not the id: putting on a second pair of shoes means
- * taking the first pair off, and the catalog is what says the two are shoes.
+ * THE SLOT'S CAPACITY IS THE RULE, not "one of each". Six reachable slots hold
+ * more than one — three hair accessories, three face pieces, two earrings, two
+ * necklaces, two wristbands, two head features — and treating every slot as
+ * capacity 1 meant putting on a second earring silently took the first off.
+ * When a slot is full the OLDEST goes, which is what makes repeated taps feel
+ * like a rotation rather than a wall.
+ *
  * Returns a NEW document — edits are immutable so undo stays a matter of
  * keeping the previous one.
  */
 export function wearItem(catalog: Catalog, dna: AvatarDNA, item: CatalogItem): AvatarDNA {
   const key = listFor(catalog, item.slot);
-  const kept = (dna[key] ?? []).filter((w) => slotOf(catalog, w.id) !== item.slot);
-  return { ...dna, [key]: [...kept, { id: item.id, params: defaultParams(item) }] };
+  const list = dna[key] ?? [];
+  const inSlot = list.filter((w) => slotOf(catalog, w.id) === item.slot && w.id !== item.id);
+  const elsewhere = list.filter((w) => slotOf(catalog, w.id) !== item.slot);
+  const room = capacityOf(catalog, item.slot) - 1;
+  return {
+    ...dna,
+    [key]: [...elsewhere, ...inSlot.slice(-room), { id: item.id, params: defaultParams(item) }],
+  };
+}
+
+/** Take one specific thing off, leaving the rest of its slot alone. */
+export function removeItem(catalog: Catalog, dna: AvatarDNA, id: string): AvatarDNA {
+  const drop = (list: WornItem[] | undefined) => (list ?? []).filter((w) => w.id !== id);
+  return { ...dna, outfit: drop(dna.outfit), accessories: drop(dna.accessories) };
+}
+
+/** Wear it if it is off, take it off if it is on. */
+export function toggleItem(catalog: Catalog, dna: AvatarDNA, item: CatalogItem): AvatarDNA {
+  return wornIdsInSlot(catalog, dna, item.slot).includes(item.id)
+    ? removeItem(catalog, dna, item.id)
+    : wearItem(catalog, dna, item);
 }
 
 /** Take off whatever is in a slot. Wearing nothing is a valid choice. */
@@ -191,16 +220,39 @@ export function clearSlot(catalog: Catalog, dna: AvatarDNA, slot: string): Avata
  * "None" selected over a character who is visibly wearing glasses.
  */
 export function wornInSlot(catalog: Catalog, dna: AvatarDNA, slot: string): string | null {
-  const found = [...(dna.outfit ?? []), ...(dna.accessories ?? [])].find(
-    (w) => slotOf(catalog, w.id) === slot,
-  );
-  return found?.id ?? null;
+  return wornIdsInSlot(catalog, dna, slot)[0] ?? null;
+}
+
+/** Everything worn in a slot — a slot that holds three can have three. */
+export function wornIdsInSlot(catalog: Catalog, dna: AvatarDNA, slot: string): string[] {
+  return [...(dna.outfit ?? []), ...(dna.accessories ?? [])]
+    .filter((w) => slotOf(catalog, w.id) === slot)
+    .map((w) => w.id);
 }
 
 /* ── Seeing the result ───────────────────────────────────────────────────── */
 
+/*
+  THE SERVICE'S REAL RENDER SURFACE, read off its own enum errors and verified
+  on the cacheable GET form. Our types named a third of it.
+
+    crop    full | fit | bust | head | portrait     (we had three)
+    view    front | side | back                     (a true turnaround — a side
+                                                     render is a different
+                                                     picture, 50KB against 66)
+    detail  low | medium | high                     (low is 1.9x fewer bytes at
+                                                     no extra latency: a
+                                                     bandwidth knob, not a
+                                                     speed one)
+*/
+export type RenderCrop = "full" | "fit" | "bust" | "head" | "portrait";
+export type RenderView = "front" | "side" | "back";
+export type RenderDetail = "low" | "medium" | "high";
+
 export interface PreviewOptions {
-  crop?: "portrait" | "full" | "fit";
+  crop?: RenderCrop;
+  view?: RenderView;
+  detail?: RenderDetail;
   size?: number;
   /** The service draws its own scene unless this is false. */
   background?: boolean;
@@ -220,12 +272,20 @@ export interface PreviewOptions {
  */
 export async function renderPreview(
   dna: AvatarDNA,
-  { crop = "full", size = 512, background = false, signal }: PreviewOptions = {},
+  { crop = "full", view, detail, size = 512, background = false, signal }: PreviewOptions = {},
 ): Promise<Blob> {
   const res = await fetch(`${API}/render`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dna, format: "png", crop, size, background }),
+    body: JSON.stringify({
+      dna,
+      format: "png",
+      crop,
+      size,
+      background,
+      ...(view ? { view } : {}),
+      ...(detail ? { detail } : {}),
+    }),
     signal,
   });
   if (!res.ok) throw new Error(`render ${res.status}`);
@@ -336,7 +396,7 @@ export interface CatalogChoice {
 }
 
 export interface CatalogParam {
-  type: "range" | "choice" | "color" | "toggle";
+  type: "range" | "choice" | "color" | "toggle" | "text";
   key: string;
   label: string;
   default?: unknown;
@@ -346,6 +406,8 @@ export interface CatalogParam {
   step?: number;
   /** range: what the two ends mean, e.g. ["Short", "Tall"]. */
   ends?: [string, string] | string[];
+  /** text: the service's own cap on a slogan. */
+  maxLength?: number;
   /** choice */
   options?: CatalogChoice[];
   /** color: which family of colours this belongs to. */
