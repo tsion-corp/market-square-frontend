@@ -259,6 +259,25 @@ export function AvatarStudioScreen() {
   }, [catalog, dna, activeSlot, items]);
 
   const [tileCodes, setTileCodes] = useState<(string | null)[]>([]);
+  const [starterCodes, setStarterCodes] = useState<(string | null)[]>([]);
+
+  /* The starters are fixed, so their pictures are encoded once rather than
+     with every edit the wardrobe makes. */
+  useEffect(() => {
+    if (starters.length === 0) return;
+    const ac = new AbortController();
+    encodeMany(
+      starters.map((s) => s.dna),
+      ac.signal,
+    )
+      .then((codes) => {
+        if (!ac.signal.aborted) setStarterCodes(codes);
+      })
+      .catch(() => {
+        if (!ac.signal.aborted) setStarterCodes([]);
+      });
+    return () => ac.abort();
+  }, [starters]);
   useEffect(() => {
     if (variants.length === 0) {
       return;
@@ -533,7 +552,7 @@ export function AvatarStudioScreen() {
 
           {tab === "avatar" && (
             <div className="grid grid-cols-4" style={{ gap: 8.446 }}>
-              {starters.map((s) => (
+              {starters.map((s, i) => (
                 <TileButton
                   key={s.id}
                   selected={dna?.seed === s.dna.seed && dna?.kind === s.dna.kind}
@@ -542,6 +561,10 @@ export function AvatarStudioScreen() {
                     setSlot(null);
                   }}
                   label={s.label}
+                  /* Each is a DIFFERENT character, so each shows its own face.
+                     Five labelled squares told nobody that Fox and Dragon are
+                     not the same person in different clothes. */
+                  code={starterCodes[i] ?? null}
                 />
               ))}
             </div>
