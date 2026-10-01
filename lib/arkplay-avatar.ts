@@ -21,16 +21,6 @@ const ARKPLAY_ORIGIN = (
 
 const API = `${ARKPLAY_ORIGIN}/avatar/v1`;
 
-/** Where the editor is hosted. */
-export function studioUrl(origin: string, code?: string | null): string {
-  const url = new URL(`${ARKPLAY_ORIGIN}/avatar/studio/`);
-  url.searchParams.set("embed", "1");
-  // The studio checks this to decide who it may postMessage back to, so it is
-  // the caller's real origin and never a guess.
-  url.searchParams.set("origin", origin);
-  if (code) url.searchParams.set("code", code);
-  return url.toString();
-}
 
 /** The service's real crop ladder — five, not the two this once named. */
 export type AvatarCrop = "portrait" | "full" | "fit" | "bust" | "head";
@@ -94,25 +84,6 @@ export function avatarImageUrl(
   the whole reason it looked soft next to the engine's own studio. 1024 brings
   it to 1.2x; 1536 would be sharper still but costs 6.3s against 1.9s.
 */
-export function coverCharacterUrl(code: string, size = 1024): string {
-  return avatarImageUrl(code, { crop: "full", size, background: false });
-}
-
-/**
- * THE CHARACTER *IN THEIR SCENE* — what a cover actually shows.
- *
- * The engine draws the wallpaper, not us: the `scene` section carries 14
- * presets, six background modes, eleven patterns, two colours, a frame and a
- * ring, and all of it rides inside the share code. So a cover needs no second
- * field and no second picture.
- *
- * ─── WHY THIS IS SAFE TO USE FOR EVERYONE ───────────────────────────────────
- * `scene.background: "none"` renders TRANSPARENT even through this, verified
- * against the live service (corner alpha 0, against 255 for every other mode).
- * So one request serves both kinds of cover: somebody with a scene gets it,
- * and somebody without gets a cut-out that composites over whatever ground
- * their profile already had. Nothing has to decode the code to find out which.
- */
 /**
  * THE COVER, at the shape of the card rather than a square inside it.
  *
@@ -133,9 +104,25 @@ export function coverImageUrl(
   return `/api/avatar/cover/${encodeURIComponent(code)}?${q}`;
 }
 
-export function coverSceneUrl(code: string, size = 1024): string {
-  return avatarImageUrl(code, { crop: "full", size, background: true });
+export function coverCharacterUrl(code: string, size = 1024): string {
+  return avatarImageUrl(code, { crop: "full", size, background: false });
 }
+
+/**
+ * THE CHARACTER *IN THEIR SCENE* — what a cover actually shows.
+ *
+ * The engine draws the wallpaper, not us: the `scene` section carries 14
+ * presets, six background modes, eleven patterns, two colours, a frame and a
+ * ring, and all of it rides inside the share code. So a cover needs no second
+ * field and no second picture.
+ *
+ * ─── WHY THIS IS SAFE TO USE FOR EVERYONE ───────────────────────────────────
+ * `scene.background: "none"` renders TRANSPARENT even through this, verified
+ * against the live service (corner alpha 0, against 255 for every other mode).
+ * So one request serves both kinds of cover: somebody with a scene gets it,
+ * and somebody without gets a cut-out that composites over whatever ground
+ * their profile already had. Nothing has to decode the code to find out which.
+ */
 
 /*
   ─── READING THE CODE BACK OUT OF A URL ─────────────────────────────────────
@@ -166,10 +153,6 @@ export function codeFromAvatarUrl(url: string | null | undefined): string | null
   }
 }
 
-/** Whether this profile's picture is a generated avatar rather than a photo. */
-export function isGeneratedAvatar(url: string | null | undefined): boolean {
-  return codeFromAvatarUrl(url) !== null;
-}
 
 /**
  * Whether a string looks like a share code.

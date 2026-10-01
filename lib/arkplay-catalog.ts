@@ -267,38 +267,6 @@ export interface PreviewOptions {
   signal?: AbortSignal;
 }
 
-/**
- * A picture of a document that has no share code yet.
- *
- * `GET /render/{code}` needs a code, and an avatar being edited does not have
- * one — a code is only minted when it is saved. So the editor posts the
- * document itself and gets a PNG back. PNG rather than SVG on purpose:
- * measured against the live service, PNG answered in 1.15s against 3.1s, and
- * came back smaller.
- *
- * The caller owns the returned object URL and must revoke it.
- */
-export async function renderPreview(
-  dna: AvatarDNA,
-  { crop = "full", view, detail, size = 512, background = false, signal }: PreviewOptions = {},
-): Promise<Blob> {
-  const res = await fetch(`${API}/render`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      dna,
-      format: "png",
-      crop,
-      size,
-      background,
-      ...(view ? { view } : {}),
-      ...(detail ? { detail } : {}),
-    }),
-    signal,
-  });
-  if (!res.ok) throw new Error(`render ${res.status}`);
-  return res.blob();
-}
 
 /* ── Keeping the result ──────────────────────────────────────────────────── */
 
