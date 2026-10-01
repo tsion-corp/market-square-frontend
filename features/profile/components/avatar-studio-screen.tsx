@@ -311,8 +311,17 @@ export function AvatarStudioScreen() {
         const url = await renderLocally(dna, {
           crop: ZOOMS[zoom].crop,
           view,
-          size: 512,
+          size: 1160,
           detail: "medium",
+          /*
+            THE CARD'S OWN SHAPE, not a square shown inside it. The engine
+            draws its scene to fill whatever box it is given, so asking for a
+            580x440 box gives a widescreen scene with the whole character in
+            it — no bars, no crop. That is the thing every single-image attempt
+            failed at, and it only became possible once the renderer was here
+            rather than behind an HTTP API that exposes no such parameter.
+          */
+          aspect: 580 / 440,
         });
         if (cancelled || mine !== seq.current) {
           URL.revokeObjectURL(url);
@@ -551,7 +560,7 @@ export function AvatarStudioScreen() {
               <img
                 src={preview}
                 alt="Your avatar"
-                className="absolute inset-0 h-full w-full object-contain"
+                className="absolute inset-0 h-full w-full object-cover"
               />
             </>
           ) : (

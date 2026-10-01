@@ -27,9 +27,22 @@ import type { AvatarDNA, RenderCrop, RenderDetail, RenderView } from "./arkplay-
   is private to the person editing and never worth a request.
 */
 
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 type RenderSVG = (
   dna: AvatarDNA,
-  opts: { crop?: RenderCrop; size?: number; view?: RenderView; detail?: RenderDetail },
+  opts: {
+    crop?: RenderCrop;
+    size?: number;
+    view?: RenderView;
+    detail?: RenderDetail;
+    viewBox?: Box;
+  },
 ) => string;
 
 let loading: Promise<RenderSVG> | null = null;
@@ -54,6 +67,22 @@ export interface LocalRenderOptions {
   view?: RenderView;
   size?: number;
   detail?: RenderDetail;
+  /**
+   * Draw a WIDE picture instead of a square one — width ÷ height of the card
+   * this is going into.
+   *
+   * The crops are all square, which is why a cover could only ever letterbox
+   * the scene or crop the character out of it. But the engine takes a
+   * `viewBox` that "overrides the crop box entirely", and it draws the scene
+   * to fill whatever box it is given — so asking for a 741x473 box yields a
+   * widescreen scene with the whole character standing in it, which is the
+   * thing the card wanted all along.
+   *
+   * This is local-only. The service's HTTP render exposes no such parameter
+   * (probed: width, height, aspect, ratio, zoom, pad, margin are all ignored),
+   * so a saved cover is still square until they pass `viewBox` through.
+   */
+  aspect?: number;
 }
 
 /**
@@ -65,9 +94,38 @@ export interface LocalRenderOptions {
  */
 export async function renderLocally(
   dna: AvatarDNA,
-  { crop = "full", view, size = 512, detail = "medium" }: LocalRenderOptions = {},
+  { crop = "full", view, size = 512, detail = "medium", aspect }: LocalRenderOptions = {},
 ): Promise<string> {
   const renderSVG = await engine();
-  const svg = renderSVG(dna, { crop, size, view, detail });
+  const svg = aspect
+    ? renderSVG(dna, { size, view, detail, viewBox: widen(renderSVG, dna, crop, view, aspect) })
+    : renderSVG(dna, { crop, size, view, detail });
   return URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+}
+
+/**
+ * The crop's own box, stretched sideways to an aspect and left centred.
+ *
+ * The box is read back off a throwaway render rather than computed here,
+ * because `cropBox` depends on the posed model and reproducing that would be a
+ * second copy of their geometry to keep in step with the first. A render costs
+ * about 2ms, so measuring with one is cheaper than being wrong.
+ *
+ * Only the WIDTH grows: keeping the height means the character stays exactly
+ * as tall as the crop intended, and the extra width is scene.
+ */
+function widen(
+  renderSVG: RenderSVG,
+  dna: AvatarDNA,
+  crop: RenderCrop,
+  view: RenderView | undefined,
+  aspect: number,
+): Box | undefined {
+  const probe = renderSVG(dna, { crop, size: 16, view });
+  const found = /viewBox="([-\d. ]+)"/.exec(probe);
+  if (!found) return undefined;
+  const [x, y, w, h] = found[1].trim().split(/\s+/).map(Number);
+  if (![x, y, w, h].every(Number.isFinite) || h <= 0) return undefined;
+  const width = h * aspect;
+  return { x: x + (w - width) / 2, y, w: width, h };
 }
