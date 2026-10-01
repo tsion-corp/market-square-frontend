@@ -181,6 +181,7 @@ export function AvatarStudioScreen() {
   const [tab, setTab] = useState<TabId>("fashion");
   const [slot, setSlot] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [previewCutout, setPreviewCutout] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -272,17 +273,26 @@ export function AvatarStudioScreen() {
           `none` still comes back transparent, so this costs nothing for
           somebody who has not chosen one.
         */
-        const blob = await renderPreview(dna, {
-          crop: "full",
-          size: 512,
-          background: true,
-          signal: ac.signal,
-        });
+        /*
+          BOTH LAYERS, IN PARALLEL. The card draws the scene softly behind a
+          sharp character, which needs two pictures of the same document: one
+          WITH its scene and one cut out of it. Sequential would double the
+          wait for no reason — together they cost what the slower one costs.
+        */
+        const [withScene, cutout] = await Promise.all([
+          renderPreview(dna, { crop: "full", size: 512, background: true, signal: ac.signal }),
+          renderPreview(dna, { crop: "full", size: 512, background: false, signal: ac.signal }),
+        ]);
         if (ac.signal.aborted || mine !== seq.current) return;
-        const url = URL.createObjectURL(blob);
+        const sceneUrl = URL.createObjectURL(withScene);
+        const cutUrl = URL.createObjectURL(cutout);
         setPreview((old) => {
           if (old) URL.revokeObjectURL(old);
-          return url;
+          return sceneUrl;
+        });
+        setPreviewCutout((old) => {
+          if (old) URL.revokeObjectURL(old);
+          return cutUrl;
         });
       } catch {
         if (!ac.signal.aborted && mine === seq.current) {
@@ -300,7 +310,12 @@ export function AvatarStudioScreen() {
 
   useEffect(
     () => () => {
+      /* Both, or the cut-out leaks one blob per edit for the whole session. */
       setPreview((old) => {
+        if (old) URL.revokeObjectURL(old);
+        return null;
+      });
+      setPreviewCutout((old) => {
         if (old) URL.revokeObjectURL(old);
         return null;
       });
@@ -502,18 +517,25 @@ export function AvatarStudioScreen() {
           {preview ? (
             <>
               {/*
-                FILLS THE CARD, like the cover. The square render is cropped
-                rather than letterboxed: the figure sits 23%..97% down the
-                square (74% of it) and this card shows 76%, so the whole
-                character fits with nothing left over for bars. Anchored low so
-                the head keeps sky above it.
+                THE SAME TWO LAYERS THE COVER USES, so this previews the cover
+                rather than something that merely resembles it: the scene
+                filling softly out of focus, the character sharp over it at the
+                file's own geometry. One picture cannot be both — see
+                profile-cover.tsx.
               */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={preview}
+                alt=""
+                aria-hidden
+                className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl"
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewCutout ?? preview}
                 alt="Your avatar"
-                className="absolute inset-0 h-full w-full object-cover [object-position:center_85%] transition-opacity"
-                style={{ opacity: drawing ? 0.55 : 1 }}
+                className="absolute w-auto max-w-none -translate-x-1/2 transition-opacity"
+                style={{ left: "52.336%", bottom: "-3.4%", height: "95.8%", opacity: drawing ? 0.55 : 1 }}
               />
             </>
           ) : (

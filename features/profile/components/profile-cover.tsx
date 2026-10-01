@@ -12,7 +12,7 @@ import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
 import { coverBackgroundUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
-import { coverSceneUrl } from "@/lib/arkplay-avatar";
+import { coverCharacterUrl, coverSceneUrl } from "@/lib/arkplay-avatar";
 
 /**
  * THE PROFILE COVER — node 435:27500, redrawn as 1021:20229 (live file,
@@ -192,25 +192,38 @@ export function ProfileCover({
             above simply shows through and the character stands on it.
           */}
           {/*
-            IT FILLS THE CARD. The render is square and the card is not, so
-            this crops rather than letterboxes — the earlier version contained
-            the picture and filled the sides with a blurred copy of itself,
-            which read as a panel pasted onto a different image however the
-            join was blended.
+            TWO LAYERS, BECAUSE ONE CANNOT BE BOTH. The render is square and
+            the card is not, and every single-image answer failed on a real
+            avatar: contained, it sat in the middle with blurred bars and read
+            as a panel pasted on; cropped to fill, it cut the head off anyone
+            with tall hair or ears, because the figure's extent is not the same
+            from one character to the next — the 23%..97% this was anchored to
+            was ONE avatar, measured and then over-trusted.
 
-            Cropping is safe because the figure sits 23%..97% down the square,
-            74% of it, and the card shows more than that at phone widths (77%)
-            and only 10 points less at the file's 741x473. The position is
-            anchored low so the HEAD is always inside with sky above it and the
-            loss comes off the feet — which is what the file already does to
-            the mascot, and which the identity row covers anyway.
+            So the scene fills the card softly out of focus, and the character
+            is drawn over it at the file's own geometry — the same 95.8% at
+            centre 52.336% the mascot has always used. Both layers are the same
+            avatar, so the shape behind the character IS the character, and it
+            sits directly behind them.
+
+            A soft ground under a sharp subject is also what the card already
+            wanted: it draws two scrims over this precisely so white furniture
+            stays readable on a picture nobody has seen yet.
           */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={coverSceneUrl(characterCode)}
             alt=""
             aria-hidden
-            className="absolute inset-0 h-full w-full object-cover [object-position:center_85%] md:[object-position:center_62%]"
+            className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={coverCharacterUrl(characterCode)}
+            alt=""
+            aria-hidden
+            className="absolute w-auto max-w-none -translate-x-1/2"
+            style={{ left: "52.336%", bottom: "-3.4%", height: "95.8%" }}
           />
         </>
       ) : (
