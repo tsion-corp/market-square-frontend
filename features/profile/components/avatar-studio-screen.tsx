@@ -6,6 +6,7 @@ import { useMe } from "@/hooks/use-me";
 import { canGoBack } from "@/lib/nav-history";
 import { useUpdateMe } from "@/features/profile/hooks/use-profile";
 import { asset, sq } from "@/lib/square-path";
+import { avatarImageUrl } from "@/lib/arkplay-avatar";
 import {
   coverCharacterCode,
   selectedBackgroundId,
@@ -21,6 +22,7 @@ import {
   clearSlot,
   decodeCode,
   encodeDna,
+  encodeMany,
   fetchCatalog,
   itemsForSlot,
   renderPreview,
@@ -239,6 +241,40 @@ export function AvatarStudioScreen() {
     [catalog, dna, activeSlot],
   );
   const worn = catalog && dna && activeSlot ? wornInSlot(catalog, dna, activeSlot) : null;
+
+  /*
+    ─── A WARDROBE HAS TO SHOW THE CLOTHES ─────────────────────────────────────
+    A rail of labelled dark squares is a list, not a wardrobe: nobody can tell
+    a crop top from a hoodie by reading it. Each tile is the character wearing
+    that ONE thing, which also answers the question people actually have — what
+    does this look like on ME.
+
+    The variants are built here as plain documents (dressing is an object edit)
+    and encoded in a single call; the pictures are then ordinary cacheable
+    image URLs the browser fetches lazily on its own.
+  */
+  const variants = useMemo(() => {
+    if (!catalog || !dna || !activeSlot) return [];
+    return [clearSlot(catalog, dna, activeSlot), ...items.map((i) => wearItem(catalog, dna, i))];
+  }, [catalog, dna, activeSlot, items]);
+
+  const [tileCodes, setTileCodes] = useState<(string | null)[]>([]);
+  useEffect(() => {
+    if (variants.length === 0) {
+      return;
+    }
+    const ac = new AbortController();
+    encodeMany(variants, ac.signal)
+      .then((codes) => {
+        if (!ac.signal.aborted) setTileCodes(codes);
+      })
+      .catch(() => {
+        /* The rail still works by name; a missing picture is not worth a
+           banner over a studio the person is in the middle of using. */
+        if (!ac.signal.aborted) setTileCodes([]);
+      });
+    return () => ac.abort();
+  }, [variants]);
 
   const save = useCallback(async () => {
     if (!dna) return;
@@ -473,15 +509,17 @@ export function AvatarStudioScreen() {
                     selected={!worn}
                     onClick={() => catalog && dna && setDna(clearSlot(catalog, dna, activeSlot))}
                     label="None"
+                    code={tileCodes[0] ?? null}
                   />
                 )}
-                {items.map((item) => (
+                {items.map((item, i) => (
                   <TileButton
                     key={item.id}
                     selected={worn === item.id}
                     onClick={() => catalog && dna && setDna(wearItem(catalog, dna, item))}
                     label={item.label}
                     badge={item.limited ? "Limited" : item.premium ? "Premium" : null}
+                    code={tileCodes[i + 1] ?? null}
                   />
                 ))}
                 {activeSlot && items.length === 0 && (
@@ -545,11 +583,14 @@ function TileButton({
   onClick,
   label,
   badge,
+  code,
 }: {
   selected: boolean;
   onClick: () => void;
   label: string;
   badge?: string | null;
+  /** The character wearing this one thing. Null until the rail is encoded. */
+  code?: string | null;
 }) {
   return (
     <button
@@ -560,12 +601,28 @@ function TileButton({
         selected ? "ring-2 ring-white" : "hover:bg-white/[0.08]"
       }`}
     >
+      {/* The picture fills the tile and the name sits over its foot, so a
+          garment is recognised by sight and confirmed by name. */}
+      {code ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={avatarImageUrl(code, { crop: "full", size: 192, background: false })}
+          alt=""
+          aria-hidden
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-contain p-1"
+        />
+      ) : (
+        <span className="absolute inset-0 animate-pulse rounded-[13.138px] bg-white/[0.03]" aria-hidden />
+      )}
       {badge && (
-        <span className="absolute left-1.5 top-1.5 rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-white/80">
+        <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-white/80">
           {badge}
         </span>
       )}
-      <span className="line-clamp-2 text-[11px] leading-4 text-white/70">{label}</span>
+      <span className="relative z-10 line-clamp-2 bg-gradient-to-t from-[#1A1A1F] to-transparent text-[11px] leading-4 text-white/70">
+        {label}
+      </span>
     </button>
   );
 }

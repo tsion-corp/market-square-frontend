@@ -231,3 +231,33 @@ export async function decodeCode(code: string, signal?: AbortSignal): Promise<Av
   if (!body.dna) throw new AvatarCodecUnavailable(res.status);
   return body.dna;
 }
+
+/**
+ * Share codes for a whole rail at once.
+ *
+ * A wardrobe has to show the garments, and a thumbnail is the character
+ * wearing that one thing — so every tile needs a code. One call rather than
+ * one per tile, because encoding is pure and cheap while a round trip is not,
+ * and the pictures that follow are ordinary cacheable image URLs the browser
+ * fetches lazily by itself.
+ *
+ * A garment that cannot be encoded answers null in its place rather than
+ * failing the rail: one odd item should cost its own tile, not the screen.
+ */
+export async function encodeMany(
+  dnas: AvatarDNA[],
+  signal?: AbortSignal,
+): Promise<(string | null)[]> {
+  if (dnas.length === 0) return [];
+  const res = await fetch(CODEC, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dnas }),
+    signal,
+  });
+  if (!res.ok) throw new AvatarCodecUnavailable(res.status);
+  const body = (await res.json()) as { codes?: unknown };
+  return Array.isArray(body.codes)
+    ? body.codes.map((c) => (typeof c === "string" ? c : null))
+    : dnas.map(() => null);
+}
