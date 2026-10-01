@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useRef, useSyncExternalStore, type RefObject } from "react";
 import {
   getFeedSoundServerSnapshot,
   isFeedSoundOn,
@@ -37,8 +37,24 @@ import {
  *   native controls themselves, so this hook neither registers the video nor
  *   touches playback. Pausing a clip somebody pressed play on would be worse
  *   than two of them running.
+ * @param rootRef  The SCROLL CONTAINER to measure visibility against, when the
+ *   player lives inside one rather than scrolling with the window. The reels
+ *   viewer is a `fixed`, `overflow-y-auto` snap container; measuring against the
+ *   viewport (the default) does not reliably clip a slide that has scrolled out
+ *   of that container — notably in Safari — so the previous reel kept reporting
+ *   itself visible and kept playing. Passing the container as the observer root
+ *   is what makes a scrolled-away clip read as 0% and stop. Omitted for the
+ *   timeline, which scrolls with the window (root = viewport is correct there).
  */
-export function useActiveVideo({ layer, enabled }: { layer: VideoLayer; enabled: boolean }) {
+export function useActiveVideo({
+  layer,
+  enabled,
+  rootRef,
+}: {
+  layer: VideoLayer;
+  enabled: boolean;
+  rootRef?: RefObject<Element | null>;
+}) {
   const id = useId();
   const ref = useRef<HTMLVideoElement>(null);
 
@@ -87,7 +103,9 @@ export function useActiveVideo({ layer, enabled }: { layer: VideoLayer; enabled:
       (entries) => {
         for (const entry of entries) reportVideoVisibility(id, entry.intersectionRatio);
       },
-      { threshold: [...VISIBILITY_STEPS] }
+      // Measure against the scroll container when there is one (the reels
+      // viewer), else the viewport (the timeline) — see `rootRef`.
+      { root: rootRef?.current ?? null, threshold: [...VISIBILITY_STEPS] }
     );
     observer.observe(video);
 
@@ -97,7 +115,9 @@ export function useActiveVideo({ layer, enabled }: { layer: VideoLayer; enabled:
       // than leaving the feed silent behind a dead id.
       unregister();
     };
-  }, [id, layer, enabled]);
+    // `rootRef` is a stable ref object; it is listed to satisfy the linter and
+    // never actually changes identity, so the observer is not rebuilt by it.
+  }, [id, layer, enabled, rootRef]);
 
   // Obey. The element is told what it is, every time the answer changes.
   useEffect(() => {

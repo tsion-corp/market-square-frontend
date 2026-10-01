@@ -66,10 +66,17 @@ export function PostSlide({
    * covers everything, passes the overlay layer.
    */
   layer = VIDEO_LAYER.feed,
+  /**
+   * The snap SCROLL CONTAINER this slide lives in, so playback is measured
+   * against it rather than the viewport — a clip scrolled out of the container
+   * must read as 0% and stop. See `useActiveVideo`'s `rootRef`.
+   */
+  scrollRootRef,
 }: {
   post: VideoItem;
   viewTransitionName?: string;
   layer?: VideoLayer;
+  scrollRootRef?: React.RefObject<Element | null>;
 }) {
   const like = useLikePost();
   const gate = useGate();
@@ -101,7 +108,7 @@ export function PostSlide({
     ref: videoRef,
     muted,
     toggleSound,
-  } = useActiveVideo({ layer, enabled: hasVideo && !reduced });
+  } = useActiveVideo({ layer, enabled: hasVideo && !reduced, rootRef: scrollRootRef });
 
   // Seek by fraction. Clamped, and guarded on a duration: before metadata
   // arrives `duration` is NaN and seeking would throw.
