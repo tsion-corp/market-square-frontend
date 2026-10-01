@@ -11,8 +11,8 @@ import { canGoBack } from "@/lib/nav-history";
 import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
-import { coverBackgroundUrl } from "@/lib/profile-backgrounds";
-import { codeFromAvatarUrl, coverCharacterUrl } from "@/lib/arkplay-avatar";
+import { coverBackgroundUrl, coverCharacterCode } from "@/lib/profile-backgrounds";
+import { coverCharacterUrl } from "@/lib/arkplay-avatar";
 
 /**
  * THE PROFILE COVER — node 435:27500, redrawn as 1021:20229 (live file,
@@ -109,16 +109,16 @@ export function ProfileCover({
   const avatarSrc = profile.avatarUrl ?? artworkForSeed(resolveSeed({ id: profile.id, name }));
   /*
     THE CHARACTER STANDING ON THE BACKGROUND — the swap the layering above was
-    built for. A profile whose picture is a built avatar stands as ITSELF here;
-    everyone else keeps the ARK mascot, which is what they are already wearing.
+    built for. Whoever has built one stands as THEMSELVES here; everyone else
+    keeps the ARK mascot, which is what they are already wearing.
 
-    The share code comes out of the picture's own URL, so this needs no profile
-    field and no second request: `avatarUrl` IS the avatar (see
-    lib/arkplay-avatar.ts). An uploaded photograph yields no code and is not
-    drawn here — a head-and-shoulders JPEG stretched to a standing figure is
-    not a character, and the mascot is the honest fallback.
+    IT COMES FROM THE COVER, NOT THE PROFILE PICTURE. It used to be read out of
+    `avatarUrl`, which quietly made the two the same thing: building a
+    character replaced the person's photograph with it. They are separate in
+    the design and separate here — the cover carries the ground and the
+    character together, and the picture stays whatever its owner chose.
   */
-  const characterCode = codeFromAvatarUrl(profile.avatarUrl);
+  const characterCode = coverCharacterCode(profile.coverUrl);
   useLayoutEffect(() => {
     const el = cardRef.current;
     if (!el) return;

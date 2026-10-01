@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { BackgroundPicker } from "@/features/profile/components/background-picker";
-import { AvatarStudioSheet } from "@/features/profile/components/avatar-studio-sheet";
-import { avatarImageUrl, codeFromAvatarUrl } from "@/lib/arkplay-avatar";
+import { coverCharacterCode } from "@/lib/profile-backgrounds";
+import { sq } from "@/lib/square-path";
 import { GENDER_OPTIONS, normalizeGender } from "@/lib/gender";
 import { useState } from "react";
 import { resolveHandles } from "@/lib/api/mentions";
@@ -35,7 +36,6 @@ export function EditProfileSheet({
   /* The cover's BACKGROUND. Null is a real value here and means "the ARK
      sweep" — see BackgroundPicker for why that is sent rather than a URL. */
   const [coverUrl, setCoverUrl] = useState<string | null>(me.coverUrl);
-  const [studioOpen, setStudioOpen] = useState(false);
   /*
     The character being edited, as a share code.
 
@@ -44,7 +44,7 @@ export function EditProfileSheet({
     off instead of starting over. Null means the picture is a photograph or a
     placeholder — nothing to continue from, so the studio opens on a fresh one.
   */
-  const avatarCode = codeFromAvatarUrl(avatarUrl);
+  const characterCode = coverCharacterCode(coverUrl);
   /* Self-declared, all three, and all optional. `?? ""` because null is the
      real "hasn't said" and an input cannot hold it. */
   const [city, setCity] = useState(me.city ?? "");
@@ -71,13 +71,22 @@ export function EditProfileSheet({
           decline an editor first, and somebody who wants a character should
           not have to find one behind a file dialog.
         */}
-        <button
-          type="button"
-          onClick={() => setStudioOpen(true)}
-          className="ws-press ws-btn-silver ws-btn-md w-full rounded-full text-[14px] font-semibold"
+        {/*
+          A LINK, BECAUSE THE STUDIO IS A PAGE. Node 1863:2412 is a full-height
+          column with a border on its right edge only — a surface of its own,
+          not a card over this one. Stacking it inside this sheet would also
+          have put a dialog inside a dialog, with two Escapes to get out.
+
+          It edits the COVER, which is why the wording says so: the character
+          stands on the profile's banner and the picture beside it is a
+          separate choice, made by the control above.
+        */}
+        <Link
+          href={sq("/avatar")}
+          className="ws-press ws-btn-silver ws-btn-md flex w-full items-center justify-center rounded-full text-[14px] font-semibold"
         >
-          {avatarCode ? "Edit your character" : "Build a character"}
-        </button>
+          {characterCode ? "Edit your character" : "Build a character"}
+        </Link>
         <BackgroundPicker value={coverUrl} onChange={setCoverUrl} />
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold text-grey-400">
@@ -261,20 +270,6 @@ export function EditProfileSheet({
           Save
         </Button>
       </div>
-      <AvatarStudioSheet
-        open={studioOpen}
-        code={avatarCode}
-        onClose={() => setStudioOpen(false)}
-        onSaved={(code) =>
-          /*
-            Saving sets the PICTURE, which is how a character reaches every
-            surface in Square without one of them changing: the feed, a chat,
-            a comment and a roster all render avatarUrl already. The code
-            rides inside that URL, which is what makes it editable later.
-          */
-          setAvatarUrl(avatarImageUrl(code, { crop: "portrait", size: 256 }))
-        }
-      />
     </Sheet>
   );
 }

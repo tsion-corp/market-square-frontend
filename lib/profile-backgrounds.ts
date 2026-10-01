@@ -1,4 +1,5 @@
 import { asset } from "./square-path.ts";
+import { isShareCode } from "./arkplay-avatar.ts";
 
 /*
   THE GROUND A PROFILE'S CHARACTER STANDS ON.
@@ -59,6 +60,64 @@ export function defaultBackgroundUrl(): string {
   return asset("/profile/ark-cover-bg.jpg");
 }
 
+/*
+  ─── WHAT A STORED COVER ACTUALLY IS ────────────────────────────────────────
+  A cover is TWO choices — the ground and the character standing on it — and
+  the profile has one field to keep them in. So the stored value is an absolute
+  URL naming the ground, carrying the character's share code as `?c=`.
+
+  THE CHARACTER IS NOT THE PROFILE PICTURE. It used to be read out of
+  `avatarUrl`, which meant building a character silently replaced the person's
+  photograph with it. They are separate things in the design and separate here:
+  the studio writes the cover and never touches the picture.
+
+  ABSOLUTE, BECAUSE THE SERVICE INSISTS. `coverUrl` is validated with
+  `z.string().url()`, which rejects a relative path — a curated background
+  saved as `/profile/backgrounds/violet.svg` answers 400 and the choice never
+  persists. Verified against the service's own schema.
+
+  READ BY PATH, BECAUSE ORIGINS MOVE. What is written carries whatever origin
+  the browser was on — a preview deployment, a local port. Matching the whole
+  string would make a background picked on a preview stop being recognised in
+  production, so only the PATH decides which one it is.
+*/
+
+/** Absolute if the caller gave an origin, and it survives a `?c=` already there. */
+function absolute(origin: string, path: string): string {
+  return /^[a-z][a-z0-9+.-]*:/i.test(path) ? path : `${origin.replace(/\/+$/, "")}${path}`;
+}
+
+function parsed(coverUrl: string | null | undefined): URL | null {
+  const trimmed = typeof coverUrl === "string" ? coverUrl.trim() : "";
+  if (!trimmed) return null;
+  try {
+    // A base is supplied so a legacy RELATIVE value still parses; only the
+    // path and query are ever read from the result.
+    return new URL(trimmed, "https://square.invalid");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The cover as it is STORED — the one value the profile keeps.
+ *
+ * `null` means wearing nothing of one's own: the ARK sweep and the mascot,
+ * which is what somebody who has never opened the picker already has.
+ */
+export function storedCoverUrl(
+  origin: string,
+  backgroundId: string | null,
+  characterCode: string | null,
+): string | null {
+  if (!backgroundId && !characterCode) return null;
+  const url = new URL(
+    absolute(origin, backgroundId ? backgroundUrl(backgroundId) : defaultBackgroundUrl()),
+  );
+  if (characterCode) url.searchParams.set("c", characterCode);
+  return url.toString();
+}
+
 /**
  * The background a profile is actually wearing.
  *
@@ -68,9 +127,22 @@ export function defaultBackgroundUrl(): string {
  * would produce a broken image rather than the default.
  */
 export function coverBackgroundUrl(coverUrl: string | null | undefined): string {
-  const trimmed = typeof coverUrl === "string" ? coverUrl.trim() : "";
-  return trimmed ? trimmed : defaultBackgroundUrl();
+  const url = parsed(coverUrl);
+  if (!url) return defaultBackgroundUrl();
+  const id = selectedBackgroundId(coverUrl);
+  if (id) return backgroundUrl(id);
+  if (CURATED_DEFAULT.test(url.pathname)) return defaultBackgroundUrl();
+  /*
+    An uploaded picture — somebody else's URL, kept as it is. The character
+    parameter is ours and is dropped: a media host handed a query it never
+    issued can answer 403 for a signed URL, and the picture is the point here.
+  */
+  url.searchParams.delete("c");
+  return url.toString();
 }
+
+const CURATED = /\/profile\/backgrounds\/([A-Za-z0-9_-]+)\.svg$/;
+const CURATED_DEFAULT = /\/profile\/ark-cover-bg\.jpg$/;
 
 /**
  * Which curated background a stored cover is, if it is one at all.
@@ -80,7 +152,26 @@ export function coverBackgroundUrl(coverUrl: string | null | undefined): string 
  * matched would tick a swatch the person never picked.
  */
 export function selectedBackgroundId(coverUrl: string | null | undefined): string | null {
-  if (typeof coverUrl !== "string") return null;
-  const found = PROFILE_BACKGROUNDS.find((bg) => coverUrl === backgroundUrl(bg.id));
-  return found ? found.id : null;
+  const url = parsed(coverUrl);
+  const id = url && CURATED.exec(url.pathname)?.[1];
+  return id && PROFILE_BACKGROUNDS.some((bg) => bg.id === id) ? id : null;
+}
+
+/** The character standing on this cover, or null when it is the mascot's. */
+export function coverCharacterCode(coverUrl: string | null | undefined): string | null {
+  const code = parsed(coverUrl)?.searchParams.get("c") ?? null;
+  return isShareCode(code) ? code : null;
+}
+
+/**
+ * Whether a cover is wearing the ARK sweep — the ground nobody chose.
+ *
+ * Not simply "no value" any more: a profile with a character but no chosen
+ * background stores the default's own path so the character has something to
+ * hang off, and the picker would otherwise read that as an uploaded picture
+ * and tick nothing.
+ */
+export function isDefaultBackground(coverUrl: string | null | undefined): boolean {
+  const url = parsed(coverUrl);
+  return !url || CURATED_DEFAULT.test(url.pathname);
 }

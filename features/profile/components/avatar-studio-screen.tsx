@@ -1,8 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Sheet } from "@/components/ui/sheet";
-import { asset } from "@/lib/square-path";
+import { useRouter } from "next/navigation";
+import { useMe } from "@/hooks/use-me";
+import { canGoBack } from "@/lib/nav-history";
+import { useUpdateMe } from "@/features/profile/hooks/use-profile";
+import { asset, sq } from "@/lib/square-path";
+import {
+  coverCharacterCode,
+  selectedBackgroundId,
+  storedCoverUrl,
+} from "@/lib/profile-backgrounds";
 import { ENGINE_VERSION } from "@/vendor/arkplay-dna/version.ts";
 import {
   AvatarCodecUnavailable,
@@ -74,19 +82,25 @@ interface Starter {
   dna: AvatarDNA;
 }
 
-export function AvatarStudioSheet({
-  open,
-  code,
-  onClose,
-  onSaved,
-}: {
-  open: boolean;
-  /** Reopen on an existing avatar, so editing continues rather than restarts. */
-  code: string | null;
-  onClose: () => void;
-  /** The share code the person saved. */
-  onSaved: (savedCode: string) => void;
-}) {
+export function AvatarStudioScreen() {
+  const router = useRouter();
+  const me = useMe().data;
+  const update = useUpdateMe();
+  /* A page, not a dialog: there is nothing to open, so everything that used to
+     wait on `open` runs once the route is mounted. */
+  const open = true;
+  /** Reopen on the character already on the cover, so editing continues. */
+  const code = coverCharacterCode(me?.coverUrl);
+  /*
+    BACK TO WHERE THEY CAME FROM. Not a built `/u/<username>` link: this repo
+    routes people by id because a username is theirs to change, and a test
+    pins it. The studio is always reached from somewhere, so history is both
+    the correct answer and the honest one.
+  */
+  const leave = useCallback(() => {
+    if (canGoBack()) router.back();
+    else router.push(sq("/"));
+  }, [router]);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [starters, setStarters] = useState<Starter[]>([]);
   const [dna, setDna] = useState<AvatarDNA | null>(null);
@@ -231,8 +245,23 @@ export function AvatarStudioSheet({
     setSaving(true);
     setProblem(null);
     try {
-      onSaved(await encodeDna(dna));
-      onClose();
+      const saved = await encodeDna(dna);
+      /*
+        THE CHARACTER GOES ON THE COVER, AND THE PROFILE PICTURE IS LEFT ALONE.
+        It used to be written to `avatarUrl`, which meant building a character
+        silently replaced somebody's photograph with it. The cover carries the
+        ground and the character together (see lib/profile-backgrounds.ts), so
+        the background already chosen is read back and kept — saving a
+        character must not quietly return the ground to the ARK sweep.
+      */
+      await update.mutateAsync({
+        coverUrl: storedCoverUrl(
+          window.location.origin,
+          selectedBackgroundId(me?.coverUrl),
+          saved,
+        ),
+      });
+      leave();
     } catch (e) {
       setProblem(
         e instanceof AvatarCodecUnavailable
@@ -242,21 +271,22 @@ export function AvatarStudioSheet({
     } finally {
       setSaving(false);
     }
-  }, [dna, onSaved, onClose]);
+  }, [dna, update, me, leave]);
 
+  /*
+    A PAGE, NOT A DIALOG — and the frame says so. Node 1863:2412 is 951 wide by
+    2238 tall with a border on its RIGHT EDGE ONLY and a backdrop blur: that is
+    a full-height column standing beside the rest of the app, not a card
+    floating on a backdrop. A dialog has four edges.
+  */
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      bare
-      panelClassName="w-full max-w-[616px] rounded-[20px] border border-white/10 bg-[#121214] p-0"
-    >
-      <div className="max-h-[85vh] overflow-y-auto px-[18px] pb-6">
+    <div className="min-h-screen w-full border-r border-white/10 bg-[#121214] backdrop-blur-[12px] md:max-w-[951px]">
+      <div className="px-[18px] pb-6">
         {/* 1951:25810 + 1951:25804 — the round back at 48, the title beside it. */}
         <div className="flex items-center gap-4 pb-[14px] pt-[29px]">
           <button
             type="button"
-            onClick={onClose}
+            onClick={leave}
             aria-label="Back"
             /* The file's 48 IS the scale's large icon button — no bespoke geometry needed. */
             className="ws-press ws-iconbtn-lg flex shrink-0 items-center justify-center rounded-full bg-white/[0.16]"
@@ -315,7 +345,7 @@ export function AvatarStudioSheet({
           {/* 1972:26898 — the 44.12 close disc on white 10%. */}
           <button
             type="button"
-            onClick={onClose}
+            onClick={leave}
             aria-label="Close"
             className="ws-press absolute flex items-center justify-center rounded-full bg-white/10"
             style={{ left: pctX(14), top: pctY(7), width: 44.12, height: 44.12 }}
@@ -505,7 +535,7 @@ export function AvatarStudioSheet({
           </button>
         </div>
       </div>
-    </Sheet>
+    </div>
   );
 }
 

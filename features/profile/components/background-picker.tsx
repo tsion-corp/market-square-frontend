@@ -3,8 +3,11 @@
 import {
   PROFILE_BACKGROUNDS,
   backgroundUrl,
+  coverCharacterCode,
   defaultBackgroundUrl,
+  isDefaultBackground,
   selectedBackgroundId,
+  storedCoverUrl,
 } from "@/lib/profile-backgrounds";
 import { UploadField } from "@/components/ui/upload-field";
 
@@ -33,10 +36,18 @@ export function BackgroundPicker({
   onChange: (next: string | null) => void;
 }) {
   const selected = selectedBackgroundId(value);
-  const isDefault = !value;
+  const isDefault = isDefaultBackground(value);
   // An upload is "a cover that is not one of ours" — the one case where the
-  // stored value is set but matches no swatch.
-  const isUpload = Boolean(value) && selected === null;
+  // stored value is set but matches neither a swatch nor the default.
+  const isUpload = Boolean(value) && selected === null && !isDefault;
+  /*
+    CHANGING THE GROUND MUST NOT UNDRESS THE CHARACTER. One field carries both,
+    so every pick below rebuilds the whole value and carries this through.
+  */
+  const character = coverCharacterCode(value);
+  /* Stored absolute: the service validates coverUrl with z.string().url() and
+     rejects a relative path, so a swatch saved as a path never persisted. */
+  const origin = () => (typeof window === "undefined" ? "" : window.location.origin);
 
   return (
     <div>
@@ -49,7 +60,7 @@ export function BackgroundPicker({
           src={defaultBackgroundUrl()}
           label="ARK"
           selected={isDefault}
-          onPick={() => onChange(null)}
+          onPick={() => onChange(storedCoverUrl(origin(), null, character))}
         />
         {PROFILE_BACKGROUNDS.map((bg) => (
           <Swatch
@@ -57,7 +68,7 @@ export function BackgroundPicker({
             src={backgroundUrl(bg.id)}
             label={bg.label}
             selected={selected === bg.id}
-            onPick={() => onChange(backgroundUrl(bg.id))}
+            onPick={() => onChange(storedCoverUrl(origin(), bg.id, character))}
           />
         ))}
       </div>
@@ -65,7 +76,15 @@ export function BackgroundPicker({
       <div className="mt-3">
         <UploadField
           value={isUpload ? value : null}
-          onChange={(next) => onChange(next)}
+          /* An uploaded picture carries the character too, or swapping the
+             ground for a photograph would quietly take the character off it. */
+          onChange={(next) => {
+            if (!next) return onChange(storedCoverUrl(origin(), null, character));
+            if (!character) return onChange(next);
+            const url = new URL(next, origin() || "https://square.invalid");
+            url.searchParams.set("c", character);
+            onChange(url.toString());
+          }}
           label="Or use your own picture"
         />
       </div>

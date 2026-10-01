@@ -5,8 +5,11 @@ import {
   PROFILE_BACKGROUNDS,
   backgroundUrl,
   coverBackgroundUrl,
+  coverCharacterCode,
   defaultBackgroundUrl,
+  isDefaultBackground,
   selectedBackgroundId,
+  storedCoverUrl,
 } from "./profile-backgrounds.ts";
 
 describe("the curated set", () => {
@@ -91,5 +94,79 @@ describe("knowing which one is chosen", () => {
     assert.equal(selectedBackgroundId(null), null);
     assert.equal(selectedBackgroundId(undefined), null);
     assert.equal(selectedBackgroundId(""), null);
+  });
+});
+
+/*
+  A COVER IS TWO CHOICES IN ONE FIELD — the ground, and the character standing
+  on it. These pin the rules that made that possible, each of which cost
+  something to learn.
+*/
+describe("what a cover stores", () => {
+  const CODE = "A2" + "x".repeat(200);
+  const ORIGIN = "https://square.example";
+
+  /*
+    THE BUG THIS CAUGHT. The service validates coverUrl with
+    `z.string().url()`, which REJECTS a relative path — so a curated background
+    stored as "/profile/backgrounds/violet.svg" answered 400 and the choice
+    never persisted. Everything written must parse as an absolute URL.
+  */
+  it("stores an absolute URL, because a relative one is refused", () => {
+    for (const stored of [
+      storedCoverUrl(ORIGIN, "violet", null),
+      storedCoverUrl(ORIGIN, "violet", CODE),
+      storedCoverUrl(ORIGIN, null, CODE),
+    ]) {
+      assert.ok(stored, "a choice stores something");
+      assert.doesNotThrow(() => new URL(stored as string), `${stored} is absolute`);
+    }
+  });
+
+  /* Wearing nothing of one's own stays null, rather than pinning a URL that
+     would stop tracking the default if it ever changed. */
+  it("stores nothing when neither has been chosen", () => {
+    assert.equal(storedCoverUrl(ORIGIN, null, null), null);
+  });
+
+  it("carries the ground and the character together", () => {
+    const stored = storedCoverUrl(ORIGIN, "violet", CODE);
+    assert.equal(selectedBackgroundId(stored), "violet");
+    assert.equal(coverCharacterCode(stored), CODE);
+  });
+
+  /*
+    ORIGINS MOVE. What is written carries whatever origin the browser was on —
+    a preview deployment, a local port — so matching the whole string would
+    make a background picked on a preview stop being recognised in production.
+  */
+  it("recognises a background saved from another origin", () => {
+    const fromPreview = storedCoverUrl("https://preview.example", "ember", CODE);
+    assert.equal(selectedBackgroundId(fromPreview), "ember");
+    assert.equal(coverCharacterCode(fromPreview), CODE);
+  });
+
+  /* A character with no chosen ground still wears the ARK sweep, and the
+     picker must read that as the default rather than as an upload. */
+  it("keeps the default readable as the default once a character is on it", () => {
+    const stored = storedCoverUrl(ORIGIN, null, CODE);
+    assert.equal(isDefaultBackground(stored), true);
+    assert.equal(selectedBackgroundId(stored), null);
+    assert.equal(coverBackgroundUrl(stored), defaultBackgroundUrl());
+  });
+
+  /* The character parameter is ours; a media host handed a query it never
+     issued can refuse a signed URL outright. */
+  it("does not hand our character parameter to somebody else's picture", () => {
+    const upload = "https://cdn.example/me.jpg?sig=abc";
+    const url = new URL(upload);
+    url.searchParams.set("c", CODE);
+    assert.equal(coverBackgroundUrl(url.toString()), upload);
+    assert.equal(coverCharacterCode(url.toString()), CODE);
+  });
+
+  it("refuses a character that is not a share code", () => {
+    assert.equal(coverCharacterCode(`${ORIGIN}/profile/backgrounds/violet.svg?c=nope`), null);
+    assert.equal(coverCharacterCode(null), null);
   });
 });
