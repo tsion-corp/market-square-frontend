@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
-import { errorMessage } from "@/lib/api/envelope";
-import { ACCEPT_IMAGE, ensureUploadLimits, uploadFile, validateUpload } from "@/lib/api/upload";
+import { useImageUpload } from "@/components/ui/use-image-upload";
 import { IconCamera, IconX } from "@/components/ui/icons";
 
 // Image upload field for avatars and covers: pick → local preview → eager
@@ -22,45 +20,10 @@ export function UploadField({
   label: string;
   className?: string;
 }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (preview) URL.revokeObjectURL(preview);
-    };
-  }, [preview]);
-
-  const pick = async (file: File) => {
-    setError(null);
-    // Limits come from the backend (GET /uploads/limits), memoised per
-    // session, with the compiled-in fallback if it fails. Still checked before
-    // the upload starts, so the error is instant and names both the cap and
-    // this file's size.
-    await ensureUploadLimits();
-    const invalid = validateUpload(file, "image");
-    if (invalid) {
-      setError(invalid);
-      return;
-    }
-    const objectUrl = URL.createObjectURL(file);
-    setPreview(objectUrl);
-    setProgress(0);
-    try {
-      const result = await uploadFile(file, setProgress, "image");
-      onChange(result.url);
-    } catch (uploadError) {
-      setError(errorMessage(uploadError, "Upload failed."));
-      setPreview(null);
-      onChange(value);
-    } finally {
-      setProgress(null);
-    }
-  };
-
-  const shown = preview ?? value;
+  /* The behaviour lives in a hook so the profile editor can reuse it behind
+     its own camera buttons without a second copy. */
+  const upload = useImageUpload(value, onChange);
+  const { shown, progress, error } = upload;
 
   return (
     <div className={className}>
@@ -68,7 +31,7 @@ export function UploadField({
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => inputRef.current?.click()}
+          onClick={upload.open}
           aria-label={`Upload ${label}`}
           className={cn(
             "ws-press relative flex items-center justify-center overflow-hidden border border-white/15 bg-black/40 text-grey-500 transition-colors hover:border-white/30",
@@ -93,10 +56,7 @@ export function UploadField({
         {shown && progress === null && (
           <button
             type="button"
-            onClick={() => {
-              setPreview(null);
-              onChange(null);
-            }}
+            onClick={upload.clear}
             aria-label={`Remove ${label}`}
             className="rounded-full p-1.5 text-grey-500 transition-colors hover:bg-white/10 hover:text-white"
           >
@@ -108,17 +68,7 @@ export function UploadField({
         )}
       </div>
       {error && <p className="mt-1 text-xs text-down">{error}</p>}
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPT_IMAGE}
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) void pick(file);
-        }}
-      />
+      <input {...upload.inputProps} />
     </div>
   );
 }

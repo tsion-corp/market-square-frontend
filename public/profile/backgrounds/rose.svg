@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 741 473" width="741" height="473" role="img" aria-label="rose background">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4a0f27"/>
+      <stop offset="55%" stop-color="#2b0817"/>
+      <stop offset="100%" stop-color="#12030a"/>
+    </linearGradient>
+    <radialGradient id="pool" cx="52%" cy="96%" r="46%">
+      <stop offset="0%" stop-color="#f472b6" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#f472b6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="horizon" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f9a8d4" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#f9a8d4" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#f9a8d4" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="741" height="473" fill="url(#sky)"/>
+  <ellipse cx="385" cy="463" rx="326" ry="94" fill="url(#pool)"/>
+  <rect x="0" y="406" width="741" height="1.5" fill="url(#horizon)"/>
+</svg>
