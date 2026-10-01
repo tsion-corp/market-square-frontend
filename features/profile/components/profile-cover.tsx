@@ -11,7 +11,7 @@ import { canGoBack } from "@/lib/nav-history";
 import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
-import { coverBackgroundUrl, coverCharacterCode } from "@/lib/profile-backgrounds";
+import { coverBackgroundUrl } from "@/lib/profile-backgrounds";
 import { coverCharacterUrl } from "@/lib/arkplay-avatar";
 
 /**
@@ -112,13 +112,18 @@ export function ProfileCover({
     built for. Whoever has built one stands as THEMSELVES here; everyone else
     keeps the ARK mascot, which is what they are already wearing.
 
-    IT COMES FROM THE COVER, NOT THE PROFILE PICTURE. It used to be read out of
-    `avatarUrl`, which quietly made the two the same thing: building a
-    character replaced the person's photograph with it. They are separate in
-    the design and separate here — the cover carries the ground and the
-    character together, and the picture stays whatever its owner chose.
+    IT IS ITS OWN FIELD, and it took two wrong homes to get here. It was read
+    out of `avatarUrl`, which quietly made a character and a profile picture
+    the same thing — building one replaced the person's photograph. Then it was
+    carried in `coverUrl`, which the service refuses outright: that field goes
+    through `verifyAttachment` and accepts only a picture this person uploaded.
+
+    `avatarConfig` is PUBLIC, which is the whole point and was nearly missed —
+    the cover is drawn on `/u/<username>` for every visitor, so a field only
+    its owner could read would have meant nobody ever saw anybody's character
+    but their own.
   */
-  const characterCode = coverCharacterCode(profile.coverUrl);
+  const characterCode = profile.avatarConfig ?? null;
   useLayoutEffect(() => {
     const el = cardRef.current;
     if (!el) return;
