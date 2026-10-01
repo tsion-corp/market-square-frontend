@@ -45,6 +45,8 @@ export interface CatalogItem {
   premium?: boolean;
   limited?: boolean;
   tier?: string;
+  /** Relative likelihood when rolling at random. */
+  weight?: number;
 }
 
 export interface CatalogSlot {
@@ -61,6 +63,7 @@ export interface Catalog {
   dnaVersion: number;
   slots: CatalogSlot[];
   items: CatalogItem[];
+  sections?: CatalogSection[];
 }
 
 /** One worn thing. `params` carries its colours and options. */
@@ -199,13 +202,23 @@ export async function renderPreview(
 const CODEC = "/api/avatar/codes";
 
 export class AvatarCodecUnavailable extends Error {
-  constructor(readonly status: number) {
+  /*
+    A PLAIN FIELD, NOT A PARAMETER PROPERTY. This repo runs its .ts files
+    directly under node, whose type stripping cannot execute
+    `constructor(readonly status: number)` — the module throws
+    ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX on import, so every test that touches it
+    dies at load. tsc never says a word about it.
+  */
+  readonly status: number;
+
+  constructor(status: number) {
     super(
       status === 400
         ? "That avatar couldn't be saved — it isn't a shape the encoder recognises."
         : "Couldn't reach the avatar encoder. Try again in a moment.",
     );
     this.name = "AvatarCodecUnavailable";
+    this.status = status;
   }
 }
 
@@ -260,4 +273,216 @@ export async function encodeMany(
   return Array.isArray(body.codes)
     ? body.codes.map((c) => (typeof c === "string" ? c : null))
     : dnas.map(() => null);
+}
+
+/* ── The character itself: body, face, hair, species ─────────────────────── */
+
+export interface CatalogChoice {
+  id: string;
+  label: string;
+  /** Relative likelihood when rolling at random. Absent means 1. */
+  weight?: number;
+}
+
+export interface CatalogParam {
+  type: "range" | "choice" | "color" | "toggle";
+  key: string;
+  label: string;
+  default?: unknown;
+  /** range */
+  min?: number;
+  max?: number;
+  step?: number;
+  /** range: what the two ends mean, e.g. ["Short", "Tall"]. */
+  ends?: [string, string] | string[];
+  /** choice */
+  options?: CatalogChoice[];
+  /** color: which family of colours this belongs to. */
+  palette?: string;
+  /**
+   * Only offered when another parameter holds (or does not hold) one of these.
+   *
+   * THREE FORMS, and reading only the first one crashes: of the 19 conditions
+   * in the live schema, 6 use `in`, 10 use `notIn`, and 3 name a `section`
+   * other than their own. An implementation that assumed `in` threw
+   * "Cannot read properties of undefined" on the ten `notIn` cases, which took
+   * the whole editor down with it.
+   */
+  visibleIf?: { key: string; in?: unknown[]; notIn?: unknown[]; section?: string };
+  /** How the engine rolls this one. */
+  random?: { mode?: string; sd?: number; p?: number };
+}
+
+export interface CatalogSection {
+  id: string;
+  label: string;
+  /** Which strip of the editor it belongs under. */
+  tab: string;
+  kinds?: string[];
+  params: CatalogParam[];
+}
+
+/** The sections a given body has at all — a creature has no facial hair. */
+export function sectionsFor(catalog: Catalog, kind: string): CatalogSection[] {
+  return (catalog.sections ?? []).filter((s) => !s.kinds?.length || s.kinds.includes(kind));
+}
+
+/**
+ * The parameters worth showing right now.
+ *
+ * `visibleIf` is the schema's own conditional: a prosthetic's colour means
+ * nothing until a prosthetic is chosen. Drawing it anyway would offer a
+ * control that changes the picture not at all, which reads as broken.
+ *
+ * The condition may point at a parameter in ANOTHER section, so the whole
+ * document is resolved against, not just this section's own values.
+ */
+export function visibleParams(
+  catalog: Catalog,
+  dna: AvatarDNA,
+  section: CatalogSection,
+): CatalogParam[] {
+  return section.params.filter((p) => {
+    const cond = p.visibleIf;
+    if (!cond) return true;
+    const owner =
+      cond.section && cond.section !== section.id
+        ? (catalog.sections ?? []).find((s) => s.id === cond.section)
+        : section;
+    if (!owner) return true;
+    const current =
+      dna.sections?.[owner.id]?.[cond.key] ??
+      owner.params.find((q) => q.key === cond.key)?.default;
+    if (cond.in) return cond.in.includes(current);
+    if (cond.notIn) return !cond.notIn.includes(current);
+    return true;
+  });
+}
+
+/** What a section's parameter is set to, falling back to the schema's default. */
+export function paramValue(dna: AvatarDNA, section: CatalogSection, p: CatalogParam): unknown {
+  return dna.sections?.[section.id]?.[p.key] ?? p.default;
+}
+
+/** Change one parameter. Immutable, like every edit here. */
+export function setParam(
+  dna: AvatarDNA,
+  sectionId: string,
+  key: string,
+  value: unknown,
+): AvatarDNA {
+  return {
+    ...dna,
+    sections: {
+      ...(dna.sections ?? {}),
+      [sectionId]: { ...(dna.sections?.[sectionId] ?? {}), [key]: value },
+    },
+  };
+}
+
+/* ── Rolling a character at random ───────────────────────────────────────── */
+
+/**
+ * Every colour the designers actually chose, grouped by the family it belongs
+ * to.
+ *
+ * Random hex is how a character ends up with mustard skin and lime hair: the
+ * schema names a `palette` per colour but does not publish its swatches, so
+ * the honest source of "a plausible colour for this" is the set of DEFAULTS
+ * the catalog already uses for that same palette — each one picked by somebody.
+ */
+function palettes(catalog: Catalog): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const add = (p: CatalogParam) => {
+    if (p.type !== "color" || !p.palette || typeof p.default !== "string") return;
+    const list = out.get(p.palette) ?? [];
+    if (!list.includes(p.default)) list.push(p.default);
+    out.set(p.palette, list);
+  };
+  for (const s of catalog.sections ?? []) s.params.forEach(add);
+  for (const i of catalog.items) (i.params as CatalogParam[] | undefined)?.forEach(add);
+  return out;
+}
+
+function pick<T>(list: T[], weight: (x: T) => number = () => 1): T | undefined {
+  const total = list.reduce((sum, x) => sum + Math.max(0, weight(x)), 0);
+  if (total <= 0) return list[Math.floor(Math.random() * list.length)];
+  let roll = Math.random() * total;
+  for (const x of list) {
+    roll -= Math.max(0, weight(x));
+    if (roll <= 0) return x;
+  }
+  return list[list.length - 1];
+}
+
+/** A number in range, clustered near the default when the schema says so. */
+function rollRange(p: CatalogParam): number {
+  const min = p.min ?? 0;
+  const max = p.max ?? 1;
+  const step = p.step ?? 0.01;
+  let value: number;
+  if (p.random?.mode === "normal" && typeof p.default === "number") {
+    // Box–Muller, so a build or a nose lands near the middle far more often
+    // than at an extreme — a uniform roll makes almost everybody a caricature.
+    const u = Math.random() || 1e-9;
+    const gauss = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
+    value = p.default + gauss * (p.random.sd ?? 0.2) * (max - min);
+  } else {
+    value = min + Math.random() * (max - min);
+  }
+  const snapped = Math.round(value / step) * step;
+  return Math.min(max, Math.max(min, Number(snapped.toFixed(4))));
+}
+
+/**
+ * A whole character, rolled.
+ *
+ * Deliberately NOT the engine's own randomiser: that lives in a part of their
+ * source this repo does not carry, and the catalog already publishes
+ * everything needed — the ranges, the weighted options, and the `random` hints
+ * the engine itself rolls against.
+ *
+ * The SEED changes too. It is what the engine varies the un-parameterised
+ * details by, so leaving it alone makes every roll a variation on one face.
+ */
+export function randomiseDna(catalog: Catalog, dna: AvatarDNA): AvatarDNA {
+  const swatches = palettes(catalog);
+  let next: AvatarDNA = { ...dna, seed: Math.floor(Math.random() * 0xffffffff) };
+
+  for (const section of sectionsFor(catalog, dna.kind)) {
+    const values: Record<string, unknown> = { ...(next.sections?.[section.id] ?? {}) };
+    for (const p of section.params) {
+      if (p.type === "range") values[p.key] = rollRange(p);
+      else if (p.type === "choice" && p.options?.length) {
+        values[p.key] = pick(p.options, (o) => o.weight ?? 1)?.id ?? p.default;
+      } else if (p.type === "toggle") {
+        // These are rare on purpose — glowing eyes at p=0.03, not a coin flip.
+        values[p.key] = Math.random() < (p.random?.p ?? 0.5);
+      } else if (p.type === "color") {
+        const choices = (p.palette && swatches.get(p.palette)) || [];
+        if (choices.length) values[p.key] = pick(choices) ?? p.default;
+      }
+    }
+    next = { ...next, sections: { ...(next.sections ?? {}), [section.id]: values } };
+  }
+
+  /* And dressed: one item per garment slot that has any, sometimes none. */
+  const outfit: WornItem[] = [];
+  for (const slot of slotsFor(catalog, dna.kind)) {
+    const choices = itemsForSlot(catalog, slot.id, dna.kind);
+    if (!choices.length) continue;
+    const chosen = pick(choices, (i) => i.weight ?? 1);
+    if (!chosen) continue;
+    // An empty slot is a real look; without this everybody wears everything.
+    if (Math.random() < 0.25) continue;
+    const params: Record<string, unknown> = {};
+    for (const p of (chosen.params as CatalogParam[] | undefined) ?? []) {
+      if (p.type === "color") {
+        const choicesForPalette = (p.palette && swatches.get(p.palette)) || [];
+        params[p.key] = choicesForPalette.length ? pick(choicesForPalette) : p.default;
+      } else if (p.default !== undefined) params[p.key] = p.default;
+    }
+    outfit.push({ id: chosen.id, params });
+  }
+  return { ...next, outfit };
 }

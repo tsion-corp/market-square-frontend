@@ -19,14 +19,20 @@ import {
   type Catalog,
   type CatalogItem,
   type CatalogSlot,
+  type CatalogParam,
   clearSlot,
   decodeCode,
   encodeDna,
   encodeMany,
   fetchCatalog,
   itemsForSlot,
+  paramValue,
+  randomiseDna,
   renderPreview,
+  sectionsFor,
+  setParam,
   slotsFor,
+  visibleParams,
   wearItem,
   wornInSlot,
 } from "@/lib/arkplay-catalog";
@@ -551,6 +557,22 @@ export function AvatarStudioScreen() {
           )}
 
           {tab === "avatar" && (
+            <>
+            {/*
+              ROLL THE WHOLE CHARACTER. Not the engine's own randomiser — that
+              lives in a part of their source this repo does not carry — but
+              the catalog publishes the ranges, the weighted options and the
+              `random` hints the engine itself rolls against, so this rolls the
+              same schema. See randomiseDna.
+            */}
+            <button
+              type="button"
+              onClick={() => catalog && dna && setDna(randomiseDna(catalog, dna))}
+              disabled={!catalog || !dna}
+              className="ws-press ws-btn-silver ws-btn-sm mb-3 w-full rounded-full text-[13px] font-semibold disabled:opacity-50"
+            >
+              Surprise me
+            </button>
             <div className="grid grid-cols-4" style={{ gap: 8.446 }}>
               {starters.map((s, i) => (
                 <TileButton
@@ -568,6 +590,39 @@ export function AvatarStudioScreen() {
                 />
               ))}
             </div>
+
+            {/*
+              THE CHARACTER'S OWN PARAMETERS — 17 for a body, 17 for eyes, and
+              so on down the schema. The wardrobe tab dresses somebody; this is
+              where they are somebody in the first place, and a studio without
+              it can only ever offer five faces.
+            */}
+            {catalog && dna && (
+              <div className="mt-5 space-y-5">
+                {sectionsFor(catalog, dna.kind).map((section) => {
+                  const shown = visibleParams(catalog, dna, section);
+                  if (!shown.length) return null;
+                  return (
+                    <section key={section.id}>
+                      <h3 className="mb-2 text-[13px] font-semibold text-white/80">
+                        {section.label}
+                      </h3>
+                      <div className="space-y-3">
+                        {shown.map((p) => (
+                          <ParamControl
+                            key={p.key}
+                            param={p}
+                            value={paramValue(dna, section, p)}
+                            onChange={(v) => setDna(setParam(dna, section.id, p.key, v))}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+            </>
           )}
 
           {tab === "collections" && (
@@ -647,5 +702,96 @@ function TileButton({
         {label}
       </span>
     </button>
+  );
+}
+
+/**
+ * One of the character's own parameters.
+ *
+ * The schema has exactly four kinds and each wants a different control: a
+ * slider whose ends are NAMED (the file says "Short"/"Tall", which is more use
+ * than 0 and 1), a row of chips, a colour well, and a switch. Rendering them
+ * all as text inputs would be the same amount of code and none of the meaning.
+ */
+function ParamControl({
+  param,
+  value,
+  onChange,
+}: {
+  param: CatalogParam;
+  value: unknown;
+  onChange: (next: unknown) => void;
+}) {
+  if (param.type === "range") {
+    return (
+      <label className="block">
+        <span className="mb-1 flex items-baseline justify-between text-[12px] text-white/60">
+          <span>{param.label}</span>
+          {param.ends?.length === 2 && (
+            <span className="text-[11px] text-white/35">
+              {param.ends[0]} – {param.ends[1]}
+            </span>
+          )}
+        </span>
+        <input
+          type="range"
+          min={param.min ?? 0}
+          max={param.max ?? 1}
+          step={param.step ?? 0.01}
+          value={typeof value === "number" ? value : ((param.default as number) ?? 0.5)}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-full accent-white"
+        />
+      </label>
+    );
+  }
+
+  if (param.type === "choice") {
+    return (
+      <div>
+        <span className="mb-1 block text-[12px] text-white/60">{param.label}</span>
+        <div className="flex flex-wrap gap-1.5">
+          {(param.options ?? []).map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onChange(o.id)}
+              aria-pressed={value === o.id}
+              className={`rounded-full px-2.5 py-1 text-[12px] transition-colors ${
+                value === o.id ? "bg-white text-black" : "bg-white/[0.06] text-white/70"
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (param.type === "color") {
+    return (
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-[12px] text-white/60">{param.label}</span>
+        <input
+          type="color"
+          value={typeof value === "string" ? value : ((param.default as string) ?? "#ffffff")}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-7 w-12 cursor-pointer rounded border border-white/10 bg-transparent"
+        />
+      </label>
+    );
+  }
+
+  return (
+    <label className="flex items-center justify-between gap-3">
+      <span className="text-[12px] text-white/60">{param.label}</span>
+      <input
+        type="checkbox"
+        checked={value === true}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 accent-white"
+      />
+    </label>
   );
 }
