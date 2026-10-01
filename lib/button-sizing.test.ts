@@ -62,6 +62,31 @@ const DESIGN_LOCKED = new Set<string>([
   // the file's own geometry on a surface built to its pixels.
   "components/layout/house-profile-screen.tsx",
   /*
+    The avatar studio's preview card (1863:2412). Its BACK uses the scale —
+    `ws-iconbtn-lg` is exactly the file's 48 — but the close disc on the card
+    is the file's own 44.118, a constant the scale cannot express: every
+    `ws-iconbtn-*` tier shrinks to 32..36 on a fine pointer, and this one is
+    drawn at one size over a 580x440 picture whatever is pointing at it.
+
+    WORTH KNOWING RATHER THAN HIDING: at 44.118 it clears the touch floor, and
+    it is not a lone route out — the studio is built on `Sheet`, so Escape and
+    the backdrop close it too, and the header's Back does the same job.
+  */
+  "features/profile/components/avatar-studio-screen.tsx",
+  /*
+    The profile editor (2112:19429), built to the file's pixels. Its controls
+    are not scale tiers and could not be: the cover's camera is a 38 disc
+    centred on a photograph, the profile picture is a 71 square with its own
+    camera over it, and Save is 47 — one under `ws-btn-lg`, carrying the file's
+    own four-stop gradient rather than `ws-btn-silver`'s.
+
+    WORTH KNOWING RATHER THAN HIDING: the 38 camera is under the 44 touch
+    floor. It is not a lone route to anything — the same picture can be changed
+    from the profile's own camera button, and the sheet closes on Escape, the
+    backdrop and its own cross.
+  */
+  "features/profile/components/edit-profile-sheet.tsx",
+  /*
     Buy-a-gift (1285:83137). Its ACTION uses the scale — `ws-btn-lg` is
     exactly the node's 48 at 16px — but the dialog's three other controls sit
     below the scale's smallest tier on purpose: a 43 round close, and 32

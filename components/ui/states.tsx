@@ -59,17 +59,32 @@ export function ErrorState({
   fallback = "Something went wrong.",
   onRetry,
   className,
+  quiet = false,
 }: {
   error: unknown;
   fallback?: string;
   onRetry?: () => void;
   className?: string;
+  /**
+   * A calm inline line instead of the bordered box, for a list that is already
+   * populated or a surface where a full panel would read as alarming. Same copy
+   * and the same retry, in the meta grey rather than the fault red.
+   */
+  quiet?: boolean;
 }) {
   // Being signed out is not an error. Retrying a 401 just repeats it, so every
   // error surface in the app turns into the sign-in invitation instead — one
   // change rather than thirty-three call sites, and no gated read can leave a
   // signed-out visitor at a dead end.
   if (isAuthError(error)) return <SignInPrompt className={className} />;
+  if (quiet) {
+    return (
+      <div className={cn("flex flex-col items-center gap-2 py-8 text-center", className)}>
+        <p className="text-[13px] text-meta">{errorMessage(error, fallback)}</p>
+        {onRetry && <RetryButton onRetry={onRetry} />}
+      </div>
+    );
+  }
   return (
     <div className={cn("flex flex-col items-center gap-3 rounded-[16.5px] border border-white/10 bg-transparent px-6 py-10 text-center", className)}>
       <p className="text-sm text-down">{errorMessage(error, fallback)}</p>

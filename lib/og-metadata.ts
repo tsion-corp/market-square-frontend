@@ -140,6 +140,10 @@ const CLOUD_PREFIX = "/dpynyht1l/";
 
 const POST_TRANSFORMATION = "c_fill,g_auto,w_1200,h_630,f_jpg,q_auto:good";
 const AVATAR_TRANSFORMATION = "c_fill,g_face,w_400,h_400,f_jpg,q_auto:good";
+// The invite card's 380×108 banner strip (≈3.52:1), at 2× for a large card.
+// `g_auto` picks the subject so a tall photo is not cropped to a dark sliver,
+// and a real render at this size is sharp where upscaling a w_256 source blurs.
+const BANNER_TRANSFORMATION = "c_fill,g_auto,w_912,h_260,f_jpg,q_auto:good";
 
 /**
  * A Cloudinary transformation segment: comma-separated `key_value` parts whose
@@ -154,7 +158,7 @@ const TRANSFORMATION_SEGMENT = new RegExp(`^(?:${TRANSFORMATION_KEYS})_[^,]+(?:,
 /** An issued upload key: optional version, `uploads/<owner>/`, folders, a file with an extension. No `%`, no `$`. */
 const ISSUED_KEY = /^(?:v\d+\/)?uploads\/[A-Za-z0-9:_-]+\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.[A-Za-z0-9]{2,5}$/;
 
-export type OgImageVariant = "post" | "avatar";
+export type OgImageVariant = "post" | "avatar" | "banner";
 
 /**
  * A crawler-sized JPEG of an image or video on OUR Cloudinary cloud, or null.
@@ -201,7 +205,12 @@ export function ogImageUrl(raw: unknown, variant: OgImageVariant): string | null
   // What remains has to be an asset we issued — see the header.
   if (!ISSUED_KEY.test(tail.join("/"))) return null;
 
-  const base = variant === "avatar" ? AVATAR_TRANSFORMATION : POST_TRANSFORMATION;
+  const base =
+    variant === "avatar"
+      ? AVATAR_TRANSFORMATION
+      : variant === "banner"
+        ? BANNER_TRANSFORMATION
+        : POST_TRANSFORMATION;
   let transformation = base;
   if (resource === "video") {
     transformation = `so_0,${base}`;

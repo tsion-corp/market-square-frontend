@@ -11,6 +11,8 @@ import { canGoBack } from "@/lib/nav-history";
 import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
+import { coverBackgroundUrl, coverPictureUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
+import { coverImageUrl } from "@/lib/arkplay-avatar";
 
 /**
  * THE PROFILE COVER — node 435:27500, redrawn as 1021:20229 (live file,
@@ -83,18 +85,63 @@ export function ProfileCover({
   /* The picture open full screen, if any: the profile picture or the cover. */
   const [viewing, setViewing] = useState<{ src: string; alt: string } | null>(null);
   /*
-    THE COVER IS HARD-CODED FOR NOW — node 2102:18362 (2026-09-28): the ARK
-    mascot standing on the orange checkered sweep, composed from the node's own
-    raster layers at its exact geometry (bg crop offset −300.94/−118.02, the
-    1024² mascot cut-out at 293² @ 133.5,63) and baked at 3x to
-    `public/profile/ark-cover.jpg`. EVERY profile wears it — `coverUrl` is
-    deliberately not read — until the avatar system ogazboiz's teammate is
-    building ships and profiles get generated covers of their own. The person's
-    own PROFILE PICTURE (the rounded tile below) is untouched and still theirs
-    to change. To restore user covers: `profile.coverUrl ?? asset(…)` again.
+    THE BACKGROUND IS THE PERSON'S NOW — node 2102:18362 (2026-09-28) supplied
+    the composition and the geometry, and the mascot still stands exactly where
+    it drew him. What changed is the ground under him: `coverUrl` is read
+    again, so a profile wears the background its owner picked and falls back to
+    the ARK sweep when they have picked none.
+
+    It was hard-coded because this repo's own PATCH input omitted `coverUrl`
+    while the service accepted it all along — the field was never missing, only
+    the line that declared it. See features/profile/lib/api.ts.
+
+    The MASCOT is still everyone's. He becomes the person's own character when
+    the avatar engine lands; the layering here is what makes that a swap of one
+    image rather than a rebuild of the card.
   */
-  const coverSrc = asset("/profile/ark-cover.jpg");
+  /*
+    Opening the cover full screen shows the BACKGROUND, not the baked
+    composite. The composite is a picture of a card that no longer exists once
+    the ground is the person's own — a viewer showing somebody the ARK sweep
+    while their card renders violet is showing them another profile's cover.
+  */
+  const { code: characterCode, background, anim } = decodeAvatarCover(profile.avatarConfig);
+  const coverSrc = coverBackgroundUrl(background, profile.coverUrl);
+  /*
+    WHAT OPENING THE COVER SHOWS IS THE COVER.
+
+    It used to show the GROUND — the background layer alone, with no character
+    on it — because that is what the cover was back when it was a character
+    composited over a separate picture. Now the cover IS one rendered image, so
+    tapping it opens that. Showing the ground instead meant tapping a character
+    standing in a meadow and being handed an empty meadow.
+
+    Somebody with no character still has only a ground, and that is what opens.
+  */
+  /* Twice the card's size: this opens full screen, where the card's own 741
+     would be visibly soft. It is SVG, so the cost is bytes rather than pixels,
+     and it is cached on its own URL like every other. */
+  const viewerSrc = coverPictureUrl(profile.avatarConfig, profile.coverUrl, {
+    width: 1482,
+    height: 946,
+  }).src;
   const avatarSrc = profile.avatarUrl ?? artworkForSeed(resolveSeed({ id: profile.id, name }));
+  /*
+    THE CHARACTER STANDING ON THE BACKGROUND — the swap the layering above was
+    built for. Whoever has built one stands as THEMSELVES here; everyone else
+    keeps the ARK mascot, which is what they are already wearing.
+
+    IT IS ITS OWN FIELD, and it took two wrong homes to get here. It was read
+    out of `avatarUrl`, which quietly made a character and a profile picture
+    the same thing — building one replaced the person's photograph. Then it was
+    carried in `coverUrl`, which the service refuses outright: that field goes
+    through `verifyAttachment` and accepts only a picture this person uploaded.
+
+    `avatarConfig` is PUBLIC, which is the whole point and was nearly missed —
+    the cover is drawn on `/u/<username>` for every visitor, so a field only
+    its owner could read would have meant nobody ever saw anybody's character
+    but their own.
+  */
   useLayoutEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -119,30 +166,75 @@ export function ProfileCover({
       above the actions; `md:` returns the file's frame.
     */
     <div ref={cardRef} className="relative h-[300px] w-full overflow-hidden rounded-[20px] md:aspect-[741/473] md:h-auto">
-      {/* THE COVER IS LAYERED, not one flat picture, so the mascot's head can
-          be swapped per user (the seeded-avatar personalisation ogazboiz is
-          building toward). Layer 1: the orange checkered sweep, baked from the
-          node's own raster at its exact crop (offset −300.94/−118.02).
-          Layer 2: the 1024² transparent mascot cut-out — the very bitmap the
-          file's SVG wraps — positioned by the node's geometry: a 293² box at
-          (133.5, 63) in the 535×342 frame → centre-x 52.34%, height 85.67%,
-          its feet 4.09% below the card edge (the frame clips them, as the
-          file does). Layer 3 (coming): the per-seed HEAD overlay. */}
+      {/* THE COVER IS LAYERED, not one flat picture, and that is the whole
+          point of it: a person changes the ground without touching the
+          character, and the character without touching the ground.
+          Layer 1: the background — the ARK sweep baked from the node's own
+          raster at its exact crop (offset −300.94/−118.02), or the one its
+          owner picked.
+          Layer 2: the character, standing on it. The mascot for everyone who
+          has not built one; their own 2D avatar once they have. */}
+      {/* The ground beneath: an uploaded photograph, or the ARK sweep. It
+          shows through whenever the character's own scene is transparent. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={asset("/profile/ark-cover-bg.jpg")}
+        src={coverSrc}
         alt=""
         aria-hidden
         className="absolute inset-0 h-full w-full object-cover"
       />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={asset("/profile/ark-mascot.png")}
-        alt=""
-        aria-hidden
-        className="absolute w-auto max-w-none -translate-x-1/2"
-        style={{ left: "52.336%", bottom: "-4.094%", height: "85.673%" }}
-      />
+      {/*
+        LAYER 2 — THE CHARACTER, at the spot 2102:18362 stands the mascot on
+        (centre-x 52.336%), whoever it is.
+
+        The two pictures need different numbers because they are padded
+        differently inside their own canvases, and the geometry follows the
+        FIGURE, not the file. Measured: the mascot's ink fills 94.6% of its
+        1024², its feet 3.6% above the bottom edge; an ArkPlay `full` render
+        gives a humanoid 84.6% of a 512², its feet 2.5% up. So the ArkPlay
+        canvas is drawn taller — 95.8% against 85.673% — which lands a humanoid
+        at 81.0% of the card, the same height the mascot has always stood, and
+        its foot within a point of his. A creature stands shorter because a
+        creature IS shorter; see coverCharacterUrl for why that is left alone.
+      */}
+      {characterCode ? (
+        <>
+          {/*
+            THE SCENE IS SQUARE AND THE CARD IS NOT. A 741x473 crop of a square
+            render cuts the legs off at mid-thigh — measured, not guessed. So
+            the picture is CONTAINED at full height and the sides are filled by
+            a blurred, over-scaled copy of itself, which is why the bleed
+            always matches: it is the same sky.
+
+            Both layers are transparent when the scene is `none`, so the ground
+            above simply shows through and the character stands on it.
+          */}
+          {/*
+            THE SCENE FILLS THE CARD. Drawn at 741x473 rather than square, so
+            there is nothing to letterbox and nothing to crop — see
+            app/api/avatar/cover for why that cannot come from the avatar
+            service and does not need to.
+          */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            /* The clip its owner chose. The picture pauses itself for a visitor
+               whose system asks for less movement, so one cover serves both. */
+            src={coverImageUrl(characterCode, { anim })}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        </>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={asset("/profile/ark-mascot.png")}
+          alt=""
+          aria-hidden
+          className="absolute w-auto max-w-none -translate-x-1/2"
+          style={{ left: "52.336%", bottom: "-4.094%", height: "85.673%" }}
+        />
+      )}
 
       {/* 108 of 473 at the top, 215 at the foot — see the note above for why
           these are vertical and why the alphas are not the stops' 1.0. */}
@@ -159,7 +251,7 @@ export function ProfileCover({
           layer above lets taps through except on its own controls. */}
       <button
         type="button"
-        onClick={() => setViewing({ src: coverSrc, alt: "Cover photo" })}
+        onClick={() => setViewing({ src: viewerSrc, alt: "Cover photo" })}
         aria-label="View cover photo"
         className="absolute inset-0 cursor-zoom-in"
       />

@@ -92,6 +92,21 @@ const RawProfileSchema = z.object({
    */
   coverUrl: z.string().nullable().optional().default(null),
   /**
+   * THE 2D CHARACTER THAT STANDS ON THE COVER — its ArkPlay share code.
+   *
+   * Opaque by contract: the service stores the characters and has no opinion
+   * about them, so the encoding can change here without a migration. Not a
+   * URL, never fetched, never rendered as a source — which is what makes it
+   * safe to hold something the cover field could not (see
+   * lib/profile-backgrounds.ts for why `coverUrl` cannot carry it).
+   *
+   * Optional and nullable on the same grounds as `coverUrl` above: it is on
+   * `OwnProfile` in the service's repo and NOT yet on the deployed spec, so a
+   * client that required it would fail to parse every profile in production.
+   * Absent means the person has no character and wears the shared mascot.
+   */
+  avatarConfig: z.string().nullable().optional().default(null),
+  /**
    * THE LINK ROW — node 545:47631 draws `akar-icons:link-chain` and a URL at
    * 15/20 under the place. LIVE on `PublicProfile` and `PATCH /me` at :8080
    * (null clears, absent leaves alone; the service accepts http(s) only).

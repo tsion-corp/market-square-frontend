@@ -194,6 +194,11 @@ export function VideoViewer({
               // Occlusion is not observable, so the surface that knows it
               // covers everything says so.
               layer={VIDEO_LAYER.overlay}
+              // Measure playback against THIS scroll container, not the
+              // viewport — otherwise a reel scrolled out of the snap feed keeps
+              // reporting itself visible and keeps playing (the same root the
+              // active-slide observer above uses).
+              scrollRootRef={scrollRef}
             />
           </div>
         ))}

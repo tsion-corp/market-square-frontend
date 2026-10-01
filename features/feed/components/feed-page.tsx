@@ -14,6 +14,7 @@ import { useLaneSignal } from "@/features/feed/hooks/use-lane-signal";
 import { Composer } from "@/features/feed/components/composer";
 import { VideoViewer } from "@/features/feed/components/video-viewer";
 import type { VideoItem } from "@/lib/video-context";
+import { isVideoPost } from "@/lib/media";
 import { FeedItemCard } from "@/features/feed/components/feed-cards";
 import type { FeedItem, Lane, Post } from "@/features/feed/lib/types";
 import type { Profile } from "@/lib/api/schemas";
@@ -389,11 +390,25 @@ export function FeedPage({
       ),
     [items]
   );
+  /*
+    THE IMMERSIVE VIEWER IS VIDEO-ONLY — the "reels" rule, the same one Explore
+    already follows (`videoPostsOf`). A picture in the swipe feed meant scrolling
+    landed on a still with nothing to play, and the previous clip's sound bled
+    over it (ogazboiz, 2026-10-01: "filter out the text and image, only the video
+    should be playing"). So the viewer pages through VIDEOS only; a picture opens
+    in the feed instead (see `openMedia`).
+  */
+  const videoItems = useMemo(() => mediaItems.filter((post) => isVideoPost(post)), [mediaItems]);
   const [openVideoId, setOpenVideoId] = useState<string | null>(null);
 
-  // The card morphs into the player. Feature-detected, and skipped under
-  // reduced motion, the same rule Explore's grid uses.
+  // A VIDEO card morphs into the player; a picture opens in the feed (the viewer
+  // is video-only). Feature-detected, and skipped under reduced motion — the
+  // same rule Explore's grid uses.
   const openMedia = (post: Post) => {
+    if (!isVideoPost(post)) {
+      router.push(sq(`/feed?post=${post.id}`));
+      return;
+    }
     const apply = () => setOpenVideoId(post.id);
     if (
       !document.startViewTransition ||
@@ -548,7 +563,7 @@ export function FeedPage({
      tap on a video card performs. */
   const viewer = openVideoId && (
     <VideoViewer
-      items={mediaItems}
+      items={videoItems}
       activeId={openVideoId}
       onActiveChange={setOpenVideoId}
       onClose={() => setOpenVideoId(null)}

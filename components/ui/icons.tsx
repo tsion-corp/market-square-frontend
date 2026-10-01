@@ -512,6 +512,26 @@ export function IconFullscreen({ className }: IconProps) {
   );
 }
 
+// A FILL glyph — two diagonal arrows breaking out of a box (the "media-expand"
+// mark ogazboiz supplied 2026-09-29). Fill, not stroke, so it does not go
+// through `base()`; sized by className like the rest. Used by the room
+// mini-player's "Return to room" to say "open this back up to full".
+export function IconMediaExpand({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M13 3h8v8h-2V6.41l-5.043 5.05-1.414-1.42L17.586 5H13V3zm-1.543 10.96L6.414 19H11v2H3v-8h2v4.59l5.043-5.05 1.414 1.42z" />
+    </svg>
+  );
+}
+
 /**
  * The raised hand: asking for the floor.
  *
