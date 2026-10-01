@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMe } from "@/hooks/use-me";
+import { useAuth } from "@/hooks/use-auth";
 import { canGoBack } from "@/lib/nav-history";
 import { useUpdateMe } from "@/features/profile/hooks/use-profile";
 import { asset, sq } from "@/lib/square-path";
@@ -87,7 +88,24 @@ interface Starter {
 
 export function AvatarStudioScreen() {
   const router = useRouter();
-  const me = useMe().data;
+  const meQuery = useMe();
+  const me = meQuery.data;
+  const { ready, authenticated } = useAuth();
+  /*
+    ─── WAIT FOR "ME" BEFORE PUTTING A FACE ON THE SCREEN ──────────────────────
+    `useAuth().ready` is false on the first render and `/me` is not even
+    requested until it turns true, so this screen's first pass ALWAYS saw a
+    null code. Falling back to a starter there installed a stranger — and
+    because the fallback is `current ?? opening`, the real character arriving a
+    moment later was thrown away. The person then edited somebody else's face
+    and Save wrote it over their own.
+
+    Measured, so this is a race that really does turn the wrong way: the
+    catalog fetch that gates the fallback took 2.2s/5.5s/2.2s from here, while
+    `starters.json` is 1–11ms. Any cold load where auth hydration outlasts the
+    catalog loses.
+  */
+  const identityKnown = !ready || !authenticated || !meQuery.isPending;
   const update = useUpdateMe();
   /* A page, not a dialog: there is nothing to open, so everything that used to
      wait on `open` runs once the route is mounted. */
@@ -116,7 +134,7 @@ export function AvatarStudioScreen() {
 
   /* ── What may be worn, and who we start as ─────────────────────────────── */
   useEffect(() => {
-    if (!open) return;
+    if (!open || !identityKnown) return;
     const ac = new AbortController();
     (async () => {
       try {
@@ -168,7 +186,7 @@ export function AvatarStudioScreen() {
       }
     })();
     return () => ac.abort();
-  }, [open, code]);
+  }, [open, code, identityKnown]);
 
   /*
     ── THE PICTURE ───────────────────────────────────────────────────────────
@@ -260,6 +278,7 @@ export function AvatarStudioScreen() {
   }, [catalog, dna, activeSlot, items]);
 
   const [tileCodes, setTileCodes] = useState<(string | null)[]>([]);
+  const wardrobeOpen = tab === "fashion";
   const [starterCodes, setStarterCodes] = useState<(string | null)[]>([]);
 
   /* The starters are fixed, so their pictures are encoded once rather than
@@ -279,22 +298,33 @@ export function AvatarStudioScreen() {
       });
     return () => ac.abort();
   }, [starters]);
+  /*
+    DEBOUNCED, AND ONLY WHILE THE WARDROBE IS ON SCREEN.
+
+    This hung off `dna` undebounced, so one drag of a slider in the Avatar tab
+    fired one encode of the WHOLE rail per input event — measured at 50 posts
+    and 1.85 MB for a single second of dragging, for pictures nobody was
+    looking at. The preview was debounced; this was not.
+  */
   useEffect(() => {
-    if (variants.length === 0) {
-      return;
-    }
+    if (!wardrobeOpen || variants.length === 0) return;
     const ac = new AbortController();
-    encodeMany(variants, ac.signal)
-      .then((codes) => {
-        if (!ac.signal.aborted) setTileCodes(codes);
-      })
-      .catch(() => {
-        /* The rail still works by name; a missing picture is not worth a
-           banner over a studio the person is in the middle of using. */
-        if (!ac.signal.aborted) setTileCodes([]);
-      });
-    return () => ac.abort();
-  }, [variants]);
+    const timer = setTimeout(() => {
+      encodeMany(variants, ac.signal)
+        .then((codes) => {
+          if (!ac.signal.aborted) setTileCodes(codes);
+        })
+        .catch(() => {
+          /* The rail still works by name; a missing picture is not worth a
+             banner over a studio the person is in the middle of using. */
+          if (!ac.signal.aborted) setTileCodes([]);
+        });
+    }, 250);
+    return () => {
+      ac.abort();
+      clearTimeout(timer);
+    };
+  }, [variants, wardrobeOpen]);
 
   const save = useCallback(async () => {
     if (!dna) return;

@@ -96,9 +96,18 @@ export async function fetchCatalog(signal?: AbortSignal): Promise<Catalog> {
   return (await res.json()) as Catalog;
 }
 
-/** The slots a given body can actually wear, in the service's own order. */
+/**
+ * The slots a given body can actually wear, in the service's own order.
+ *
+ * `custom` is excluded on purpose: the codec requires an uploaded image for it
+ * ("A custom accessory had no usable image and was removed") and Square has no
+ * way to upload one to that service. Offering the tile would be offering the
+ * one item in the catalog that silently cannot be worn.
+ */
 export function slotsFor(catalog: Catalog, kind: string): CatalogSlot[] {
-  return catalog.slots.filter((s) => !s.kinds?.length || s.kinds.includes(kind));
+  return catalog.slots.filter(
+    (s) => s.id !== "custom" && (!s.kinds?.length || s.kinds.includes(kind)),
+  );
 }
 
 /** The items offered for one slot, for one kind of body. */
@@ -122,6 +131,33 @@ function slotOf(catalog: Catalog, id: string): string | null {
   return catalog.items.find((i) => i.id === id)?.slot ?? null;
 }
 
+/*
+  ─── A DOCUMENT HAS TWO WARDROBES, NOT ONE ──────────────────────────────────
+  `outfit` holds GARMENTS and `accessories` holds everything else, and the
+  codec sorts them by the catalog's own `slot.kind`, discarding anything found
+  in the wrong list (vendor/arkplay-dna/dna/normalize.ts: `if (isGarment !==
+  garment) continue`). Six of the 23 slots are garments.
+
+  Writing everything to `outfit` therefore made 17 slots — hats, glasses,
+  wings, necklaces, pets, every creature item — do NOTHING: the picture never
+  changed, every tile in those rails was the same character, and the choice was
+  dropped on save. 193 of the catalog's 256 items were unreachable, with 2650
+  tests green over it.
+
+  It also silently dropped GARMENTS: the codec reads only the first `max * 2`
+  entries of a list, so accessories piling into `outfit` pushed the top someone
+  picked last out of range and saved them with no top at all.
+*/
+function isGarmentSlot(catalog: Catalog, slot: string | null): boolean {
+  if (!slot) return false;
+  return catalog.slots.find((s) => s.id === slot)?.kind === "garment";
+}
+
+/** The list an item lives in, which the catalog decides and the codec enforces. */
+function listFor(catalog: Catalog, slot: string): "outfit" | "accessories" {
+  return isGarmentSlot(catalog, slot) ? "outfit" : "accessories";
+}
+
 /**
  * Wear an item, taking off whatever already held its slot.
  *
@@ -131,19 +167,34 @@ function slotOf(catalog: Catalog, id: string): string | null {
  * keeping the previous one.
  */
 export function wearItem(catalog: Catalog, dna: AvatarDNA, item: CatalogItem): AvatarDNA {
-  const list = dna.outfit ?? [];
-  const kept = list.filter((w) => slotOf(catalog, w.id) !== item.slot);
-  return { ...dna, outfit: [...kept, { id: item.id, params: defaultParams(item) }] };
+  const key = listFor(catalog, item.slot);
+  const kept = (dna[key] ?? []).filter((w) => slotOf(catalog, w.id) !== item.slot);
+  return { ...dna, [key]: [...kept, { id: item.id, params: defaultParams(item) }] };
 }
 
 /** Take off whatever is in a slot. Wearing nothing is a valid choice. */
 export function clearSlot(catalog: Catalog, dna: AvatarDNA, slot: string): AvatarDNA {
-  return { ...dna, outfit: (dna.outfit ?? []).filter((w) => slotOf(catalog, w.id) !== slot) };
+  /* BOTH lists, for the same reason wornInSlot reads both: a starter arrives
+     with its glasses in `accessories`, and clearing only the slot's "proper"
+     list left them on the face with None highlighted. */
+  const strip = (list: WornItem[] | undefined) =>
+    (list ?? []).filter((w) => slotOf(catalog, w.id) !== slot);
+  return { ...dna, outfit: strip(dna.outfit), accessories: strip(dna.accessories) };
 }
 
-/** What is worn in a slot right now, or null. */
+/**
+ * What is worn in a slot right now, or null.
+ *
+ * Both lists are searched rather than the one the slot belongs to: a document
+ * that arrived with an item on the other side (a starter, or anything saved
+ * before this was understood) must still read as worn, or the editor shows
+ * "None" selected over a character who is visibly wearing glasses.
+ */
 export function wornInSlot(catalog: Catalog, dna: AvatarDNA, slot: string): string | null {
-  return (dna.outfit ?? []).find((w) => slotOf(catalog, w.id) === slot)?.id ?? null;
+  const found = [...(dna.outfit ?? []), ...(dna.accessories ?? [])].find(
+    (w) => slotOf(catalog, w.id) === slot,
+  );
+  return found?.id ?? null;
 }
 
 /* ── Seeing the result ───────────────────────────────────────────────────── */
@@ -452,6 +503,14 @@ export function randomiseDna(catalog: Catalog, dna: AvatarDNA): AvatarDNA {
   for (const section of sectionsFor(catalog, dna.kind)) {
     const values: Record<string, unknown> = { ...(next.sections?.[section.id] ?? {}) };
     for (const p of section.params) {
+      /*
+        `keep` MEANS KEEP. The schema marks 13 parameters this way — a
+        creature's body plan and gait, and the house art style (outline, ink,
+        shading, grade, detail). Rolling them turned a fox into an aquatic blob
+        and re-drew Square's own look, which is the opposite of what a
+        randomiser is for.
+      */
+      if (p.random?.mode === "keep") continue;
       if (p.type === "range") values[p.key] = rollRange(p);
       else if (p.type === "choice" && p.options?.length) {
         values[p.key] = pick(p.options, (o) => o.weight ?? 1)?.id ?? p.default;
@@ -466,15 +525,21 @@ export function randomiseDna(catalog: Catalog, dna: AvatarDNA): AvatarDNA {
     next = { ...next, sections: { ...(next.sections ?? {}), [section.id]: values } };
   }
 
-  /* And dressed: one item per garment slot that has any, sometimes none. */
+  /*
+    And dressed: one item per slot that has any, sometimes none — into the
+    RIGHT list. Piling everything into `outfit` is what made 17 of the 23 slots
+    silently vanish, and a rolled character came back wearing nothing it had
+    been given but its clothes.
+  */
   const outfit: WornItem[] = [];
+  const accessories: WornItem[] = [];
   for (const slot of slotsFor(catalog, dna.kind)) {
     const choices = itemsForSlot(catalog, slot.id, dna.kind);
     if (!choices.length) continue;
-    const chosen = pick(choices, (i) => i.weight ?? 1);
-    if (!chosen) continue;
     // An empty slot is a real look; without this everybody wears everything.
     if (Math.random() < 0.25) continue;
+    const chosen = pick(choices, (i) => i.weight ?? 1);
+    if (!chosen) continue;
     const params: Record<string, unknown> = {};
     for (const p of (chosen.params as CatalogParam[] | undefined) ?? []) {
       if (p.type === "color") {
@@ -482,7 +547,10 @@ export function randomiseDna(catalog: Catalog, dna: AvatarDNA): AvatarDNA {
         params[p.key] = choicesForPalette.length ? pick(choicesForPalette) : p.default;
       } else if (p.default !== undefined) params[p.key] = p.default;
     }
-    outfit.push({ id: chosen.id, params });
+    (listFor(catalog, slot.id) === "outfit" ? outfit : accessories).push({
+      id: chosen.id,
+      params,
+    });
   }
-  return { ...next, outfit };
+  return { ...next, outfit, accessories };
 }

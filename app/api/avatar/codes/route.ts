@@ -23,11 +23,21 @@ import { encodeShareCode } from "@/vendor/arkplay-dna/dna/codec.ts";
  * back but the code.
  */
 
-/** A DNA document is ~2.7KB; this is room for the largest plausible one. */
-const MAX_BODY = 64 * 1024;
+/*
+  THE TWO CAPS HAVE TO AGREE, AND THEY DID NOT.
 
-/** One rail of the wardrobe. The widest slot in the catalog holds 30. */
+  A DNA document is 2.4–3.5 KB, so a 64 KB body could carry about 26 of them —
+  while the batch cap said 64. The widest rail in the catalog (head, 30 items)
+  needs 31 and came to ~77 KB, so it answered 413 every time and every tile in
+  the Hats rail sat blank forever. After one "Surprise me" the document grows
+  and both hand rails joined it.
+
+  The body cap is now sized from the batch cap rather than guessed next to it:
+  64 documents at 8 KB each, with room for the ones that are unusually large.
+*/
 const MAX_BATCH = 64;
+const MAX_DOC = 8 * 1024;
+const MAX_BODY = MAX_BATCH * MAX_DOC;
 
 /*
   THE CODEC IS NOT A VALIDATOR, AND ASSUMING IT WAS COST A REAL BUG.
@@ -52,8 +62,20 @@ function shapedAvatar(dna: unknown): boolean {
 }
 
 export async function POST(request: Request) {
+  /*
+    Refuse before buffering when the client says how big it is: `await
+    request.text()` reads the whole body into a string first, so checking only
+    afterwards means a 20 MB post is fully resident before being rejected.
+  */
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BODY) {
+    return NextResponse.json({ code: "too_large", message: "That avatar is too big." }, { status: 413 });
+  }
+
   const raw = await request.text();
-  if (raw.length > MAX_BODY) {
+  // BYTES, not UTF-16 units: `raw.length` counts a 4-byte emoji as 2, so a
+  // body of emoji slipped through at nearly twice the intended size.
+  if (Buffer.byteLength(raw, "utf8") > MAX_BODY) {
     return NextResponse.json({ code: "too_large", message: "That avatar is too big." }, { status: 413 });
   }
 

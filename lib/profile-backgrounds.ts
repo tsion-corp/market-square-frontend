@@ -84,7 +84,16 @@ export function defaultBackgroundUrl(): string {
 
 /** Absolute if the caller gave an origin, and it survives a `?c=` already there. */
 function absolute(origin: string, path: string): string {
-  return /^[a-z][a-z0-9+.-]*:/i.test(path) ? path : `${origin.replace(/\/+$/, "")}${path}`;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return path;
+  const base = origin.replace(/\/+$/, "");
+  /*
+    An empty origin is what `window.location.origin` reads as during SSR, and
+    joining it produced a relative string that `new URL()` then threw on —
+    ERR_INVALID_URL out of a background pick. The placeholder keeps the value
+    parseable; `storedCoverUrl` is only ever called from a click handler, where
+    a real origin exists.
+  */
+  return `${base || PARSE_BASE}${path}`;
 }
 
 function parsed(coverUrl: string | null | undefined): URL | null {
@@ -93,11 +102,14 @@ function parsed(coverUrl: string | null | undefined): URL | null {
   try {
     // A base is supplied so a legacy RELATIVE value still parses; only the
     // path and query are ever read from the result.
-    return new URL(trimmed, "https://square.invalid");
+    return new URL(trimmed, PARSE_BASE);
   } catch {
     return null;
   }
 }
+
+/** Never returned to a caller — see `coverBackgroundUrl`, which strips it. */
+const PARSE_BASE = "https://square.invalid";
 
 /**
  * The cover as it is STORED — the one value the profile keeps.
@@ -138,7 +150,14 @@ export function coverBackgroundUrl(coverUrl: string | null | undefined): string 
     issued can answer 403 for a signed URL, and the picture is the point here.
   */
   url.searchParams.delete("c");
-  return url.toString();
+  /*
+    THE PARSE BASE MUST NOT LEAK. A relative stored cover (an upload URL that
+    is not absolute) came back as "https://square.invalid/uploads/me.jpg" — a
+    host that does not exist, rendered as a broken image. Only the origin the
+    value actually carried belongs in the answer.
+  */
+  const absoluteInput = /^[a-z][a-z0-9+.-]*:/i.test((coverUrl ?? "").trim());
+  return absoluteInput ? url.toString() : `${url.pathname}${url.search}`;
 }
 
 const CURATED = /\/profile\/backgrounds\/([A-Za-z0-9_-]+)\.svg$/;
