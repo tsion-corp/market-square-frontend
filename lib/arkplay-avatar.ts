@@ -91,6 +91,25 @@ export function coverCharacterUrl(code: string, size = 512): string {
   return avatarImageUrl(code, { crop: "full", size, background: false });
 }
 
+/**
+ * THE CHARACTER *IN THEIR SCENE* — what a cover actually shows.
+ *
+ * The engine draws the wallpaper, not us: the `scene` section carries 14
+ * presets, six background modes, eleven patterns, two colours, a frame and a
+ * ring, and all of it rides inside the share code. So a cover needs no second
+ * field and no second picture.
+ *
+ * ─── WHY THIS IS SAFE TO USE FOR EVERYONE ───────────────────────────────────
+ * `scene.background: "none"` renders TRANSPARENT even through this, verified
+ * against the live service (corner alpha 0, against 255 for every other mode).
+ * So one request serves both kinds of cover: somebody with a scene gets it,
+ * and somebody without gets a cut-out that composites over whatever ground
+ * their profile already had. Nothing has to decode the code to find out which.
+ */
+export function coverSceneUrl(code: string, size = 512): string {
+  return avatarImageUrl(code, { crop: "full", size, background: true });
+}
+
 /*
   ─── READING THE CODE BACK OUT OF A URL ─────────────────────────────────────
   A person must be able to reopen the editor on the avatar they already have,

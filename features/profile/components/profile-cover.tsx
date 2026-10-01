@@ -12,7 +12,7 @@ import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
 import { coverBackgroundUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
-import { coverCharacterUrl } from "@/lib/arkplay-avatar";
+import { coverSceneUrl } from "@/lib/arkplay-avatar";
 
 /**
  * THE PROFILE COVER — node 435:27500, redrawn as 1021:20229 (live file,
@@ -156,6 +156,8 @@ export function ProfileCover({
           owner picked.
           Layer 2: the character, standing on it. The mascot for everyone who
           has not built one; their own 2D avatar once they have. */}
+      {/* The ground beneath: an uploaded photograph, or the ARK sweep. It
+          shows through whenever the character's own scene is transparent. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={coverSrc}
@@ -177,18 +179,43 @@ export function ProfileCover({
         its foot within a point of his. A creature stands shorter because a
         creature IS shorter; see coverCharacterUrl for why that is left alone.
       */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={characterCode ? coverCharacterUrl(characterCode) : asset("/profile/ark-mascot.png")}
-        alt=""
-        aria-hidden
-        className="absolute w-auto max-w-none -translate-x-1/2"
-        style={
-          characterCode
-            ? { left: "52.336%", bottom: "-3.4%", height: "95.8%" }
-            : { left: "52.336%", bottom: "-4.094%", height: "85.673%" }
-        }
-      />
+      {characterCode ? (
+        <>
+          {/*
+            THE SCENE IS SQUARE AND THE CARD IS NOT. A 741x473 crop of a square
+            render cuts the legs off at mid-thigh — measured, not guessed. So
+            the picture is CONTAINED at full height and the sides are filled by
+            a blurred, over-scaled copy of itself, which is why the bleed
+            always matches: it is the same sky.
+
+            Both layers are transparent when the scene is `none`, so the ground
+            above simply shows through and the character stands on it.
+          */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={coverSceneUrl(characterCode)}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={coverSceneUrl(characterCode)}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-contain"
+          />
+        </>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={asset("/profile/ark-mascot.png")}
+          alt=""
+          aria-hidden
+          className="absolute w-auto max-w-none -translate-x-1/2"
+          style={{ left: "52.336%", bottom: "-4.094%", height: "85.673%" }}
+        />
+      )}
 
       {/* 108 of 473 at the top, 215 at the foot — see the note above for why
           these are vertical and why the alphas are not the stops' 1.0. */}

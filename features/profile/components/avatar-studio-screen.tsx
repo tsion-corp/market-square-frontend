@@ -4,12 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMe } from "@/hooks/use-me";
 import { useAuth } from "@/hooks/use-auth";
-import { BackgroundPicker } from "@/features/profile/components/background-picker";
-import {
-  coverBackgroundUrl,
-  decodeAvatarCover,
-  encodeAvatarCover,
-} from "@/lib/profile-backgrounds";
 import { canGoBack } from "@/lib/nav-history";
 import { useUpdateMe } from "@/features/profile/hooks/use-profile";
 import { asset, sq } from "@/lib/square-path";
@@ -120,14 +114,10 @@ export function AvatarStudioScreen() {
   /* A page, not a dialog: there is nothing to open, so everything that used to
      wait on `open` runs once the route is mounted. */
   const open = true;
-  /** Reopen on the character AND the ground they already have. */
-  const saved = decodeAvatarCover(me?.avatarConfig);
-  const code = saved.code;
-  const [background, setBackground] = useState<string | null>(null);
+  /** Reopen on the character they already have — scene included, since it
+      rides inside the same code. */
+  const code = me?.avatarConfig ?? null;
   const [groundOpen, setGroundOpen] = useState(false);
-  /* Derived until the person touches it, so it follows `me` arriving late
-     rather than being frozen by a first render that had nothing. */
-  const ground = background ?? saved.background;
   /*
     BACK TO WHERE THEY CAME FROM. Not a built `/u/<username>` link: this repo
     routes people by id because a username is theirs to change, and a test
@@ -275,7 +265,19 @@ export function AvatarStudioScreen() {
     const timer = setTimeout(async () => {
       setDrawing(true);
       try {
-        const blob = await renderPreview(dna, { crop: "full", size: 512, signal: ac.signal });
+        /*
+          `background: true` so the SCENE shows. It was false, which is why
+          every one of the ten scene parameters edited nothing visible — the
+          wallpaper was being rendered and then thrown away. A scene set to
+          `none` still comes back transparent, so this costs nothing for
+          somebody who has not chosen one.
+        */
+        const blob = await renderPreview(dna, {
+          crop: "full",
+          size: 512,
+          background: true,
+          signal: ac.signal,
+        });
         if (ac.signal.aborted || mine !== seq.current) return;
         const url = URL.createObjectURL(blob);
         setPreview((old) => {
@@ -412,9 +414,7 @@ export function AvatarStudioScreen() {
         `avatarConfig` exists because of those two walls: opaque, never
         fetched, never rendered as a source.
       */
-      const after = await update.mutateAsync({
-        avatarConfig: encodeAvatarCover({ code: encoded, background: ground }),
-      });
+      const after = await update.mutateAsync({ avatarConfig: encoded });
 
       /*
         AN UNKNOWN FIELD IS STRIPPED, NOT REFUSED — which is the one failure
@@ -431,10 +431,20 @@ export function AvatarStudioScreen() {
       }
       leave();
     } catch (e) {
+      /*
+        "Try again in a moment" was a lie for the failure people actually hit.
+        An unknown field is STRIPPED, so a server without `avatarConfig` drops
+        it, is left with an empty patch, and answers 400 — which no amount of
+        retrying will change. The two cases read differently now: something
+        that might pass later, and something that needs a deploy.
+      */
+      const contractGap = e instanceof Error && /\b400\b/.test(e.message);
       setProblem(
         e instanceof AvatarCodecUnavailable
           ? e.message
-          : "Couldn't save that avatar. Try again in a moment.",
+          : contractGap
+            ? "This server can't store avatars yet — it needs the profile update that adds the field. Your character is still here."
+            : "Couldn't save that avatar. Try again in a moment.",
       );
     } finally {
       setSaving(false);
@@ -488,34 +498,31 @@ export function AvatarStudioScreen() {
         */}
         <div className="sticky top-0 z-20 -mx-[18px] bg-[#121214] px-[18px] pb-3 pt-1">
         <div className="relative aspect-[580/440] w-full overflow-hidden rounded-[12px] bg-[#1A1A1F]">
-          {/* The ground, so this previews the COVER rather than a character on
-              a grey card — which is what the person is actually choosing. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={coverBackgroundUrl(ground, null)}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full object-cover"
-          />
           {/* The character. 341² at (120,60) in the card's own 580x440. */}
           {preview ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={preview}
-              alt="Your avatar"
-              className="absolute object-contain transition-opacity"
-              style={{
-                left: pctX(120),
-                top: pctY(60),
-                width: pctX(341),
-                height: pctY(341),
-                opacity: drawing ? 0.55 : 1,
-              }}
-            />
+            <>
+              {/* The same treatment the cover uses, so this previews the cover
+                  rather than something that resembles it: the square render
+                  contained at full height, its sides filled by a blurred copy
+                  of itself. See profile-cover.tsx for why a crop will not do. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={preview}
+                alt=""
+                aria-hidden
+                className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl"
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={preview}
+                alt="Your avatar"
+                className="absolute inset-0 h-full w-full object-contain transition-opacity"
+                style={{ opacity: drawing ? 0.55 : 1 }}
+              />
+            </>
           ) : (
             <span
-              className="absolute animate-pulse rounded-2xl bg-white/[0.04]"
-              style={{ left: pctX(120), top: pctY(60), width: pctX(341), height: pctY(341) }}
+              className="absolute inset-0 animate-pulse bg-white/[0.04]"
               aria-hidden
             />
           )}
@@ -607,9 +614,27 @@ export function AvatarStudioScreen() {
           </button>
         </div>
 
-        {groundOpen && (
-          <div className="mt-3 rounded-[12px] bg-[#1A1A1F] p-3">
-            <BackgroundPicker value={ground} onChange={setBackground} />
+        {groundOpen && catalog && dna && (
+          <div className="mt-3 max-h-[40vh] space-y-3 overflow-y-auto rounded-[12px] bg-[#1A1A1F] p-3">
+            {/*
+              THE WALLPAPER IS THE ENGINE'S OWN SCENE — 14 presets, six
+              background modes, eleven patterns, two colours, a frame and a
+              ring. It rides inside the share code, so choosing one needs no
+              second field and no second picture, which is what six hand-drawn
+              SVGs needed and never got.
+            */}
+            {sectionsFor(catalog, dna.kind)
+              .filter((section) => section.tab === "scene")
+              .map((section) =>
+                visibleParams(catalog, dna, section).map((p) => (
+                  <ParamControl
+                    key={`${section.id}.${p.key}`}
+                    param={p}
+                    value={paramValue(dna, section, p)}
+                    onChange={(v) => setDna(setParam(dna, section.id, p.key, v))}
+                  />
+                )),
+              )}
           </div>
         )}
 
