@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BackgroundPicker } from "@/features/profile/components/background-picker";
-import { coverCharacterCode } from "@/lib/profile-backgrounds";
+import { decodeAvatarCover } from "@/lib/profile-backgrounds";
 import { sq } from "@/lib/square-path";
 import { GENDER_OPTIONS, normalizeGender } from "@/lib/gender";
 import { useState } from "react";
@@ -44,7 +43,7 @@ export function EditProfileSheet({
     off instead of starting over. Null means the picture is a photograph or a
     placeholder — nothing to continue from, so the studio opens on a fresh one.
   */
-  const characterCode = coverCharacterCode(coverUrl);
+  const characterCode = decodeAvatarCover(me.avatarConfig).code;
   /* Self-declared, all three, and all optional. `?? ""` because null is the
      real "hasn't said" and an input cannot hold it. */
   const [city, setCity] = useState(me.city ?? "");
@@ -87,7 +86,11 @@ export function EditProfileSheet({
         >
           {characterCode ? "Edit your character" : "Build a character"}
         </Link>
-        <BackgroundPicker value={coverUrl} onChange={setCoverUrl} />
+        {/* The curated BACKGROUND moved to the studio's palette, where the
+            character it stands behind is on screen. This stays: `coverUrl` is
+            for a photograph somebody uploaded, which is the one thing the
+            service will accept in it. */}
+        <UploadField value={coverUrl} onChange={setCoverUrl} label="Cover photo" />
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold text-grey-400">
             Display name

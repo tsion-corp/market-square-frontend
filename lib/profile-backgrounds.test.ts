@@ -5,11 +5,9 @@ import {
   PROFILE_BACKGROUNDS,
   backgroundUrl,
   coverBackgroundUrl,
-  coverCharacterCode,
+  decodeAvatarCover,
   defaultBackgroundUrl,
-  isDefaultBackground,
-  selectedBackgroundId,
-  storedCoverUrl,
+  encodeAvatarCover,
 } from "./profile-backgrounds.ts";
 
 describe("the curated set", () => {
@@ -55,10 +53,13 @@ describe("the curated set", () => {
 });
 
 describe("resolving what a profile wears", () => {
-  it("uses a stored cover when there is one", () => {
-    const violet = backgroundUrl("violet");
-    assert.equal(coverBackgroundUrl(violet), violet);
-    assert.equal(coverBackgroundUrl("https://cdn.example/mine.jpg"), "https://cdn.example/mine.jpg");
+  it("uses what the person chose when they chose something", () => {
+    assert.equal(coverBackgroundUrl("violet", null), backgroundUrl("violet"));
+    assert.equal(
+      coverBackgroundUrl(null, "https://cdn.example/mine.jpg"),
+      "https://cdn.example/mine.jpg",
+      "an uploaded photograph is still a cover",
+    );
   });
 
   it("falls back to the ARK sweep when there is not", () => {
@@ -71,102 +72,69 @@ describe("resolving what a profile wears", () => {
     image where the default belongs — the failure looks like a bug in the cover
     rather than an empty value.
   */
-  it("treats a blank or whitespace cover as absent", () => {
-    assert.equal(coverBackgroundUrl(""), defaultBackgroundUrl());
-    assert.equal(coverBackgroundUrl("   "), defaultBackgroundUrl());
-  });
-});
-
-describe("knowing which one is chosen", () => {
-  it("recognises a curated background", () => {
-    assert.equal(selectedBackgroundId(backgroundUrl("mint")), "mint");
-  });
-
-  /*
-    An uploaded picture is a real cover that is simply not one of ours.
-    Matching it to a swatch would tick a choice the person never made.
-  */
-  it("answers null for an upload, rather than guessing a swatch", () => {
-    assert.equal(selectedBackgroundId("https://cdn.example/mine.jpg"), null);
-  });
-
-  it("answers null for nothing at all", () => {
-    assert.equal(selectedBackgroundId(null), null);
-    assert.equal(selectedBackgroundId(undefined), null);
-    assert.equal(selectedBackgroundId(""), null);
+  it("treats a blank or whitespace choice as absent", () => {
+    assert.equal(coverBackgroundUrl("", ""), defaultBackgroundUrl());
+    assert.equal(coverBackgroundUrl("   ", "   "), defaultBackgroundUrl());
   });
 });
 
 /*
-  A COVER IS TWO CHOICES IN ONE FIELD — the ground, and the character standing
-  on it. These pin the rules that made that possible, each of which cost
-  something to learn.
+  ─── A COVER IS TWO CHOICES IN ONE FIELD ────────────────────────────────────
+  The ground and the character travel together in `avatarConfig`, because it is
+  the only field that will accept them: `coverUrl` is validated
+  `z.string().url()` (a relative path 400s) and then run through
+  `verifyAttachment`, which takes only a picture its owner uploaded (403).
 */
-describe("what a cover stores", () => {
+describe("what a profile wears", () => {
   const CODE = "A2" + "x".repeat(200);
-  const ORIGIN = "https://square.example";
+
+  it("keeps a bare code bare, so nothing already saved has to change", () => {
+    assert.equal(encodeAvatarCover({ code: CODE, background: null }), CODE);
+    assert.deepEqual(decodeAvatarCover(CODE), { code: CODE, background: null });
+  });
+
+  it("carries the ground and the character together when there are both", () => {
+    const stored = encodeAvatarCover({ code: CODE, background: "violet" });
+    assert.ok(stored && stored.startsWith("{"));
+    assert.deepEqual(decodeAvatarCover(stored), { code: CODE, background: "violet" });
+  });
+
+  it("stores nothing when neither has been chosen", () => {
+    assert.equal(encodeAvatarCover({ code: null, background: null }), null);
+    assert.deepEqual(decodeAvatarCover(null), { code: null, background: null });
+  });
+
+  it("can wear a ground with no character", () => {
+    const stored = encodeAvatarCover({ code: null, background: "ember" });
+    assert.deepEqual(decodeAvatarCover(stored), { code: null, background: "ember" });
+  });
+
+  /* The service caps the STORED STRING at 1024 and the wrapper counts. */
+  it("fits the field with room to spare", () => {
+    const stored = encodeAvatarCover({ code: "A2" + "x".repeat(400), background: "midnight" });
+    assert.ok((stored?.length ?? 0) < 1024, `${stored?.length} characters`);
+  });
 
   /*
-    THE BUG THIS CAUGHT. The service validates coverUrl with
-    `z.string().url()`, which REJECTS a relative path — so a curated background
-    stored as "/profile/backgrounds/violet.svg" answered 400 and the choice
-    never persisted. Everything written must parse as an absolute URL.
+    A value is replayed from a profile an older client may have written, so
+    anything unreadable falls back to the mascot rather than throwing on a page
+    somebody is only visiting.
   */
-  it("stores an absolute URL, because a relative one is refused", () => {
-    for (const stored of [
-      storedCoverUrl(ORIGIN, "violet", null),
-      storedCoverUrl(ORIGIN, "violet", CODE),
-      storedCoverUrl(ORIGIN, null, CODE),
-    ]) {
-      assert.ok(stored, "a choice stores something");
-      assert.doesNotThrow(() => new URL(stored as string), `${stored} is absolute`);
+  it("never throws on something it cannot read", () => {
+    for (const junk of ["{", "{]", '{"c":5}', '{"bg":"nope"}', "   ", "not-a-code"]) {
+      assert.deepEqual(decodeAvatarCover(junk), { code: null, background: null }, junk);
     }
   });
 
-  /* Wearing nothing of one's own stays null, rather than pinning a URL that
-     would stop tracking the default if it ever changed. */
-  it("stores nothing when neither has been chosen", () => {
-    assert.equal(storedCoverUrl(ORIGIN, null, null), null);
+  it("refuses a background it does not have", () => {
+    const forged = JSON.stringify({ c: CODE, bg: "../../etc" });
+    assert.deepEqual(decodeAvatarCover(forged), { code: CODE, background: null });
   });
 
-  it("carries the ground and the character together", () => {
-    const stored = storedCoverUrl(ORIGIN, "violet", CODE);
-    assert.equal(selectedBackgroundId(stored), "violet");
-    assert.equal(coverCharacterCode(stored), CODE);
-  });
-
-  /*
-    ORIGINS MOVE. What is written carries whatever origin the browser was on —
-    a preview deployment, a local port — so matching the whole string would
-    make a background picked on a preview stop being recognised in production.
-  */
-  it("recognises a background saved from another origin", () => {
-    const fromPreview = storedCoverUrl("https://preview.example", "ember", CODE);
-    assert.equal(selectedBackgroundId(fromPreview), "ember");
-    assert.equal(coverCharacterCode(fromPreview), CODE);
-  });
-
-  /* A character with no chosen ground still wears the ARK sweep, and the
-     picker must read that as the default rather than as an upload. */
-  it("keeps the default readable as the default once a character is on it", () => {
-    const stored = storedCoverUrl(ORIGIN, null, CODE);
-    assert.equal(isDefaultBackground(stored), true);
-    assert.equal(selectedBackgroundId(stored), null);
-    assert.equal(coverBackgroundUrl(stored), defaultBackgroundUrl());
-  });
-
-  /* The character parameter is ours; a media host handed a query it never
-     issued can refuse a signed URL outright. */
-  it("does not hand our character parameter to somebody else's picture", () => {
-    const upload = "https://cdn.example/me.jpg?sig=abc";
-    const url = new URL(upload);
-    url.searchParams.set("c", CODE);
-    assert.equal(coverBackgroundUrl(url.toString()), upload);
-    assert.equal(coverCharacterCode(url.toString()), CODE);
-  });
-
-  it("refuses a character that is not a share code", () => {
-    assert.equal(coverCharacterCode(`${ORIGIN}/profile/backgrounds/violet.svg?c=nope`), null);
-    assert.equal(coverCharacterCode(null), null);
+  it("draws the ground in the right order: chosen, then uploaded, then ARK", () => {
+    assert.equal(coverBackgroundUrl("violet", "https://cdn.example/me.jpg"), backgroundUrl("violet"));
+    assert.equal(coverBackgroundUrl(null, "https://cdn.example/me.jpg"), "https://cdn.example/me.jpg");
+    assert.equal(coverBackgroundUrl(null, null), defaultBackgroundUrl());
+    assert.equal(coverBackgroundUrl(null, "   "), defaultBackgroundUrl(), "blank is absent");
   });
 });

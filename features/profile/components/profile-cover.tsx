@@ -11,7 +11,7 @@ import { canGoBack } from "@/lib/nav-history";
 import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
-import { coverBackgroundUrl } from "@/lib/profile-backgrounds";
+import { coverBackgroundUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
 import { coverCharacterUrl } from "@/lib/arkplay-avatar";
 
 /**
@@ -105,7 +105,8 @@ export function ProfileCover({
     the ground is the person's own — a viewer showing somebody the ARK sweep
     while their card renders violet is showing them another profile's cover.
   */
-  const coverSrc = coverBackgroundUrl(profile.coverUrl);
+  const { code: characterCode, background } = decodeAvatarCover(profile.avatarConfig);
+  const coverSrc = coverBackgroundUrl(background, profile.coverUrl);
   const avatarSrc = profile.avatarUrl ?? artworkForSeed(resolveSeed({ id: profile.id, name }));
   /*
     THE CHARACTER STANDING ON THE BACKGROUND — the swap the layering above was
@@ -123,7 +124,6 @@ export function ProfileCover({
     its owner could read would have meant nobody ever saw anybody's character
     but their own.
   */
-  const characterCode = profile.avatarConfig ?? null;
   useLayoutEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -158,7 +158,7 @@ export function ProfileCover({
           has not built one; their own 2D avatar once they have. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={coverBackgroundUrl(profile.coverUrl)}
+        src={coverSrc}
         alt=""
         aria-hidden
         className="absolute inset-0 h-full w-full object-cover"

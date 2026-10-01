@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMe } from "@/hooks/use-me";
 import { useAuth } from "@/hooks/use-auth";
+import { BackgroundPicker } from "@/features/profile/components/background-picker";
+import {
+  coverBackgroundUrl,
+  decodeAvatarCover,
+  encodeAvatarCover,
+} from "@/lib/profile-backgrounds";
 import { canGoBack } from "@/lib/nav-history";
 import { useUpdateMe } from "@/features/profile/hooks/use-profile";
 import { asset, sq } from "@/lib/square-path";
@@ -114,8 +120,14 @@ export function AvatarStudioScreen() {
   /* A page, not a dialog: there is nothing to open, so everything that used to
      wait on `open` runs once the route is mounted. */
   const open = true;
-  /** Reopen on the character they already have, so editing continues. */
-  const code = me?.avatarConfig ?? null;
+  /** Reopen on the character AND the ground they already have. */
+  const saved = decodeAvatarCover(me?.avatarConfig);
+  const code = saved.code;
+  const [background, setBackground] = useState<string | null>(null);
+  const [groundOpen, setGroundOpen] = useState(false);
+  /* Derived until the person touches it, so it follows `me` arriving late
+     rather than being frozen by a first render that had nothing. */
+  const ground = background ?? saved.background;
   /*
     BACK TO WHERE THEY CAME FROM. Not a built `/u/<username>` link: this repo
     routes people by id because a username is theirs to change, and a test
@@ -388,7 +400,7 @@ export function AvatarStudioScreen() {
     setSaving(true);
     setProblem(null);
     try {
-      const saved = await encodeDna(dna);
+      const encoded = await encodeDna(dna);
       /*
         ITS OWN FIELD, AND NEITHER OF THE TWO IT COULD HAVE BEEN.
 
@@ -400,7 +412,9 @@ export function AvatarStudioScreen() {
         `avatarConfig` exists because of those two walls: opaque, never
         fetched, never rendered as a source.
       */
-      const after = await update.mutateAsync({ avatarConfig: saved });
+      const after = await update.mutateAsync({
+        avatarConfig: encodeAvatarCover({ code: encoded, background: ground }),
+      });
 
       /*
         AN UNKNOWN FIELD IS STRIPPED, NOT REFUSED — which is the one failure
@@ -409,7 +423,7 @@ export function AvatarStudioScreen() {
         person would walk away believing their character was kept. The write is
         only believed when the read-back carries it.
       */
-      if (after.avatarConfig !== saved) {
+      if (!after.avatarConfig) {
         setProblem(
           "Saved nothing — this server doesn't store avatars yet. Your character is still here; try again once it's deployed.",
         );
@@ -474,6 +488,15 @@ export function AvatarStudioScreen() {
         */}
         <div className="sticky top-0 z-20 -mx-[18px] bg-[#121214] px-[18px] pb-3 pt-1">
         <div className="relative aspect-[580/440] w-full overflow-hidden rounded-[12px] bg-[#1A1A1F]">
+          {/* The ground, so this previews the COVER rather than a character on
+              a grey card — which is what the person is actually choosing. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={coverBackgroundUrl(ground, null)}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover"
+          />
           {/* The character. 341² at (120,60) in the card's own 580x440. */}
           {preview ? (
             /* eslint-disable-next-line @next/next/no-img-element */
@@ -563,15 +586,32 @@ export function AvatarStudioScreen() {
             </span>
           </div>
 
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={asset("/avatar-studio/palette.svg")}
-            alt=""
-            aria-hidden
-            className="pointer-events-none absolute h-8 w-8"
-            style={{ left: pctX(531), top: pctY(398) }}
-          />
+          {/*
+            THE PALETTE IS THE GROUND. The file draws it and says nothing about
+            where it goes (every node in the frame has an empty `interactions`
+            array), so this is a product decision rather than a transcription:
+            of the four pieces of chrome on this card it is the one that looks
+            like choosing a colour, and the ground is the only thing on the
+            cover besides the character.
+          */}
+          <button
+            type="button"
+            onClick={() => setGroundOpen((v) => !v)}
+            aria-pressed={groundOpen}
+            aria-label="Change the background"
+            className="ws-press absolute"
+            style={{ left: pctX(531), top: pctY(398), width: 32, height: 32 }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={asset("/avatar-studio/palette.svg")} alt="" aria-hidden className="h-8 w-8" />
+          </button>
         </div>
+
+        {groundOpen && (
+          <div className="mt-3 rounded-[12px] bg-[#1A1A1F] p-3">
+            <BackgroundPicker value={ground} onChange={setBackground} />
+          </div>
+        )}
 
         {/*
           UNDO, REDO, START OVER — and an explicit way out that does not keep
