@@ -5,12 +5,14 @@ import {
   AvatarCodecUnavailable,
   type AvatarDNA,
   type Catalog,
+  capacityOf,
   clearSlot,
   itemsForSlot,
   randomiseDna,
   sectionsFor,
   slotsFor,
   wearItem,
+  wornIdsInSlot,
   wornInSlot,
   setParam,
   visibleParams,
@@ -231,6 +233,27 @@ describe("dressing a character", () => {
   it("does not offer the slot that cannot be worn", () => {
     assert.ok(catalog.slots.some((s) => s.id === "custom"), "the catalog has it");
     assert.ok(!slotsFor(catalog, "humanoid").some((s) => s.id === "custom"), "we do not");
+  });
+
+  /*
+    `slice(-0)` IS `slice(0)` — the whole array. A capacity-1 slot leaves room
+    0, and that negative-zero slice kept every previous item instead of none:
+    three tops worn at once, all drawn as selected, which is what a person sees
+    when they tap three shirts in a row.
+  */
+  it("keeps exactly as many as the slot holds, and no more", () => {
+    for (const slot of slotsFor(catalog, "humanoid")) {
+      const items = itemsForSlot(catalog, slot.id, "humanoid");
+      if (items.length < 2) continue;
+      let dna: AvatarDNA = { ...BASE, outfit: [], accessories: [] };
+      for (const item of items) dna = wearItem(catalog, dna, item);
+      const worn = wornIdsInSlot(catalog, dna, slot.id);
+      const cap = capacityOf(catalog, slot.id);
+      assert.equal(worn.length, Math.min(cap, items.length), `${slot.id} holds ${cap}`);
+      assert.equal(new Set(worn).size, worn.length, `${slot.id} wears nothing twice`);
+      // The most recent choice is always on, or tapping a shirt does nothing.
+      assert.ok(worn.includes(items[items.length - 1].id), `${slot.id} keeps the newest`);
+    }
   });
 
   it("dresses a rolled character into both lists", () => {

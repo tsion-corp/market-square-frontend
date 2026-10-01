@@ -181,10 +181,17 @@ export function wearItem(catalog: Catalog, dna: AvatarDNA, item: CatalogItem): A
   const list = dna[key] ?? [];
   const inSlot = list.filter((w) => slotOf(catalog, w.id) === item.slot && w.id !== item.id);
   const elsewhere = list.filter((w) => slotOf(catalog, w.id) !== item.slot);
+  /*
+    `slice(-0)` IS `slice(0)` — THE WHOLE ARRAY. A slot of capacity 1 leaves
+    room 0, and the negative-zero slice kept every previous item instead of
+    none: three tops at once, all drawn as selected. Guarded explicitly rather
+    than relying on a negative index that cannot express "keep nothing".
+  */
   const room = capacityOf(catalog, item.slot) - 1;
+  const keep = room <= 0 ? [] : inSlot.slice(-room);
   return {
     ...dna,
-    [key]: [...elsewhere, ...inSlot.slice(-room), { id: item.id, params: defaultParams(item) }],
+    [key]: [...elsewhere, ...keep, { id: item.id, params: defaultParams(item) }],
   };
 }
 
