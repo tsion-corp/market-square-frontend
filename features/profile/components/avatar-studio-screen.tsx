@@ -87,6 +87,28 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+/*
+  ─── HOW CLOSE YOU ARE STANDING ─────────────────────────────────────────────
+  The engine's crop ladder, furthest to nearest, verified against the live
+  service. This is a VIEWING aid and nothing else: it changes what the studio
+  shows while you work and never what is saved, because a cover always draws
+  the whole character. Editing an eyebrow on a figure 450px tall is the reason
+  every serious avatar editor has a zoom.
+*/
+const ZOOMS = [
+  { crop: "full" as const, label: "Whole" },
+  { crop: "fit" as const, label: "Body" },
+  { crop: "bust" as const, label: "Bust" },
+  { crop: "head" as const, label: "Head" },
+];
+
+/** A real turnaround: a side render is a different picture, not a transform. */
+const VIEWS = [
+  { view: "front" as const, label: "Front" },
+  { view: "side" as const, label: "Side" },
+  { view: "back" as const, label: "Back" },
+];
+
 /** How many notches a continuous parameter is offered as. See ParamControl. */
 const STOPS = 7;
 
@@ -125,6 +147,8 @@ export function AvatarStudioScreen() {
   const code = saved.code;
   const [background, setBackground] = useState<string | null>(null);
   const [groundOpen, setGroundOpen] = useState(false);
+  const [zoom, setZoom] = useState(0);
+  const [view, setView] = useState<(typeof VIEWS)[number]["view"]>("front");
   /* Derived until the person touches it, so it follows `me` arriving late
      rather than being frozen by a first render that had nothing. */
   const ground = background ?? saved.background;
@@ -293,7 +317,8 @@ export function AvatarStudioScreen() {
           looked soft beside the engine's own studio.
         */
         const blob = await renderPreview(dna, {
-          crop: "full",
+          crop: ZOOMS[zoom].crop,
+          view,
           size: 1024,
           background: true,
           signal: ac.signal,
@@ -316,7 +341,7 @@ export function AvatarStudioScreen() {
       ac.abort();
       clearTimeout(timer);
     };
-  }, [open, dna]);
+  }, [open, dna, zoom, view]);
 
   useEffect(
     () => () => {
@@ -632,6 +657,49 @@ export function AvatarStudioScreen() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={asset("/avatar-studio/palette.svg")} alt="" aria-hidden className="h-8 w-8" />
           </button>
+        </div>
+
+        {/*
+          ZOOM AND TURN. Both are the engine's own — `crop` walks a five-step
+          ladder and `view` is a genuine turnaround rather than a CSS flip — and
+          neither touches the document, so nothing here changes what is saved.
+        */}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.max(0, z - 1))}
+            disabled={zoom === 0}
+            aria-label="Zoom out"
+            className="ws-press ws-btn-sm rounded-full bg-white/[0.06] text-white/80 disabled:opacity-35"
+          >
+            −
+          </button>
+          <span className="min-w-[46px] text-center text-[12px] text-white/50">
+            {ZOOMS[zoom].label}
+          </span>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.min(ZOOMS.length - 1, z + 1))}
+            disabled={zoom === ZOOMS.length - 1}
+            aria-label="Zoom in"
+            className="ws-press ws-btn-sm rounded-full bg-white/[0.06] text-white/80 disabled:opacity-35"
+          >
+            +
+          </button>
+          <span className="flex-1" />
+          {VIEWS.map((v) => (
+            <button
+              key={v.view}
+              type="button"
+              onClick={() => setView(v.view)}
+              aria-pressed={view === v.view}
+              className={`ws-press ws-btn-sm rounded-full text-[12px] ${
+                view === v.view ? "bg-white text-black" : "bg-white/[0.06] text-white/70"
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
         </div>
 
         {groundOpen && (
