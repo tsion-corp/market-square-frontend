@@ -37,9 +37,6 @@ export function EditProfileSheet({
   const [username, setUsername] = useState(me.username);
   const [bio, setBio] = useState(me.bio);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(me.avatarUrl);
-  /* The cover's BACKGROUND. Null is a real value here and means "the ARK
-     sweep" — see BackgroundPicker for why that is sent rather than a URL. */
-  const [coverUrl, setCoverUrl] = useState<string | null>(me.coverUrl);
   /*
     The character being edited, as a share code.
 
@@ -62,7 +59,6 @@ export function EditProfileSheet({
   const usernameTaken = errorCode(update.error) === "CONFLICT";
 
   const avatar = useImageUpload(avatarUrl, setAvatarUrl);
-  const cover = useImageUpload(coverUrl, setCoverUrl);
 
   const save = async () => {
     /*
@@ -86,10 +82,6 @@ export function EditProfileSheet({
         bio,
         bioMentions,
         avatarUrl: avatarUrl ?? undefined,
-        /* Sent even when null, unlike avatarUrl: null is how somebody returns
-           to the ARK sweep, and `?? undefined` would make that choice
-           unsendable — the field would simply be left alone. */
-        coverUrl,
         // Sent as typed, blank included: an omitted field means "leave it" and
         // somebody who emptied the box meant "clear it". The service reads a
         // blank string as a clear.
@@ -144,24 +136,34 @@ export function EditProfileSheet({
         <div className="relative aspect-[495/199] w-full overflow-hidden rounded-[22.34px] bg-black/40 shadow-[0_4px_12px_rgba(21,32,43,0.4)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={coverBackgroundUrl(savedCover.background, cover.shown)}
+            src={coverBackgroundUrl(savedCover.background, me.coverUrl)}
             alt=""
             aria-hidden
             className="absolute inset-0 h-full w-full object-cover"
           />
           <span aria-hidden className="absolute inset-0 bg-[#101012]/[0.62]" />
 
-          {/* The 38 round camera on black at 25%, centred. */}
-          <button
-            type="button"
-            onClick={cover.open}
-            aria-label="Change cover photo"
-            className="ws-press absolute left-1/2 top-1/2 flex h-[38px] w-[38px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/25"
+          {/*
+            TAPPING THE COVER EDITS THE CHARACTER, because that is what a cover
+            now is: a character standing on a ground, both chosen in the studio.
+            It used to open a file picker and a separate "Edit your character"
+            link sat underneath — two controls for one thing, and the obvious
+            one did the less useful half. The ground and the photograph are
+            chosen in the studio too, beside the character they sit behind.
+
+            The whole card is the target, not just the 38 disc: it is the
+            biggest thing on the sheet and it is what somebody is looking at.
+          */}
+          <Link
+            href={sq("/avatar")}
+            aria-label={characterCode ? "Edit your character" : "Build a character"}
+            className="ws-press absolute inset-0 flex items-center justify-center"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={asset("/profile/edit/camera.svg")} alt="" aria-hidden className="h-[13px] w-[15px]" />
-          </button>
-          <input {...cover.inputProps} />
+            <span className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-black/25">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={asset("/profile/edit/camera.svg")} alt="" aria-hidden className="h-[13px] w-[15px]" />
+            </span>
+          </Link>
 
           {/* 2112:19481 — the profile picture at 71, radius 22.34, 16 from the
               left and 15 up from the foot, with its own camera over it. */}
@@ -169,7 +171,7 @@ export function EditProfileSheet({
             type="button"
             onClick={avatar.open}
             aria-label="Change profile photo"
-            className="ws-press absolute bottom-[15px] left-4 h-[71px] w-[71px] overflow-hidden rounded-[22.34px] shadow-[0_4px_12px_rgba(21,32,43,0.4)]"
+            className="ws-press absolute bottom-[15px] left-4 z-10 h-[71px] w-[71px] overflow-hidden rounded-[22.34px] shadow-[0_4px_12px_rgba(21,32,43,0.4)]"
           >
             {avatar.shown ? (
               /* eslint-disable-next-line @next/next/no-img-element */
@@ -184,22 +186,7 @@ export function EditProfileSheet({
           </button>
           <input {...avatar.inputProps} />
         </div>
-        {(cover.error || avatar.error) && (
-          <p className="text-xs text-down">{cover.error ?? avatar.error}</p>
-        )}
-
-        {/*
-          NOT IN THE FILE, AND KEPT ANYWAY. The design draws no way into the
-          avatar studio, and this sheet is the only route to it — removing the
-          link would make a finished page unreachable. It sits under the cover
-          because that is what it edits.
-        */}
-        <Link
-          href={sq("/avatar")}
-          className="ws-press block text-center text-[12px] font-semibold text-white/70 underline underline-offset-4 hover:text-white"
-        >
-          {characterCode ? "Edit your character" : "Build a character"}
-        </Link>
+        {avatar.error && <p className="text-xs text-down">{avatar.error}</p>}
 
         <Field label="Display name">
           <input

@@ -6,6 +6,7 @@ import { useMe } from "@/hooks/use-me";
 import { useAuth } from "@/hooks/use-auth";
 import { preloadRenderer, renderLocally } from "@/lib/arkplay-local-render";
 import { BackgroundPicker } from "@/features/profile/components/background-picker";
+import { UploadField } from "@/components/ui/upload-field";
 import {
   coverBackgroundUrl,
   decodeAvatarCover,
@@ -155,6 +156,14 @@ export function AvatarStudioScreen() {
   const saved = decodeAvatarCover(me?.avatarConfig);
   const code = saved.code;
   const [background, setBackground] = useState<string | null>(null);
+  /*
+    A PHOTOGRAPH BEHIND THE CHARACTER, for somebody who wants their own.
+    It lives here rather than in the profile editor because this is where the
+    ground is chosen, and the two are the same decision: a curated background
+    or a picture of your own, behind the character standing on it.
+  */
+  const [coverUrl, setCoverUrl] = useState<string | null | undefined>(undefined);
+  const photo = coverUrl === undefined ? (me?.coverUrl ?? null) : coverUrl;
   const [groundOpen, setGroundOpen] = useState(false);
   const [zoom, setZoom] = useState(0);
   /*
@@ -488,6 +497,9 @@ export function AvatarStudioScreen() {
       */
       const after = await update.mutateAsync({
         avatarConfig: encodeAvatarCover({ code: encoded, background: ground, anim: clip }),
+        /* Sent even when null: null is how somebody takes their photograph
+           back off, and `?? undefined` would make that choice unsendable. */
+        coverUrl: photo,
       });
 
       /*
@@ -574,7 +586,7 @@ export function AvatarStudioScreen() {
         <div className="relative aspect-[580/440] w-full overflow-hidden rounded-[12px] bg-[#1A1A1F]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={coverBackgroundUrl(ground, null)}
+            src={coverBackgroundUrl(ground, photo)}
             alt=""
             aria-hidden
             className="absolute inset-0 h-full w-full object-cover"
@@ -786,6 +798,7 @@ export function AvatarStudioScreen() {
                 )}
             {/* And the ground the card shows either side of it. */}
             <BackgroundPicker value={ground} onChange={setBackground} />
+            <UploadField value={photo} onChange={setCoverUrl} label="Or use your own picture" />
           </div>
         )}
 
