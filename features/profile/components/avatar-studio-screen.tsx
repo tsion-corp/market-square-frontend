@@ -501,25 +501,18 @@ export function AvatarStudioScreen() {
           {/* The character. 341² at (120,60) in the card's own 580x440. */}
           {preview ? (
             <>
-              {/* The same treatment the cover uses, so this previews the cover
-                  rather than something that resembles it: the square render
-                  contained at full height, its sides filled by a blurred copy
-                  of itself. See profile-cover.tsx for why a crop will not do. */}
+              {/*
+                FILLS THE CARD, like the cover. The square render is cropped
+                rather than letterboxed: the figure sits 23%..97% down the
+                square (74% of it) and this card shows 76%, so the whole
+                character fits with nothing left over for bars. Anchored low so
+                the head keeps sky above it.
+              */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={preview}
-                alt=""
-                aria-hidden
-                className="absolute inset-0 h-full w-full scale-125 object-cover blur-3xl"
-              />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {/* Faded at the sides for the same reason the cover is: the join
-                  between the sharp square and its blurred fill otherwise reads
-                  as a panel pasted onto a different picture. */}
               <img
                 src={preview}
                 alt="Your avatar"
-                className="absolute inset-0 h-full w-full object-contain transition-opacity [mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)]"
+                className="absolute inset-0 h-full w-full object-cover [object-position:center_85%] transition-opacity"
                 style={{ opacity: drawing ? 0.55 : 1 }}
               />
             </>

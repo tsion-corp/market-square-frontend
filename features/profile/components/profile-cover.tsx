@@ -191,26 +191,26 @@ export function ProfileCover({
             Both layers are transparent when the scene is `none`, so the ground
             above simply shows through and the character stands on it.
           */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={coverSceneUrl(characterCode)}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full scale-125 object-cover blur-3xl"
-          />
           {/*
-            FADED AT THE SIDES, so the two layers meet without a seam. The
-            sharp square and the blurred fill are the same picture at different
-            scales, so a hard edge between them reads as a pasted-on panel —
-            which is exactly what it looked like. The mask dissolves the join
-            instead of trying to hide it.
+            IT FILLS THE CARD. The render is square and the card is not, so
+            this crops rather than letterboxes — the earlier version contained
+            the picture and filled the sides with a blurred copy of itself,
+            which read as a panel pasted onto a different image however the
+            join was blended.
+
+            Cropping is safe because the figure sits 23%..97% down the square,
+            74% of it, and the card shows more than that at phone widths (77%)
+            and only 10 points less at the file's 741x473. The position is
+            anchored low so the HEAD is always inside with sky above it and the
+            loss comes off the feet — which is what the file already does to
+            the mascot, and which the identity row covers anyway.
           */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={coverSceneUrl(characterCode)}
             alt=""
             aria-hidden
-            className="absolute inset-0 h-full w-full object-contain [mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)]"
+            className="absolute inset-0 h-full w-full object-cover [object-position:center_85%] md:[object-position:center_62%]"
           />
         </>
       ) : (
