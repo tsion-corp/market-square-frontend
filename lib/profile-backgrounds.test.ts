@@ -89,24 +89,24 @@ describe("what a profile wears", () => {
   const CODE = "A2" + "x".repeat(200);
 
   it("keeps a bare code bare, so nothing already saved has to change", () => {
-    assert.equal(encodeAvatarCover({ code: CODE, background: null }), CODE);
-    assert.deepEqual(decodeAvatarCover(CODE), { code: CODE, background: null });
+    assert.equal(encodeAvatarCover({ code: CODE, background: null, anim: null }), CODE);
+    assert.deepEqual(decodeAvatarCover(CODE), { code: CODE, background: null, anim: null });
   });
 
   it("carries the ground and the character together when there are both", () => {
-    const stored = encodeAvatarCover({ code: CODE, background: "violet" });
+    const stored = encodeAvatarCover({ code: CODE, background: "violet", anim: null });
     assert.ok(stored && stored.startsWith("{"));
-    assert.deepEqual(decodeAvatarCover(stored), { code: CODE, background: "violet" });
+    assert.deepEqual(decodeAvatarCover(stored), { code: CODE, background: "violet", anim: null });
   });
 
   it("stores nothing when neither has been chosen", () => {
-    assert.equal(encodeAvatarCover({ code: null, background: null }), null);
-    assert.deepEqual(decodeAvatarCover(null), { code: null, background: null });
+    assert.equal(encodeAvatarCover({ code: null, background: null, anim: null }), null);
+    assert.deepEqual(decodeAvatarCover(null), { code: null, background: null, anim: null });
   });
 
   it("can wear a ground with no character", () => {
-    const stored = encodeAvatarCover({ code: null, background: "ember" });
-    assert.deepEqual(decodeAvatarCover(stored), { code: null, background: "ember" });
+    const stored = encodeAvatarCover({ code: null, background: "ember", anim: null });
+    assert.deepEqual(decodeAvatarCover(stored), { code: null, background: "ember", anim: null });
   });
 
   /* The service caps the STORED STRING at 1024 and the wrapper counts. */
@@ -122,13 +122,13 @@ describe("what a profile wears", () => {
   */
   it("never throws on something it cannot read", () => {
     for (const junk of ["{", "{]", '{"c":5}', '{"bg":"nope"}', "   ", "not-a-code"]) {
-      assert.deepEqual(decodeAvatarCover(junk), { code: null, background: null }, junk);
+      assert.deepEqual(decodeAvatarCover(junk), { code: null, background: null, anim: null }, junk);
     }
   });
 
   it("refuses a background it does not have", () => {
     const forged = JSON.stringify({ c: CODE, bg: "../../etc" });
-    assert.deepEqual(decodeAvatarCover(forged), { code: CODE, background: null });
+    assert.deepEqual(decodeAvatarCover(forged), { code: CODE, background: null, anim: null });
   });
 
   it("draws the ground in the right order: chosen, then uploaded, then ARK", () => {
@@ -136,5 +136,44 @@ describe("what a profile wears", () => {
     assert.equal(coverBackgroundUrl(null, "https://cdn.example/me.jpg"), "https://cdn.example/me.jpg");
     assert.equal(coverBackgroundUrl(null, null), defaultBackgroundUrl());
     assert.equal(coverBackgroundUrl(null, "   "), defaultBackgroundUrl(), "blank is absent");
+  });
+});
+
+/*
+  THE CLIP A CHARACTER PLAYS ON SOMEBODY ELSE'S SCREEN. Saved rather than
+  chosen by the viewer, because the point is that visitors see it.
+*/
+describe("the animation a cover carries", () => {
+  const CODE = "A2" + "x".repeat(200);
+
+  it("rides alongside the character and the ground", () => {
+    const stored = encodeAvatarCover({ code: CODE, background: "mint", anim: "wave" });
+    assert.deepEqual(decodeAvatarCover(stored), {
+      code: CODE,
+      background: "mint",
+      anim: "wave",
+    });
+  });
+
+  it("keeps a still avatar in the short form", () => {
+    assert.equal(encodeAvatarCover({ code: CODE, background: null, anim: null }), CODE);
+  });
+
+  /* A clip name reaches a renderer and arrives from a field an older client may
+     have written, so anything that is not a plain name is dropped. */
+  it("refuses a clip name that is not one", () => {
+    for (const bad of ["../../etc", "<script>", "A".repeat(80), "", "Wave!", 5]) {
+      const forged = JSON.stringify({ c: CODE, bg: null, a: bad });
+      assert.equal(decodeAvatarCover(forged).anim, null, String(bad));
+    }
+  });
+
+  it("still fits the field with all three", () => {
+    const stored = encodeAvatarCover({
+      code: "A2" + "x".repeat(400),
+      background: "midnight",
+      anim: "idle-fidget",
+    });
+    assert.ok((stored?.length ?? 0) < 1024, `${stored?.length} characters`);
   });
 });

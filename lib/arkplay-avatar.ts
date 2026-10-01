@@ -125,8 +125,12 @@ export function coverCharacterUrl(code: string, size = 1024): string {
  * Still a plain, immutable, cacheable <img src> for every visitor — a share
  * code cannot change what it decodes to.
  */
-export function coverImageUrl(code: string, width = 741, height = 473): string {
-  return `/api/avatar/cover/${encodeURIComponent(code)}?w=${width}&h=${height}`;
+export function coverImageUrl(
+  code: string,
+  { width = 741, height = 473, anim }: { width?: number; height?: number; anim?: string | null } = {},
+): string {
+  const q = `w=${width}&h=${height}${anim ? `&a=${encodeURIComponent(anim)}` : ""}`;
+  return `/api/avatar/cover/${encodeURIComponent(code)}?${q}`;
 }
 
 export function coverSceneUrl(code: string, size = 1024): string {

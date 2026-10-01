@@ -64,6 +64,7 @@ export interface Catalog {
   slots: CatalogSlot[];
   items: CatalogItem[];
   sections?: CatalogSection[];
+  clips?: CatalogClip[];
 }
 
 /** One worn thing. `params` carries its colours and options. */
@@ -622,4 +623,24 @@ export function randomiseDna(catalog: Catalog, dna: AvatarDNA): AvatarDNA {
     });
   }
   return { ...next, outfit, accessories };
+}
+
+export interface CatalogClip {
+  name: string;
+  label: string;
+  loop?: boolean;
+  duration?: number;
+  kinds?: string[];
+  tags?: string[];
+}
+
+/**
+ * The clips a given body can play.
+ *
+ * A cover animation is chosen once and seen by everybody, so the whole list is
+ * offered rather than a curated few — the engine ships 39 for a person and 41
+ * for a creature, and which of them says "me" is not ours to narrow.
+ */
+export function clipsFor(catalog: Catalog, kind: string): CatalogClip[] {
+  return (catalog.clips ?? []).filter((c) => !c.kinds?.length || c.kinds.includes(kind));
 }

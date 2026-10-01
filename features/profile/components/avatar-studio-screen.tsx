@@ -28,6 +28,7 @@ import {
   encodeDna,
   encodeMany,
   fetchCatalog,
+  clipsFor,
   itemsForSlot,
   paramValue,
   randomiseDna,
@@ -156,7 +157,12 @@ export function AvatarStudioScreen() {
   const [background, setBackground] = useState<string | null>(null);
   const [groundOpen, setGroundOpen] = useState(false);
   const [zoom, setZoom] = useState(0);
-  const [moving, setMoving] = useState(true);
+  /*
+    THE CLIP THIS CHARACTER PLAYS ON THEIR COVER. Saved, not a viewing
+    preference: the whole point is that VISITORS see it. `null` stands still.
+  */
+  const [anim, setAnim] = useState<string | null | undefined>(undefined);
+  const clip = anim === undefined ? (saved.anim ?? null) : anim;
   const [view, setView] = useState<(typeof VIEWS)[number]["view"]>("front");
   /* Derived until the person touches it, so it follows `me` arriving late
      rather than being frozen by a first render that had nothing. */
@@ -343,7 +349,7 @@ export function AvatarStudioScreen() {
             instead — and the toggle lets everyone else stop it, because a
             character fidgeting under a colour picker is a distraction.
           */
-          animate: moving && !prefersStill() ? "idle" : undefined,
+          animate: clip && !prefersStill() ? clip : undefined,
         });
         if (cancelled || mine !== seq.current) {
           URL.revokeObjectURL(url);
@@ -362,7 +368,7 @@ export function AvatarStudioScreen() {
     return () => {
       cancelled = true;
     };
-  }, [open, dna, zoom, view, moving]);
+  }, [open, dna, zoom, view, clip]);
 
   useEffect(
     () => () => {
@@ -481,7 +487,7 @@ export function AvatarStudioScreen() {
         fetched, never rendered as a source.
       */
       const after = await update.mutateAsync({
-        avatarConfig: encodeAvatarCover({ code: encoded, background: ground }),
+        avatarConfig: encodeAvatarCover({ code: encoded, background: ground, anim: clip }),
       });
 
       /*
@@ -706,16 +712,6 @@ export function AvatarStudioScreen() {
           >
             +
           </button>
-          <button
-            type="button"
-            onClick={() => setMoving((m) => !m)}
-            aria-pressed={moving}
-            className={`ws-press ws-btn-sm rounded-full text-[12px] ${
-              moving ? "bg-white text-black" : "bg-white/[0.06] text-white/70"
-            }`}
-          >
-            {moving ? "Moving" : "Still"}
-          </button>
           <span className="flex-1" />
           {VIEWS.map((v) => (
             <button
@@ -731,6 +727,44 @@ export function AvatarStudioScreen() {
             </button>
           ))}
         </div>
+
+        {/*
+          WHAT THEY DO ON YOUR PROFILE. Chosen once and saved, because a cover
+          is seen by other people — this is not a preview setting. Anybody
+          whose system asks for less movement sees the still one anyway: the
+          engine writes `prefers-reduced-motion` into the picture itself, so
+          one saved cover serves both.
+        */}
+        {catalog && dna && (
+          <div className="mt-2">
+            <span className="mb-1 block text-[12px] text-white/50">Animation</span>
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => setAnim(null)}
+                aria-pressed={!clip}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] transition-colors ${
+                  !clip ? "bg-white text-black" : "bg-white/[0.06] text-white/70"
+                }`}
+              >
+                Still
+              </button>
+              {clipsFor(catalog, dna.kind).map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => setAnim(c.name)}
+                  aria-pressed={clip === c.name}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] transition-colors ${
+                    clip === c.name ? "bg-white text-black" : "bg-white/[0.06] text-white/70"
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {groundOpen && (
           <div className="mt-3 max-h-[40vh] space-y-4 overflow-y-auto rounded-[12px] bg-[#1A1A1F] p-3">

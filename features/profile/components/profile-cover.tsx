@@ -105,7 +105,7 @@ export function ProfileCover({
     the ground is the person's own — a viewer showing somebody the ARK sweep
     while their card renders violet is showing them another profile's cover.
   */
-  const { code: characterCode, background } = decodeAvatarCover(profile.avatarConfig);
+  const { code: characterCode, background, anim } = decodeAvatarCover(profile.avatarConfig);
   const coverSrc = coverBackgroundUrl(background, profile.coverUrl);
   const avatarSrc = profile.avatarUrl ?? artworkForSeed(resolveSeed({ id: profile.id, name }));
   /*
@@ -199,7 +199,9 @@ export function ProfileCover({
           */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={coverImageUrl(characterCode)}
+            /* The clip its owner chose. The picture pauses itself for a visitor
+               whose system asks for less movement, so one cover serves both. */
+            src={coverImageUrl(characterCode, { anim })}
             alt=""
             aria-hidden
             className="absolute inset-0 h-full w-full object-cover"

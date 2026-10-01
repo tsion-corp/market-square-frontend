@@ -82,6 +82,17 @@ export interface AvatarCover {
   code: string | null;
   /** A curated background id, or null for the ARK sweep / an upload. */
   background: string | null;
+  /**
+   * The clip the character plays on the cover — `idle`, `wave`, `dance` — or
+   * null to stand still.
+   *
+   * Stored rather than chosen by the viewer, because it is part of how
+   * somebody presents themselves: the point is that VISITORS see it. Anybody
+   * whose system asks for less movement still gets a still one — the engine
+   * writes `prefers-reduced-motion` into the picture itself, so the choice is
+   * made per viewer without us serving two of them.
+   */
+  anim?: string | null;
 }
 
 /**
@@ -92,10 +103,14 @@ export interface AvatarCover {
  * there is something more to say. The service caps the STORED STRING at 1024,
  * so the wrapper counts; a code is ~250 and the wrapper is ~20.
  */
-export function encodeAvatarCover({ code, background }: AvatarCover): string | null {
-  if (!code && !background) return null;
-  if (code && !background) return code;
-  return JSON.stringify({ c: code ?? null, bg: background ?? null });
+export function encodeAvatarCover({ code, background, anim }: AvatarCover): string | null {
+  if (!code && !background && !anim) return null;
+  if (code && !background && !anim) return code;
+  return JSON.stringify({
+    c: code ?? null,
+    bg: background ?? null,
+    ...(anim ? { a: anim } : {}),
+  });
 }
 
 /**
@@ -108,21 +123,25 @@ export function encodeAvatarCover({ code, background }: AvatarCover): string | n
  */
 export function decodeAvatarCover(value: string | null | undefined): AvatarCover {
   const trimmed = typeof value === "string" ? value.trim() : "";
-  if (!trimmed) return { code: null, background: null };
+  if (!trimmed) return { code: null, background: null, anim: null };
 
   if (!trimmed.startsWith("{")) {
-    return { code: isShareCode(trimmed) ? trimmed : null, background: null };
+    return { code: isShareCode(trimmed) ? trimmed : null, background: null, anim: null };
   }
   try {
-    const parsed = JSON.parse(trimmed) as { c?: unknown; bg?: unknown };
+    const parsed = JSON.parse(trimmed) as { c?: unknown; bg?: unknown; a?: unknown };
     const code = typeof parsed.c === "string" && isShareCode(parsed.c) ? parsed.c : null;
     const bg =
       typeof parsed.bg === "string" && PROFILE_BACKGROUNDS.some((b) => b.id === parsed.bg)
         ? parsed.bg
         : null;
-    return { code, background: bg };
+    /* A clip name reaches a renderer, so it is shape-checked here rather than
+       taken on trust from a field anybody's older client may have written. */
+    const anim =
+      typeof parsed.a === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(parsed.a) ? parsed.a : null;
+    return { code, background: bg, anim };
   } catch {
-    return { code: null, background: null };
+    return { code: null, background: null, anim: null };
   }
 }
 

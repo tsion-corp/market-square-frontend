@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { decodeShareCode } from "@/vendor/arkplay-engine/dna/codec.ts";
 import { renderSVG } from "@/vendor/arkplay-engine/render/render.ts";
+import { animatedSVG } from "@/vendor/arkplay-engine/export/animated.ts";
 
 /**
  * A PROFILE COVER, DRAWN AT THE SHAPE OF THE CARD IT GOES IN.
@@ -48,6 +49,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ code: strin
   const url = new URL(request.url);
   const width = dimension(url.searchParams.get("w"), DEFAULTS.w);
   const height = dimension(url.searchParams.get("h"), DEFAULTS.h);
+  /*
+    The clip to play, if its owner chose one. Shape-checked rather than passed
+    through: this reaches a renderer, and it arrives in a URL anybody can type.
+    An unknown name simply draws the still.
+  */
+  const raw = url.searchParams.get("a");
+  const anim = raw && /^[a-z][a-z0-9-]{0,31}$/.test(raw) ? raw : null;
 
   try {
     const decoded = decodeShareCode(code) as { dna?: unknown };
@@ -73,10 +81,17 @@ export async function GET(request: Request, ctx: { params: Promise<{ code: strin
         })()
       : undefined;
 
-    const svg = renderSVG(dna, {
-      ...(box ? { viewBox: box } : { crop: "full" }),
+    /*
+      THE PICTURE PAUSES ITSELF. The animated SVG carries
+      `@media (prefers-reduced-motion: reduce) { animation-play-state: paused }`,
+      so one response serves everybody: a visitor who asked their system for
+      less movement sees it standing still, and nobody needs two URLs or a
+      per-viewer render.
+    */
+    const shared = {
+      ...(box ? { viewBox: box } : { crop: "full" as const }),
       size: width,
-      detail: "high",
+      detail: "high" as const,
       /*
         NO FRAME ON A WIDE COVER. A frame and its ring are drawn to the box, so
         widening one stretches a laurel wreath into an ellipse — visibly a
@@ -85,7 +100,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ code: strin
         avatar rendered at a portrait crop.
       */
       frame: false,
-    });
+    };
+    const svg = anim
+      ? animatedSVG(dna as Parameters<typeof animatedSVG>[0], { ...shared, anim, fps: 12 })
+      : renderSVG(dna, shared);
 
     return new NextResponse(svg, {
       headers: {
