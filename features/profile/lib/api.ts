@@ -189,6 +189,15 @@ export async function updateMe(input: {
    */
   coverUrl?: string | null;
   /**
+   * The 2D character on the cover, as its share code. Null clears it.
+   *
+   * Deliberately NOT `avatarUrl`: building a character must not replace
+   * somebody's profile picture, which is a separate choice. And deliberately
+   * not `coverUrl`, which the service runs through `verifyAttachment` and will
+   * only accept as a picture that person uploaded.
+   */
+  avatarConfig?: string | null;
+  /**
    * The self-declared place and gender.
    *
    * ABSENT leaves the field alone; explicit `null` clears it — the same

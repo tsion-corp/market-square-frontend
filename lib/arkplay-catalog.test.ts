@@ -55,7 +55,7 @@ describe("the wardrobe schema", () => {
     editor down. This walks all of them against a default document.
   */
   it("resolves every form of condition the schema actually uses", () => {
-    let seen = { in: 0, notIn: 0, crossSection: 0 };
+    const seen = { in: 0, notIn: 0, crossSection: 0 };
     for (const kind of ["humanoid", "creature"]) {
       const doc: AvatarDNA = { ...BASE, kind };
       for (const section of sectionsFor(catalog, kind)) {

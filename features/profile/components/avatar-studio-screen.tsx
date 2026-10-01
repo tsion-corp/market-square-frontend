@@ -7,11 +7,6 @@ import { canGoBack } from "@/lib/nav-history";
 import { useUpdateMe } from "@/features/profile/hooks/use-profile";
 import { asset, sq } from "@/lib/square-path";
 import { avatarImageUrl } from "@/lib/arkplay-avatar";
-import {
-  coverCharacterCode,
-  selectedBackgroundId,
-  storedCoverUrl,
-} from "@/lib/profile-backgrounds";
 import { ENGINE_VERSION } from "@/vendor/arkplay-dna/version.ts";
 import {
   AvatarCodecUnavailable,
@@ -97,8 +92,8 @@ export function AvatarStudioScreen() {
   /* A page, not a dialog: there is nothing to open, so everything that used to
      wait on `open` runs once the route is mounted. */
   const open = true;
-  /** Reopen on the character already on the cover, so editing continues. */
-  const code = coverCharacterCode(me?.coverUrl);
+  /** Reopen on the character they already have, so editing continues. */
+  const code = me?.avatarConfig ?? null;
   /*
     BACK TO WHERE THEY CAME FROM. Not a built `/u/<username>` link: this repo
     routes people by id because a username is theirs to change, and a test
@@ -308,20 +303,31 @@ export function AvatarStudioScreen() {
     try {
       const saved = await encodeDna(dna);
       /*
-        THE CHARACTER GOES ON THE COVER, AND THE PROFILE PICTURE IS LEFT ALONE.
-        It used to be written to `avatarUrl`, which meant building a character
-        silently replaced somebody's photograph with it. The cover carries the
-        ground and the character together (see lib/profile-backgrounds.ts), so
-        the background already chosen is read back and kept — saving a
-        character must not quietly return the ground to the ARK sweep.
+        ITS OWN FIELD, AND NEITHER OF THE TWO IT COULD HAVE BEEN.
+
+        Not `avatarUrl`: building a character must not replace somebody's
+        profile picture, which is a separate choice they made. Not `coverUrl`
+        either, and not for want of trying — the service runs that one through
+        `verifyAttachment`, which demands a picture this person uploaded and
+        refuses a foreign host or an appended query string outright (403).
+        `avatarConfig` exists because of those two walls: opaque, never
+        fetched, never rendered as a source.
       */
-      await update.mutateAsync({
-        coverUrl: storedCoverUrl(
-          window.location.origin,
-          selectedBackgroundId(me?.coverUrl),
-          saved,
-        ),
-      });
+      const after = await update.mutateAsync({ avatarConfig: saved });
+
+      /*
+        AN UNKNOWN FIELD IS STRIPPED, NOT REFUSED — which is the one failure
+        that would look exactly like success. Until `avatarConfig` is deployed,
+        the service drops it and answers 200 with the profile unchanged, and a
+        person would walk away believing their character was kept. The write is
+        only believed when the read-back carries it.
+      */
+      if (after.avatarConfig !== saved) {
+        setProblem(
+          "Saved nothing — this server doesn't store avatars yet. Your character is still here; try again once it's deployed.",
+        );
+        return;
+      }
       leave();
     } catch (e) {
       setProblem(
