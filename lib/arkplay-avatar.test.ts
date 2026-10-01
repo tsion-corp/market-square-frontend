@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   avatarImageUrl,
   codeFromAvatarUrl,
+  coverCharacterUrl,
   isGeneratedAvatar,
   isShareCode,
   studioUrl,
@@ -37,6 +38,31 @@ describe("the picture for a code", () => {
   it("never carries a credential", () => {
     const url = avatarImageUrl(CODE, { crop: "full" });
     assert.doesNotMatch(url, /apk_|api[_-]?key|token|secret|authorization/i);
+  });
+
+  /*
+    THE SERVICE DRAWS ITS OWN SCENE UNLESS TOLD NOT TO. Verified against the
+    live render: with the default the PNG's corners come back an opaque
+    #272F42, so a character composited over a profile background would cover
+    that background with a dark rectangle instead of standing on it.
+  */
+  it("leaves the scene alone unless a caller turns it off", () => {
+    assert.equal(new URL(avatarImageUrl(CODE)).searchParams.get("background"), null);
+    assert.equal(
+      new URL(avatarImageUrl(CODE, { background: false })).searchParams.get("background"),
+      "false",
+    );
+  });
+
+  it("cuts the cover character out of its scene", () => {
+    const url = new URL(coverCharacterUrl(CODE));
+    assert.equal(url.searchParams.get("crop"), "full", "the whole figure, not a portrait");
+    assert.equal(url.searchParams.get("background"), "false", "nothing may hide the ground");
+  });
+
+  /* The code must survive the round trip, or re-editing a cover breaks. */
+  it("keeps the share code readable back out of a cover URL", () => {
+    assert.equal(codeFromAvatarUrl(coverCharacterUrl(CODE)), CODE);
   });
 });
 

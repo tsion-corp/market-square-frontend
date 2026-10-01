@@ -39,16 +39,47 @@ export type AvatarCrop = "portrait" | "full";
  *
  * `portrait` is the head-and-shoulders used wherever an avatar appears today;
  * `full` is the whole character, which is what stands on a profile cover.
+ *
+ * `background` is the service's own scene behind the character, and it is ON
+ * by default — theirs, not ours. Left alone it returns an RGBA PNG whose
+ * corners are an opaque #272F42, so compositing one over a profile background
+ * covers that background with a dark rectangle. Every caller that layers the
+ * character over something else must pass `background: false`.
  */
 export function avatarImageUrl(
   code: string,
-  opts: { crop?: AvatarCrop; size?: number; format?: "png" | "svg" } = {},
+  opts: { crop?: AvatarCrop; size?: number; format?: "png" | "svg"; background?: boolean } = {},
 ): string {
-  const { crop = "portrait", size = 256, format = "png" } = opts;
+  const { crop = "portrait", size = 256, format = "png", background } = opts;
   const url = new URL(`${API}/render/${encodeURIComponent(code)}.${format}`);
   url.searchParams.set("crop", crop);
   url.searchParams.set("size", String(size));
+  // Only when turning it off: the parameter is absent for the service default,
+  // so an ordinary portrait URL stays the short form it has always been and
+  // the codes already saved inside one keep matching.
+  if (background === false) url.searchParams.set("background", "false");
   return url.toString();
+}
+
+/**
+ * THE CHARACTER THAT STANDS ON A PROFILE COVER.
+ *
+ * The cover is a background with a person's character standing in the middle
+ * of it, so this is the cut-out half: the whole figure, and no scene of its
+ * own to hide the ground it is standing on.
+ *
+ * ─── WHY THE FIGURE IS NOT SCALED TO A FIXED HEIGHT ─────────────────────────
+ * Measured against the live service across five avatars, a `full` render puts
+ * the figure's FEET on the canvas bottom every time — the bottom padding runs
+ * 0%..3.1% whatever the character is. What varies is its height: 84.6% of the
+ * canvas for a humanoid, 70.9% for a dragon, 37.3% for a slime. That spread is
+ * not framing to correct, it is the characters being different sizes, so the
+ * cover anchors the canvas's FOOT and lets the figure stand as tall as it is.
+ * Normalising every species to one height would stand a slime eye to eye with
+ * a dragon.
+ */
+export function coverCharacterUrl(code: string, size = 512): string {
+  return avatarImageUrl(code, { crop: "full", size, background: false });
 }
 
 /*

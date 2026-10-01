@@ -12,6 +12,7 @@ import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
 import { coverBackgroundUrl } from "@/lib/profile-backgrounds";
+import { codeFromAvatarUrl, coverCharacterUrl } from "@/lib/arkplay-avatar";
 
 /**
  * THE PROFILE COVER — node 435:27500, redrawn as 1021:20229 (live file,
@@ -106,6 +107,18 @@ export function ProfileCover({
   */
   const coverSrc = coverBackgroundUrl(profile.coverUrl);
   const avatarSrc = profile.avatarUrl ?? artworkForSeed(resolveSeed({ id: profile.id, name }));
+  /*
+    THE CHARACTER STANDING ON THE BACKGROUND — the swap the layering above was
+    built for. A profile whose picture is a built avatar stands as ITSELF here;
+    everyone else keeps the ARK mascot, which is what they are already wearing.
+
+    The share code comes out of the picture's own URL, so this needs no profile
+    field and no second request: `avatarUrl` IS the avatar (see
+    lib/arkplay-avatar.ts). An uploaded photograph yields no code and is not
+    drawn here — a head-and-shoulders JPEG stretched to a standing figure is
+    not a character, and the mascot is the honest fallback.
+  */
+  const characterCode = codeFromAvatarUrl(profile.avatarUrl);
   useLayoutEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -130,15 +143,14 @@ export function ProfileCover({
       above the actions; `md:` returns the file's frame.
     */
     <div ref={cardRef} className="relative h-[300px] w-full overflow-hidden rounded-[20px] md:aspect-[741/473] md:h-auto">
-      {/* THE COVER IS LAYERED, not one flat picture, so the mascot's head can
-          be swapped per user (the seeded-avatar personalisation ogazboiz is
-          building toward). Layer 1: the orange checkered sweep, baked from the
-          node's own raster at its exact crop (offset −300.94/−118.02).
-          Layer 2: the 1024² transparent mascot cut-out — the very bitmap the
-          file's SVG wraps — positioned by the node's geometry: a 293² box at
-          (133.5, 63) in the 535×342 frame → centre-x 52.34%, height 85.67%,
-          its feet 4.09% below the card edge (the frame clips them, as the
-          file does). Layer 3 (coming): the per-seed HEAD overlay. */}
+      {/* THE COVER IS LAYERED, not one flat picture, and that is the whole
+          point of it: a person changes the ground without touching the
+          character, and the character without touching the ground.
+          Layer 1: the background — the ARK sweep baked from the node's own
+          raster at its exact crop (offset −300.94/−118.02), or the one its
+          owner picked.
+          Layer 2: the character, standing on it. The mascot for everyone who
+          has not built one; their own 2D avatar once they have. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={coverBackgroundUrl(profile.coverUrl)}
@@ -146,13 +158,31 @@ export function ProfileCover({
         aria-hidden
         className="absolute inset-0 h-full w-full object-cover"
       />
+      {/*
+        LAYER 2 — THE CHARACTER, at the spot 2102:18362 stands the mascot on
+        (centre-x 52.336%), whoever it is.
+
+        The two pictures need different numbers because they are padded
+        differently inside their own canvases, and the geometry follows the
+        FIGURE, not the file. Measured: the mascot's ink fills 94.6% of its
+        1024², its feet 3.6% above the bottom edge; an ArkPlay `full` render
+        gives a humanoid 84.6% of a 512², its feet 2.5% up. So the ArkPlay
+        canvas is drawn taller — 95.8% against 85.673% — which lands a humanoid
+        at 81.0% of the card, the same height the mascot has always stood, and
+        its foot within a point of his. A creature stands shorter because a
+        creature IS shorter; see coverCharacterUrl for why that is left alone.
+      */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={asset("/profile/ark-mascot.png")}
+        src={characterCode ? coverCharacterUrl(characterCode) : asset("/profile/ark-mascot.png")}
         alt=""
         aria-hidden
         className="absolute w-auto max-w-none -translate-x-1/2"
-        style={{ left: "52.336%", bottom: "-4.094%", height: "85.673%" }}
+        style={
+          characterCode
+            ? { left: "52.336%", bottom: "-3.4%", height: "95.8%" }
+            : { left: "52.336%", bottom: "-4.094%", height: "85.673%" }
+        }
       />
 
       {/* 108 of 473 at the top, 215 at the foot — see the note above for why
