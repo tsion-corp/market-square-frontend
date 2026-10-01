@@ -107,6 +107,23 @@ export function ProfileCover({
   */
   const { code: characterCode, background, anim } = decodeAvatarCover(profile.avatarConfig);
   const coverSrc = coverBackgroundUrl(background, profile.coverUrl);
+  /*
+    WHAT OPENING THE COVER SHOWS IS THE COVER.
+
+    It used to show the GROUND — the background layer alone, with no character
+    on it — because that is what the cover was back when it was a character
+    composited over a separate picture. Now the cover IS one rendered image, so
+    tapping it opens that. Showing the ground instead meant tapping a character
+    standing in a meadow and being handed an empty meadow.
+
+    Somebody with no character still has only a ground, and that is what opens.
+  */
+  const viewerSrc = characterCode
+    ? /* Twice the card's size: this opens full screen, where the card's own
+         741 would be visibly soft. It is SVG, so the cost is bytes rather
+         than pixels, and it is cached on its own URL like every other. */
+      coverImageUrl(characterCode, { width: 1482, height: 946, anim })
+    : coverSrc;
   const avatarSrc = profile.avatarUrl ?? artworkForSeed(resolveSeed({ id: profile.id, name }));
   /*
     THE CHARACTER STANDING ON THE BACKGROUND — the swap the layering above was
@@ -233,7 +250,7 @@ export function ProfileCover({
           layer above lets taps through except on its own controls. */}
       <button
         type="button"
-        onClick={() => setViewing({ src: coverSrc, alt: "Cover photo" })}
+        onClick={() => setViewing({ src: viewerSrc, alt: "Cover photo" })}
         aria-label="View cover photo"
         className="absolute inset-0 cursor-zoom-in"
       />
