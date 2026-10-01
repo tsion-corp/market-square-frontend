@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMe } from "@/hooks/use-me";
 import { useAuth } from "@/hooks/use-auth";
+import { preloadRenderer, renderLocally } from "@/lib/arkplay-local-render";
 import { BackgroundPicker } from "@/features/profile/components/background-picker";
 import {
   coverBackgroundUrl,
@@ -14,7 +15,7 @@ import { canGoBack } from "@/lib/nav-history";
 import { useUpdateMe } from "@/features/profile/hooks/use-profile";
 import { asset, sq } from "@/lib/square-path";
 import { avatarImageUrl } from "@/lib/arkplay-avatar";
-import { ENGINE_VERSION } from "@/vendor/arkplay-dna/version.ts";
+import { ENGINE_VERSION } from "@/vendor/arkplay-engine/version.ts";
 import {
   AvatarCodecUnavailable,
   type AvatarDNA,
@@ -30,7 +31,6 @@ import {
   itemsForSlot,
   paramValue,
   randomiseDna,
-  renderPreview,
   sectionsFor,
   setParam,
   slotsFor,
@@ -61,7 +61,7 @@ import {
  * way to hold). Asked for, and not waited on: Square runs the codec on its own
  * server at `/api/avatar/codes`, so saving and reopening both work today. The
  * day ArkPlay ships theirs it is a change of base URL — see
- * vendor/arkplay-dna/README.md.
+ * vendor/arkplay-engine/README.md.
  */
 
 /* ── The file's numbers ───────────────────────────────────────────────────── */
@@ -215,11 +215,14 @@ export function AvatarStudioScreen() {
   const [tab, setTab] = useState<TabId>("fashion");
   const [slot, setSlot] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [drawing, setDrawing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   /* ── What may be worn, and who we start as ─────────────────────────────── */
+  useEffect(() => {
+    if (open) preloadRenderer();
+  }, [open]);
+
   useEffect(() => {
     if (!open || !identityKnown) return;
     const ac = new AbortController();
@@ -295,51 +298,38 @@ export function AvatarStudioScreen() {
   useEffect(() => {
     if (!open || !dna) return;
     const mine = ++seq.current;
-    const ac = new AbortController();
-    const timer = setTimeout(async () => {
-      setDrawing(true);
+    let cancelled = false;
+    (async () => {
       try {
         /*
-          `background: true` so the SCENE shows. It was false, which is why
-          every one of the ten scene parameters edited nothing visible — the
-          wallpaper was being rendered and then thrown away. A scene set to
-          `none` still comes back transparent, so this costs nothing for
-          somebody who has not chosen one.
+          DRAWN HERE, NOT FETCHED. About 2ms against the service's ~1,900ms, so
+          there is nothing left to debounce: the picture keeps up with the
+          taps. `detail: medium` is the live setting — `high` costs 4.9ms and
+          shows nothing more at this size, and what gets SAVED is the service's
+          own render anyway.
         */
-        /*
-          THE CHARACTER ONLY. `background: false` cuts it out of whatever scene
-          its own document carries, because the ground on a cover is a separate
-          picture that must never move or resize the character.
-        */
-        /*
-          THE SCENE IS BACK, and at a size that does not look upscaled: 512 was
-          being drawn 2.4x too large on a retina screen, which is why this
-          looked soft beside the engine's own studio.
-        */
-        const blob = await renderPreview(dna, {
+        const url = await renderLocally(dna, {
           crop: ZOOMS[zoom].crop,
           view,
-          size: 1024,
-          background: true,
-          signal: ac.signal,
+          size: 512,
+          detail: "medium",
         });
-        if (ac.signal.aborted || mine !== seq.current) return;
-        const url = URL.createObjectURL(blob);
+        if (cancelled || mine !== seq.current) {
+          URL.revokeObjectURL(url);
+          return;
+        }
         setPreview((old) => {
           if (old) URL.revokeObjectURL(old);
           return url;
         });
       } catch {
-        if (!ac.signal.aborted && mine === seq.current) {
+        if (!cancelled && mine === seq.current) {
           setProblem("Couldn't draw that look. Your last change may not be shown.");
         }
-      } finally {
-        if (mine === seq.current) setDrawing(false);
       }
-    }, 250);
+    })();
     return () => {
-      ac.abort();
-      clearTimeout(timer);
+      cancelled = true;
     };
   }, [open, dna, zoom, view]);
 
@@ -561,8 +551,7 @@ export function AvatarStudioScreen() {
               <img
                 src={preview}
                 alt="Your avatar"
-                className="absolute inset-0 h-full w-full object-contain transition-opacity"
-                style={{ opacity: drawing ? 0.55 : 1 }}
+                className="absolute inset-0 h-full w-full object-contain"
               />
             </>
           ) : (

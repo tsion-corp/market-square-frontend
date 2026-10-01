@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { decodeShareCode } from "@/vendor/arkplay-dna/dna/codec.ts";
+import { decodeShareCode } from "@/vendor/arkplay-engine/dna/codec.ts";
 
 /**
  * A SAVED AVATAR, BACK INTO THE DOCUMENT THE STUDIO EDITS.

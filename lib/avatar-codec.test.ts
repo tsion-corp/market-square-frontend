@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
-import { encodeShareCode, decodeShareCode } from "../vendor/arkplay-dna/dna/codec.ts";
-import { ENGINE_VERSION } from "../vendor/arkplay-dna/version.ts";
+import { encodeShareCode, decodeShareCode } from "../vendor/arkplay-engine/dna/codec.ts";
+import { ENGINE_VERSION } from "../vendor/arkplay-engine/version.ts";
 
 /*
   THE BORROWED CODEC, AND THE ONE THING IT DOES NOT DO.
 
   Square encodes avatars on its own server because the avatar service
-  publishes no route that does (see vendor/arkplay-dna/README.md). These pin
+  publishes no route that does (see vendor/arkplay-engine/README.md). These pin
   the two facts the route handler depends on.
 */
 

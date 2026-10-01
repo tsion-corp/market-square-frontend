@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { encodeShareCode } from "@/vendor/arkplay-dna/dna/codec.ts";
+import { encodeShareCode } from "@/vendor/arkplay-engine/dna/codec.ts";
 
 /**
  * AN AVATAR, TURNED INTO THE STRING SQUARE STORES.
@@ -9,7 +9,7 @@ import { encodeShareCode } from "@/vendor/arkplay-dna/dna/codec.ts";
  * public route that makes one — `POST /avatar/v1/codes` 404s, and the account
  * route that would return one wants an ArkPlay sign-in no Square reader has.
  * It has been asked for. Until it ships, Square encodes here, on its own
- * server, with ArkPlay's own codec (see vendor/arkplay-dna/README.md).
+ * server, with ArkPlay's own codec (see vendor/arkplay-engine/README.md).
  *
  * ─── WHY THE SERVER AND NOT THE BROWSER ─────────────────────────────────────
  * The codec is 221K of schema. Shipping it to every reader to serve the few

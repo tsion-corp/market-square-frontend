@@ -135,7 +135,7 @@ function slotOf(catalog: Catalog, id: string): string | null {
   ─── A DOCUMENT HAS TWO WARDROBES, NOT ONE ──────────────────────────────────
   `outfit` holds GARMENTS and `accessories` holds everything else, and the
   codec sorts them by the catalog's own `slot.kind`, discarding anything found
-  in the wrong list (vendor/arkplay-dna/dna/normalize.ts: `if (isGarment !==
+  in the wrong list (vendor/arkplay-engine/dna/normalize.ts: `if (isGarment !==
   garment) continue`). Six of the 23 slots are garments.
 
   Writing everything to `outfit` therefore made 17 slots — hats, glasses,
@@ -314,7 +314,7 @@ export async function renderPreview(
  * Asked for, and not waited on: Square runs the codec itself, server-side, at
  * `/api/avatar/codes`. The shapes below are deliberately the ones asked of
  * ArkPlay, so the day they ship theirs this becomes a change of base URL and
- * nothing else. See vendor/arkplay-dna/README.md for what is borrowed and how
+ * nothing else. See vendor/arkplay-engine/README.md for what is borrowed and how
  * it is kept honest.
  */
 const CODEC = "/api/avatar/codes";
