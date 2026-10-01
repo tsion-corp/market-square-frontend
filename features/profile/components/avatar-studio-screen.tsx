@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMe } from "@/hooks/use-me";
 import { useAuth } from "@/hooks/use-auth";
+import { BackgroundPicker } from "@/features/profile/components/background-picker";
+import {
+  coverBackgroundUrl,
+  decodeAvatarCover,
+  encodeAvatarCover,
+} from "@/lib/profile-backgrounds";
 import { canGoBack } from "@/lib/nav-history";
 import { useUpdateMe } from "@/features/profile/hooks/use-profile";
 import { asset, sq } from "@/lib/square-path";
@@ -114,10 +120,14 @@ export function AvatarStudioScreen() {
   /* A page, not a dialog: there is nothing to open, so everything that used to
      wait on `open` runs once the route is mounted. */
   const open = true;
-  /** Reopen on the character they already have — scene included, since it
-      rides inside the same code. */
-  const code = me?.avatarConfig ?? null;
+  /** Reopen on the character AND the ground they already have. */
+  const saved = decodeAvatarCover(me?.avatarConfig);
+  const code = saved.code;
+  const [background, setBackground] = useState<string | null>(null);
   const [groundOpen, setGroundOpen] = useState(false);
+  /* Derived until the person touches it, so it follows `me` arriving late
+     rather than being frozen by a first render that had nothing. */
+  const ground = background ?? saved.background;
   /*
     BACK TO WHERE THEY CAME FROM. Not a built `/u/<username>` link: this repo
     routes people by id because a username is theirs to change, and a test
@@ -181,7 +191,6 @@ export function AvatarStudioScreen() {
   const [tab, setTab] = useState<TabId>("fashion");
   const [slot, setSlot] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [previewCutout, setPreviewCutout] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -274,25 +283,21 @@ export function AvatarStudioScreen() {
           somebody who has not chosen one.
         */
         /*
-          BOTH LAYERS, IN PARALLEL. The card draws the scene softly behind a
-          sharp character, which needs two pictures of the same document: one
-          WITH its scene and one cut out of it. Sequential would double the
-          wait for no reason — together they cost what the slower one costs.
+          THE CHARACTER ONLY. `background: false` cuts it out of whatever scene
+          its own document carries, because the ground on a cover is a separate
+          picture that must never move or resize the character.
         */
-        const [withScene, cutout] = await Promise.all([
-          renderPreview(dna, { crop: "full", size: 512, background: true, signal: ac.signal }),
-          renderPreview(dna, { crop: "full", size: 512, background: false, signal: ac.signal }),
-        ]);
+        const blob = await renderPreview(dna, {
+          crop: "full",
+          size: 512,
+          background: false,
+          signal: ac.signal,
+        });
         if (ac.signal.aborted || mine !== seq.current) return;
-        const sceneUrl = URL.createObjectURL(withScene);
-        const cutUrl = URL.createObjectURL(cutout);
+        const url = URL.createObjectURL(blob);
         setPreview((old) => {
           if (old) URL.revokeObjectURL(old);
-          return sceneUrl;
-        });
-        setPreviewCutout((old) => {
-          if (old) URL.revokeObjectURL(old);
-          return cutUrl;
+          return url;
         });
       } catch {
         if (!ac.signal.aborted && mine === seq.current) {
@@ -310,12 +315,7 @@ export function AvatarStudioScreen() {
 
   useEffect(
     () => () => {
-      /* Both, or the cut-out leaks one blob per edit for the whole session. */
       setPreview((old) => {
-        if (old) URL.revokeObjectURL(old);
-        return null;
-      });
-      setPreviewCutout((old) => {
         if (old) URL.revokeObjectURL(old);
         return null;
       });
@@ -429,7 +429,9 @@ export function AvatarStudioScreen() {
         `avatarConfig` exists because of those two walls: opaque, never
         fetched, never rendered as a source.
       */
-      const after = await update.mutateAsync({ avatarConfig: encoded });
+      const after = await update.mutateAsync({
+        avatarConfig: encodeAvatarCover({ code: encoded, background: ground }),
+      });
 
       /*
         AN UNKNOWN FIELD IS STRIPPED, NOT REFUSED — which is the one failure
@@ -513,26 +515,22 @@ export function AvatarStudioScreen() {
         */}
         <div className="sticky top-0 z-20 -mx-[18px] bg-[#121214] px-[18px] pb-3 pt-1">
         <div className="relative aspect-[580/440] w-full overflow-hidden rounded-[12px] bg-[#1A1A1F]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={coverBackgroundUrl(ground, null)}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover"
+          />
           {/* The character. 341² at (120,60) in the card's own 580x440. */}
           {preview ? (
             <>
-              {/*
-                THE SAME TWO LAYERS THE COVER USES, so this previews the cover
-                rather than something that merely resembles it: the scene
-                filling softly out of focus, the character sharp over it at the
-                file's own geometry. One picture cannot be both — see
-                profile-cover.tsx.
-              */}
+              {/* The character over the chosen ground — the same two
+                  independent layers the cover draws, so this previews it
+                  rather than resembling it. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={preview}
-                alt=""
-                aria-hidden
-                className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl"
-              />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={previewCutout ?? preview}
                 alt="Your avatar"
                 className="absolute w-auto max-w-none -translate-x-1/2 transition-opacity"
                 style={{ left: "52.336%", bottom: "-3.4%", height: "95.8%", opacity: drawing ? 0.55 : 1 }}
@@ -632,27 +630,9 @@ export function AvatarStudioScreen() {
           </button>
         </div>
 
-        {groundOpen && catalog && dna && (
-          <div className="mt-3 max-h-[40vh] space-y-3 overflow-y-auto rounded-[12px] bg-[#1A1A1F] p-3">
-            {/*
-              THE WALLPAPER IS THE ENGINE'S OWN SCENE — 14 presets, six
-              background modes, eleven patterns, two colours, a frame and a
-              ring. It rides inside the share code, so choosing one needs no
-              second field and no second picture, which is what six hand-drawn
-              SVGs needed and never got.
-            */}
-            {sectionsFor(catalog, dna.kind)
-              .filter((section) => section.tab === "scene")
-              .map((section) =>
-                visibleParams(catalog, dna, section).map((p) => (
-                  <ParamControl
-                    key={`${section.id}.${p.key}`}
-                    param={p}
-                    value={paramValue(dna, section, p)}
-                    onChange={(v) => setDna(setParam(dna, section.id, p.key, v))}
-                  />
-                )),
-              )}
+        {groundOpen && (
+          <div className="mt-3 rounded-[12px] bg-[#1A1A1F] p-3">
+            <BackgroundPicker value={ground} onChange={setBackground} />
           </div>
         )}
 
@@ -826,7 +806,18 @@ export function AvatarStudioScreen() {
             */}
             {catalog && dna && (
               <div className="mt-5 space-y-5">
-                {sectionsFor(catalog, dna.kind).map((section) => {
+                {sectionsFor(catalog, dna.kind)
+                  /*
+                    SCENE IS NOT OFFERED, because nothing it does would show.
+                    The character is rendered cut out of its own scene so the
+                    ground stays a separate picture, which means every one of
+                    the ten scene parameters would edit something invisible —
+                    a control that changes nothing is worse than one that is
+                    missing. They come back the day the engine can render a
+                    scene WITHOUT the character baked into it.
+                  */
+                  .filter((section) => section.tab !== "scene")
+                  .map((section) => {
                   const shown = visibleParams(catalog, dna, section);
                   if (!shown.length) return null;
                   return (

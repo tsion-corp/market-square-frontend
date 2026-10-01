@@ -12,7 +12,7 @@ import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
 import { coverBackgroundUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
-import { coverCharacterUrl, coverSceneUrl } from "@/lib/arkplay-avatar";
+import { coverCharacterUrl } from "@/lib/arkplay-avatar";
 
 /**
  * THE PROFILE COVER — node 435:27500, redrawn as 1021:20229 (live file,
@@ -192,31 +192,21 @@ export function ProfileCover({
             above simply shows through and the character stands on it.
           */}
           {/*
-            TWO LAYERS, BECAUSE ONE CANNOT BE BOTH. The render is square and
-            the card is not, and every single-image answer failed on a real
-            avatar: contained, it sat in the middle with blurred bars and read
-            as a panel pasted on; cropped to fill, it cut the head off anyone
-            with tall hair or ears, because the figure's extent is not the same
-            from one character to the next — the 23%..97% this was anchored to
-            was ONE avatar, measured and then over-trusted.
+            THE BACKGROUND NEVER TOUCHES THE CHARACTER. They are two
+            independent pictures: a flat background that fills the card at any
+            shape, and the character cut out of its own render, drawn at the
+            file's geometry — the same 95.8% at centre 52.336% the mascot
+            always used. Changing one cannot move or resize the other.
 
-            So the scene fills the card softly out of focus, and the character
-            is drawn over it at the file's own geometry — the same 95.8% at
-            centre 52.336% the mascot has always used. Both layers are the same
-            avatar, so the shape behind the character IS the character, and it
-            sits directly behind them.
-
-            A soft ground under a sharp subject is also what the card already
-            wanted: it draws two scrims over this precisely so white furniture
-            stays readable on a picture nobody has seen yet.
+            That independence is the requirement, and it is why the engine's
+            own SCENES cannot be the ground here: their render bakes the
+            character INTO the scene, so using one means either cropping the
+            character to the card's shape — which zoomed it to a torso and cut
+            the head off anyone with tall hair — or blurring the scene until
+            the baked-in figure stops reading, which left a smear instead of a
+            background. Both were tried. A scene-only render has been asked
+            for; until it exists the ground is ours.
           */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={coverSceneUrl(characterCode)}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl"
-          />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={coverCharacterUrl(characterCode)}
