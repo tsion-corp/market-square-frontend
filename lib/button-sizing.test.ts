@@ -62,6 +62,18 @@ const DESIGN_LOCKED = new Set<string>([
   // the file's own geometry on a surface built to its pixels.
   "components/layout/house-profile-screen.tsx",
   /*
+    The avatar studio's preview card (1863:2412). Its BACK uses the scale —
+    `ws-iconbtn-lg` is exactly the file's 48 — but the close disc on the card
+    is the file's own 44.118, a constant the scale cannot express: every
+    `ws-iconbtn-*` tier shrinks to 32..36 on a fine pointer, and this one is
+    drawn at one size over a 580x440 picture whatever is pointing at it.
+
+    WORTH KNOWING RATHER THAN HIDING: at 44.118 it clears the touch floor, and
+    it is not a lone route out — the studio is built on `Sheet`, so Escape and
+    the backdrop close it too, and the header's Back does the same job.
+  */
+  "features/profile/components/avatar-studio-sheet.tsx",
+  /*
     Buy-a-gift (1285:83137). Its ACTION uses the scale — `ws-btn-lg` is
     exactly the node's 48 at 16px — but the dialog's three other controls sit
     below the scale's smallest tier on purpose: a 43 round close, and 32
