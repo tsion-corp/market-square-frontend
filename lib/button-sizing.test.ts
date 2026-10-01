@@ -74,6 +74,19 @@ const DESIGN_LOCKED = new Set<string>([
   */
   "features/profile/components/avatar-studio-screen.tsx",
   /*
+    The profile editor (2112:19429), built to the file's pixels. Its controls
+    are not scale tiers and could not be: the cover's camera is a 38 disc
+    centred on a photograph, the profile picture is a 71 square with its own
+    camera over it, and Save is 47 — one under `ws-btn-lg`, carrying the file's
+    own four-stop gradient rather than `ws-btn-silver`'s.
+
+    WORTH KNOWING RATHER THAN HIDING: the 38 camera is under the 44 touch
+    floor. It is not a lone route to anything — the same picture can be changed
+    from the profile's own camera button, and the sheet closes on Escape, the
+    backdrop and its own cross.
+  */
+  "features/profile/components/edit-profile-sheet.tsx",
+  /*
     Buy-a-gift (1285:83137). Its ACTION uses the scale — `ws-btn-lg` is
     exactly the node's 48 at 16px — but the dialog's three other controls sit
     below the scale's smallest tier on purpose: a 43 round close, and 32
