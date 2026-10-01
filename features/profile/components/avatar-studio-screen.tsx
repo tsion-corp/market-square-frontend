@@ -287,10 +287,15 @@ export function AvatarStudioScreen() {
           its own document carries, because the ground on a cover is a separate
           picture that must never move or resize the character.
         */
+        /*
+          THE SCENE IS BACK, and at a size that does not look upscaled: 512 was
+          being drawn 2.4x too large on a retina screen, which is why this
+          looked soft beside the engine's own studio.
+        */
         const blob = await renderPreview(dna, {
           crop: "full",
-          size: 512,
-          background: false,
+          size: 1024,
+          background: true,
           signal: ac.signal,
         });
         if (ac.signal.aborted || mine !== seq.current) return;
@@ -525,15 +530,14 @@ export function AvatarStudioScreen() {
           {/* The character. 341² at (120,60) in the card's own 580x440. */}
           {preview ? (
             <>
-              {/* The character over the chosen ground — the same two
-                  independent layers the cover draws, so this previews it
-                  rather than resembling it. */}
+              {/* Fitted, like the cover — see profile-cover.tsx for why this
+                  contains rather than fills. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={preview}
                 alt="Your avatar"
-                className="absolute w-auto max-w-none -translate-x-1/2 transition-opacity"
-                style={{ left: "52.336%", bottom: "-3.4%", height: "95.8%", opacity: drawing ? 0.55 : 1 }}
+                className="absolute inset-0 h-full w-full object-contain transition-opacity"
+                style={{ opacity: drawing ? 0.55 : 1 }}
               />
             </>
           ) : (
@@ -631,7 +635,24 @@ export function AvatarStudioScreen() {
         </div>
 
         {groundOpen && (
-          <div className="mt-3 rounded-[12px] bg-[#1A1A1F] p-3">
+          <div className="mt-3 max-h-[40vh] space-y-4 overflow-y-auto rounded-[12px] bg-[#1A1A1F] p-3">
+            {/* The engine's own scene — 14 presets, patterns, gradients — which
+                is what the picture itself carries. */}
+            {catalog &&
+              dna &&
+              sectionsFor(catalog, dna.kind)
+                .filter((section) => section.tab === "scene")
+                .map((section) =>
+                  visibleParams(catalog, dna, section).map((p) => (
+                    <ParamControl
+                      key={`${section.id}.${p.key}`}
+                      param={p}
+                      value={paramValue(dna, section, p)}
+                      onChange={(v) => setDna(setParam(dna, section.id, p.key, v))}
+                    />
+                  )),
+                )}
+            {/* And the ground the card shows either side of it. */}
             <BackgroundPicker value={ground} onChange={setBackground} />
           </div>
         )}
@@ -807,15 +828,8 @@ export function AvatarStudioScreen() {
             {catalog && dna && (
               <div className="mt-5 space-y-5">
                 {sectionsFor(catalog, dna.kind)
-                  /*
-                    SCENE IS NOT OFFERED, because nothing it does would show.
-                    The character is rendered cut out of its own scene so the
-                    ground stays a separate picture, which means every one of
-                    the ten scene parameters would edit something invisible —
-                    a control that changes nothing is worse than one that is
-                    missing. They come back the day the engine can render a
-                    scene WITHOUT the character baked into it.
-                  */
+                  /* Scene lives behind the palette, beside the ground it
+                     competes with, rather than buried under "Ear size". */
                   .filter((section) => section.tab !== "scene")
                   .map((section) => {
                   const shown = visibleParams(catalog, dna, section);

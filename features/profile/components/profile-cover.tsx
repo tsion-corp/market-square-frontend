@@ -12,7 +12,7 @@ import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
 import { coverBackgroundUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
-import { coverCharacterUrl } from "@/lib/arkplay-avatar";
+import { coverSceneUrl } from "@/lib/arkplay-avatar";
 
 /**
  * THE PROFILE COVER — node 435:27500, redrawn as 1021:20229 (live file,
@@ -192,28 +192,24 @@ export function ProfileCover({
             above simply shows through and the character stands on it.
           */}
           {/*
-            THE BACKGROUND NEVER TOUCHES THE CHARACTER. They are two
-            independent pictures: a flat background that fills the card at any
-            shape, and the character cut out of its own render, drawn at the
-            file's geometry — the same 95.8% at centre 52.336% the mascot
-            always used. Changing one cannot move or resize the other.
+            FITTED, NOT CROPPED. The render is square and the card is not, so
+            this contains the whole picture rather than filling the card with
+            it: cropping to fill zoomed the character to a torso and cut the
+            head off anybody with tall hair, because how much of the canvas a
+            figure occupies is a property of each character, not a constant.
 
-            That independence is the requirement, and it is why the engine's
-            own SCENES cannot be the ground here: their render bakes the
-            character INTO the scene, so using one means either cropping the
-            character to the card's shape — which zoomed it to a torso and cut
-            the head off anyone with tall hair — or blurring the scene until
-            the baked-in figure stops reading, which left a smear instead of a
-            background. Both were tried. A scene-only render has been asked
-            for; until it exists the ground is ours.
+            The ground chosen above shows either side, so the sides read as the
+            cover's own background rather than as bars.
+
+            It carries the engine's SCENE, which is what the studio shows and
+            what people are choosing in it.
           */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={coverCharacterUrl(characterCode)}
+            src={coverSceneUrl(characterCode)}
             alt=""
             aria-hidden
-            className="absolute w-auto max-w-none -translate-x-1/2"
-            style={{ left: "52.336%", bottom: "-3.4%", height: "95.8%" }}
+            className="absolute inset-0 h-full w-full object-contain"
           />
         </>
       ) : (

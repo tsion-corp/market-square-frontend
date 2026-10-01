@@ -87,7 +87,14 @@ export function avatarImageUrl(
  * Normalising every species to one height would stand a slime eye to eye with
  * a dragon.
  */
-export function coverCharacterUrl(code: string, size = 512): string {
+/*
+  1024, NOT 512. A cover draws the character 453 CSS px tall, which is 906
+  device pixels on a 2x screen — and the figure is only about 74% of the render
+  canvas, so a 512 render supplies 379px and was being blown up 2.4x. That is
+  the whole reason it looked soft next to the engine's own studio. 1024 brings
+  it to 1.2x; 1536 would be sharper still but costs 6.3s against 1.9s.
+*/
+export function coverCharacterUrl(code: string, size = 1024): string {
   return avatarImageUrl(code, { crop: "full", size, background: false });
 }
 
@@ -106,7 +113,7 @@ export function coverCharacterUrl(code: string, size = 512): string {
  * and somebody without gets a cut-out that composites over whatever ground
  * their profile already had. Nothing has to decode the code to find out which.
  */
-export function coverSceneUrl(code: string, size = 512): string {
+export function coverSceneUrl(code: string, size = 1024): string {
   return avatarImageUrl(code, { crop: "full", size, background: true });
 }
 
