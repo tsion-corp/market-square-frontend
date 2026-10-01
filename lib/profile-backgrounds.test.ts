@@ -5,6 +5,7 @@ import {
   PROFILE_BACKGROUNDS,
   backgroundUrl,
   coverBackgroundUrl,
+  coverPictureUrl,
   decodeAvatarCover,
   defaultBackgroundUrl,
   encodeAvatarCover,
@@ -175,5 +176,50 @@ describe("the animation a cover carries", () => {
       anim: "idle-fidget",
     });
     assert.ok((stored?.length ?? 0) < 1024, `${stored?.length} characters`);
+  });
+});
+
+/*
+  ─── ONE ANSWER FOR THE COVER, BECAUSE FOUR DRIFTED ─────────────────────────
+  The profile card, the full-screen viewer, the editor's thumbnail and the
+  studio preview each resolved the cover for themselves, and each was corrected
+  separately as the cover changed shape: the viewer opened an empty meadow, and
+  the editor showed the ARK sweep over somebody who had built a character.
+*/
+describe("the cover picture a profile shows", () => {
+  const CODE = "A2" + "x".repeat(200);
+
+  it("is the character's own picture once they have one", () => {
+    const got = coverPictureUrl(encodeAvatarCover({ code: CODE, background: "violet" }), null);
+    assert.equal(got.isCharacter, true);
+    assert.match(got.src, /\/api\/avatar\/cover\//, "rendered, not a flat ground");
+    assert.ok(got.src.includes(encodeURIComponent(CODE)), "and it is THEIR character");
+  });
+
+  it("carries the clip they chose, so a cover animates where it is drawn", () => {
+    const got = coverPictureUrl(
+      encodeAvatarCover({ code: CODE, background: null, anim: "wave" }),
+      null,
+    );
+    assert.match(got.src, /[?&]a=wave\b/);
+  });
+
+  it("asks for the size the surface needs", () => {
+    const got = coverPictureUrl(CODE, null, { width: 1482, height: 946 });
+    assert.match(got.src, /[?&]w=1482\b/);
+    assert.match(got.src, /[?&]h=946\b/);
+  });
+
+  /* Without a character there is only a ground, and the mascot stands on it. */
+  it("falls back to the ground, and says so", () => {
+    const upload = coverPictureUrl(null, "https://cdn.example/mine.jpg");
+    assert.equal(upload.isCharacter, false);
+    assert.equal(upload.src, "https://cdn.example/mine.jpg");
+
+    const curated = coverPictureUrl(encodeAvatarCover({ code: null, background: "ember" }), null);
+    assert.equal(curated.isCharacter, false);
+    assert.equal(curated.src, backgroundUrl("ember"));
+
+    assert.equal(coverPictureUrl(null, null).src, defaultBackgroundUrl());
   });
 });

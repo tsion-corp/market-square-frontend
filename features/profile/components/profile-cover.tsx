@@ -11,7 +11,7 @@ import { canGoBack } from "@/lib/nav-history";
 import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
-import { coverBackgroundUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
+import { coverBackgroundUrl, coverPictureUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
 import { coverImageUrl } from "@/lib/arkplay-avatar";
 
 /**
@@ -118,12 +118,13 @@ export function ProfileCover({
 
     Somebody with no character still has only a ground, and that is what opens.
   */
-  const viewerSrc = characterCode
-    ? /* Twice the card's size: this opens full screen, where the card's own
-         741 would be visibly soft. It is SVG, so the cost is bytes rather
-         than pixels, and it is cached on its own URL like every other. */
-      coverImageUrl(characterCode, { width: 1482, height: 946, anim })
-    : coverSrc;
+  /* Twice the card's size: this opens full screen, where the card's own 741
+     would be visibly soft. It is SVG, so the cost is bytes rather than pixels,
+     and it is cached on its own URL like every other. */
+  const viewerSrc = coverPictureUrl(profile.avatarConfig, profile.coverUrl, {
+    width: 1482,
+    height: 946,
+  }).src;
   const avatarSrc = profile.avatarUrl ?? artworkForSeed(resolveSeed({ id: profile.id, name }));
   /*
     THE CHARACTER STANDING ON THE BACKGROUND — the swap the layering above was

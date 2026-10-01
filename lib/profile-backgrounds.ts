@@ -1,5 +1,5 @@
 import { asset } from "./square-path.ts";
-import { isShareCode } from "./arkplay-avatar.ts";
+import { coverImageUrl, isShareCode } from "./arkplay-avatar.ts";
 
 /*
   THE GROUND A PROFILE'S CHARACTER STANDS ON.
@@ -161,4 +161,29 @@ export function coverBackgroundUrl(
   }
   const upload = typeof uploadedCoverUrl === "string" ? uploadedCoverUrl.trim() : "";
   return upload || defaultBackgroundUrl();
+}
+
+/**
+ * THE COVER PICTURE FOR A PROFILE — the one answer, in one place.
+ *
+ * Four surfaces draw this: the profile card, the full-screen viewer, the
+ * editor's thumbnail and the studio's preview. Each used to resolve it for
+ * itself, and each was corrected separately as the cover changed shape — which
+ * is how the viewer ended up opening an empty meadow and the editor kept
+ * showing the ARK sweep over somebody who had built a character.
+ *
+ * A cover is now ONE rendered picture when there is a character: them, in
+ * their scene, at the shape of the card. Without one it is the ground alone —
+ * an uploaded photograph or the sweep — with the mascot drawn over it.
+ */
+export function coverPictureUrl(
+  avatarConfig: string | null | undefined,
+  uploadedCoverUrl: string | null | undefined,
+  size?: { width?: number; height?: number },
+): { src: string; isCharacter: boolean } {
+  const { code, background, anim } = decodeAvatarCover(avatarConfig);
+  if (code) {
+    return { src: coverImageUrl(code, { ...size, anim }), isCharacter: true };
+  }
+  return { src: coverBackgroundUrl(background, uploadedCoverUrl), isCharacter: false };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { coverBackgroundUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
+import { coverPictureUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
 import { asset, sq } from "@/lib/square-path";
 import { useImageUpload } from "@/components/ui/use-image-upload";
 import { GENDER_OPTIONS, normalizeGender } from "@/lib/gender";
@@ -136,7 +136,9 @@ export function EditProfileSheet({
         <div className="relative aspect-[495/199] w-full overflow-hidden rounded-[22.34px] bg-black/40 shadow-[0_4px_12px_rgba(21,32,43,0.4)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={coverBackgroundUrl(savedCover.background, me.coverUrl)}
+            /* The COVER, not the ground under it — one resolver, so this can
+               never drift from the card it is a thumbnail of. */
+            src={coverPictureUrl(me.avatarConfig, me.coverUrl).src}
             alt=""
             aria-hidden
             className="absolute inset-0 h-full w-full object-cover"
