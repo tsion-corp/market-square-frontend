@@ -113,6 +113,22 @@ export function coverCharacterUrl(code: string, size = 1024): string {
  * and somebody without gets a cut-out that composites over whatever ground
  * their profile already had. Nothing has to decode the code to find out which.
  */
+/**
+ * THE COVER, at the shape of the card rather than a square inside it.
+ *
+ * Ours, not the service's: every crop the engine offers is square and their
+ * HTTP render exposes no way to ask for anything else, so a cover built on it
+ * could only letterbox the scene or crop the character out of it. We run the
+ * engine ourselves (see app/api/avatar/cover) where a `viewBox` can be widened
+ * to the card and the scene fills it.
+ *
+ * Still a plain, immutable, cacheable <img src> for every visitor — a share
+ * code cannot change what it decodes to.
+ */
+export function coverImageUrl(code: string, width = 741, height = 473): string {
+  return `/api/avatar/cover/${encodeURIComponent(code)}?w=${width}&h=${height}`;
+}
+
 export function coverSceneUrl(code: string, size = 1024): string {
   return avatarImageUrl(code, { crop: "full", size, background: true });
 }

@@ -12,7 +12,7 @@ import { artworkForSeed, resolveSeed } from "@/lib/avatar-seed";
 import type { Profile } from "@/lib/api/schemas";
 import { asset, sq } from "@/lib/square-path";
 import { coverBackgroundUrl, decodeAvatarCover } from "@/lib/profile-backgrounds";
-import { coverSceneUrl } from "@/lib/arkplay-avatar";
+import { coverImageUrl } from "@/lib/arkplay-avatar";
 
 /**
  * THE PROFILE COVER — node 435:27500, redrawn as 1021:20229 (live file,
@@ -192,24 +192,17 @@ export function ProfileCover({
             above simply shows through and the character stands on it.
           */}
           {/*
-            FITTED, NOT CROPPED. The render is square and the card is not, so
-            this contains the whole picture rather than filling the card with
-            it: cropping to fill zoomed the character to a torso and cut the
-            head off anybody with tall hair, because how much of the canvas a
-            figure occupies is a property of each character, not a constant.
-
-            The ground chosen above shows either side, so the sides read as the
-            cover's own background rather than as bars.
-
-            It carries the engine's SCENE, which is what the studio shows and
-            what people are choosing in it.
+            THE SCENE FILLS THE CARD. Drawn at 741x473 rather than square, so
+            there is nothing to letterbox and nothing to crop — see
+            app/api/avatar/cover for why that cannot come from the avatar
+            service and does not need to.
           */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={coverSceneUrl(characterCode)}
+            src={coverImageUrl(characterCode)}
             alt=""
             aria-hidden
-            className="absolute inset-0 h-full w-full object-contain"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         </>
       ) : (

@@ -42,6 +42,7 @@ type RenderSVG = (
     view?: RenderView;
     detail?: RenderDetail;
     viewBox?: Box;
+    frame?: boolean;
   },
 ) => string;
 
@@ -148,7 +149,8 @@ export async function renderLocally(
   }
 
   const svg = viewBox
-    ? renderSVG(dna, { size, view, detail, viewBox })
+    ? /* No frame when the box is widened — it stretches into an ellipse. */
+      renderSVG(dna, { size, view, detail, viewBox, frame: false })
     : renderSVG(dna, { crop, size, view, detail });
   return URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
 }
