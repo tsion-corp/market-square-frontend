@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useConversations } from "@/features/messages";
 import { HOUSE_CARD, HouseCard } from "@/components/layout/house-card";
+import { CreateGroupFlow } from "@/components/layout/create-group-flow";
 import { sq } from "@/lib/square-path";
 
 /**
@@ -36,6 +39,8 @@ import { sq } from "@/lib/square-path";
  */
 
 export function ProfileHouses() {
+  const router = useRouter();
+  const [createOpen, setCreateOpen] = useState(false);
   const houses = useConversations("houses");
   const items = (houses.data?.pages ?? []).flatMap((page) => page.items);
 
@@ -64,8 +69,15 @@ export function ProfileHouses() {
             one mark. Its measured fill is `#9F5AFF`; painted with
             `--color-create` `#9F65FD`, the ramp's light stop, because the two
             are a hair apart and this repo deliberately keeps two purples. */}
-        <Link
-          href={sq("/messages?compose=house")}
+        {/* Opens the create-house modal IN PLACE — it does NOT navigate. It
+            used to link to /messages?compose=house, which threw the reader off
+            their profile onto the inbox before the sheet showed (ogazboiz,
+            2026-09-30). `CreateGroupFlow` is the very flow the inbox opens; on
+            success we route to the new house, as its own card's "View House"
+            does, and the rail refetches from the create mutation's invalidation. */}
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
           className={`${HOUSE_CARD} ws-press flex h-[112px] w-[136px] flex-col items-center justify-center px-4 py-3 transition-colors hover:bg-white/[0.06]`}
         >
           <span aria-hidden className="text-[41.6px] font-semibold leading-[62.4px] text-create">
@@ -74,7 +86,7 @@ export function ProfileHouses() {
           <span className="-mt-3 text-[13.82px] font-semibold leading-[20.73px] text-grey-400">
             Add new house
           </span>
-        </Link>
+        </button>
 
         {items.map((house) => (
           <HouseCard
@@ -89,6 +101,16 @@ export function ProfileHouses() {
           />
         ))}
       </div>
+
+      <CreateGroupFlow
+        open={createOpen}
+        mode="group"
+        onClose={() => setCreateOpen(false)}
+        onStarted={(conversation) => {
+          setCreateOpen(false);
+          router.push(sq(`/messages?conversation=${conversation.id}`));
+        }}
+      />
     </section>
   );
 }

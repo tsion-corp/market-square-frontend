@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/cn";
 import { Spinner } from "@/components/ui/button";
@@ -34,6 +33,13 @@ import type { Conversation } from "@/features/messages/lib/types";
  * title must not carry a description the person never touched — that is how a
  * form quietly erases a field somebody else wrote.
  */
+
+// The service's own column limits (same as the create-group form). Enforced on
+// input so a long title/description is trimmed as it is typed rather than
+// accepted here and rejected by the API's VALIDATION_ERROR on save (2026-09-30).
+const TITLE_MAX = 80;
+const DESCRIPTION_MAX = 500;
+
 export function GroupSettingsSheet({
   open,
   onClose,
@@ -150,7 +156,13 @@ export function GroupSettingsSheet({
         <div className="flex items-center gap-3">
           <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/12 bg-white/5">
             {imageUrl ? (
-              <Image src={imageUrl} alt="" width={64} height={64} className="h-full w-full object-cover" />
+              // A plain <img>, not next/image: the upload host (Cloudinary) is
+              // not in next.config's image hosts, and the app renders every
+              // remote/uploaded image this way — same as the create-group
+              // preview and Avatar. next/image threw "hostname not configured"
+              // whenever a group with a picture opened its settings (2026-09-30).
+              // eslint-disable-next-line @next/next/no-img-element -- remote upload host is unknown at build time
+              <img src={imageUrl} alt="" className="h-full w-full object-cover" />
             ) : (
               <span className="text-[20px] text-meta">{(named || "G").slice(0, 1).toUpperCase()}</span>
             )}
@@ -178,14 +190,14 @@ export function GroupSettingsSheet({
 
         <label className="block">
           <span className="mb-1 block text-[12px] font-semibold text-meta">Name</span>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} className={field} />
+          <input value={title} onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX))} className={field} />
         </label>
 
         <label className="block">
           <span className="mb-1 block text-[12px] font-semibold text-meta">Description</span>
           <textarea
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX))}
             rows={5}
             placeholder="What is this group for?"
             className={field}

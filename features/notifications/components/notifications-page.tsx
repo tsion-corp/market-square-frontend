@@ -464,6 +464,15 @@ export function NotificationsPage({
   const { ready, authenticated, login } = useAuth();
   /* Omitted entirely for "everything" — the enum has no `all`. */
   const [group, setGroup] = useState<NotificationGroup | "">("");
+  /*
+    READ / UNREAD is a CLIENT filter on `readAt`, not a query parameter.
+    `GET /me/notifications` takes only `group`, `limit` and `cursor`; every row
+    already carries `readAt` (null = unread), so the split is applied to the
+    loaded rows here. If the service later grows a `status` parameter this should
+    move onto the query for correct paging — same note as `group` before it
+    shipped.
+  */
+  const [status, setStatus] = useState<"all" | "unread" | "read">("all");
   // POLLS, because this IS the list the reader is looking at — the one place
   // a 30s interval on notifications is the reader's own expectation rather
   // than a background cost they cannot see. See the hook.
@@ -475,6 +484,10 @@ export function NotificationsPage({
   );
 
   const items = notifications.data?.pages.flatMap((page) => page.items) ?? [];
+  // The read/unread split, applied to the loaded rows — see `status`.
+  const shown = items.filter((item) =>
+    status === "all" ? true : status === "unread" ? !item.readAt : Boolean(item.readAt)
+  );
   /*
     GLOBAL, AND NOT THE COUNT FOR THIS TAB. `unreadCount` counts what is
     waiting for the person, not what is on screen — the service does not filter
@@ -616,6 +629,31 @@ export function NotificationsPage({
         </label>
       </div>
 
+      {/*
+        READ / UNREAD filter. A segmented control under the head, beside the
+        group filter above it: All shows everything, Unread and Read split the
+        loaded rows on `readAt`. Kept out of the header row so it does not crowd
+        the title, the Mark-all-read count and the group pill already there.
+      */}
+      {authenticated && (
+        <div className="flex items-center gap-1 px-8 pb-2">
+          {(["all", "unread", "read"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setStatus(value)}
+              aria-pressed={status === value}
+              className={cn(
+                "ws-press rounded-full px-3.5 py-1.5 text-[13px] font-medium capitalize transition-colors",
+                status === value ? "bg-white text-ink" : "text-white/60 hover:bg-white/10 hover:text-white"
+              )}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+      )}
+
       {ready && !authenticated && (
         <div className="p-4">
           <EmptyState
@@ -655,8 +693,24 @@ export function NotificationsPage({
               />
             </div>
           )}
+          {/* There ARE notifications, just none in this read/unread filter — say
+              that rather than the "all caught up" state, which would read as an
+              empty inbox. */}
+          {notifications.isSuccess && items.length > 0 && shown.length === 0 && (
+            <div className="p-4">
+              <EmptyState
+                glyph="○"
+                title={status === "unread" ? "No unread notifications" : "No read notifications"}
+                body={
+                  status === "unread"
+                    ? "You're all caught up — nothing unread here."
+                    : "Nothing you've read yet shows here."
+                }
+              />
+            </div>
+          )}
 
-          {items.map((item) => (
+          {shown.map((item) => (
             <Row
               key={item.id}
               item={item}
