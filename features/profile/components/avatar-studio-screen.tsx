@@ -109,6 +109,14 @@ const VIEWS = [
   { view: "back" as const, label: "Back" },
 ];
 
+/** Whether the reader has asked their system for less movement. */
+function prefersStill(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+  );
+}
+
 /** How many notches a continuous parameter is offered as. See ParamControl. */
 const STOPS = 7;
 
@@ -148,6 +156,7 @@ export function AvatarStudioScreen() {
   const [background, setBackground] = useState<string | null>(null);
   const [groundOpen, setGroundOpen] = useState(false);
   const [zoom, setZoom] = useState(0);
+  const [moving, setMoving] = useState(true);
   const [view, setView] = useState<(typeof VIEWS)[number]["view"]>("front");
   /* Derived until the person touches it, so it follows `me` arriving late
      rather than being frozen by a first render that had nothing. */
@@ -322,6 +331,19 @@ export function AvatarStudioScreen() {
             rather than behind an HTTP API that exposes no such parameter.
           */
           aspect: 580 / 440,
+          /*
+            A CHARACTER THAT BREATHES. The engine ships 44 clips and `idle` is
+            the one that separates a character from a printed picture — it is
+            also what the engine's own studio plays, which is why ours looked
+            inert beside it.
+
+            The SVG carries its own loop, so the browser plays it with no timer
+            and no frame loop of ours. Anybody who has asked their system for
+            less movement has asked for less here too, so the still is drawn
+            instead — and the toggle lets everyone else stop it, because a
+            character fidgeting under a colour picker is a distraction.
+          */
+          animate: moving && !prefersStill() ? "idle" : undefined,
         });
         if (cancelled || mine !== seq.current) {
           URL.revokeObjectURL(url);
@@ -340,7 +362,7 @@ export function AvatarStudioScreen() {
     return () => {
       cancelled = true;
     };
-  }, [open, dna, zoom, view]);
+  }, [open, dna, zoom, view, moving]);
 
   useEffect(
     () => () => {
@@ -683,6 +705,16 @@ export function AvatarStudioScreen() {
             className="ws-press ws-btn-sm rounded-full bg-white/[0.06] text-white/80 disabled:opacity-35"
           >
             +
+          </button>
+          <button
+            type="button"
+            onClick={() => setMoving((m) => !m)}
+            aria-pressed={moving}
+            className={`ws-press ws-btn-sm rounded-full text-[12px] ${
+              moving ? "bg-white text-black" : "bg-white/[0.06] text-white/70"
+            }`}
+          >
+            {moving ? "Moving" : "Still"}
           </button>
           <span className="flex-1" />
           {VIEWS.map((v) => (

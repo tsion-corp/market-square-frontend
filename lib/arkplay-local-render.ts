@@ -45,7 +45,20 @@ type RenderSVG = (
   },
 ) => string;
 
+type AnimatedSVG = (
+  dna: AvatarDNA,
+  opts: {
+    anim: string;
+    fps?: number;
+    size?: number;
+    view?: RenderView;
+    detail?: RenderDetail;
+    viewBox?: Box;
+  },
+) => string;
+
 let loading: Promise<RenderSVG> | null = null;
+let loadingAnim: Promise<AnimatedSVG> | null = null;
 
 /** The renderer, fetched once and reused. */
 function engine(): Promise<RenderSVG> {
@@ -53,6 +66,18 @@ function engine(): Promise<RenderSVG> {
     (m) => m.renderSVG as unknown as RenderSVG,
   );
   return loading;
+}
+
+/**
+ * The animated exporter. Two files beyond the renderer, which is why it is
+ * worth having: the engine ships 44 clips and the character simply breathing
+ * is most of the difference between a picture and a character.
+ */
+function animator(): Promise<AnimatedSVG> {
+  loadingAnim ??= import("@/vendor/arkplay-engine/export/animated.ts").then(
+    (m) => m.animatedSVG as unknown as AnimatedSVG,
+  );
+  return loadingAnim;
 }
 
 /** Warm the chunk before the first edit, so even that one is instant. */
@@ -67,6 +92,16 @@ export interface LocalRenderOptions {
   view?: RenderView;
   size?: number;
   detail?: RenderDetail;
+  /**
+   * Play a clip instead of drawing a still — `idle` is the one that makes a
+   * character look alive rather than printed.
+   *
+   * The SVG carries its own looping animation, so the browser plays it with no
+   * timer of ours and no frame loop. Honour `prefers-reduced-motion` at the
+   * call site: somebody who has asked the system for less movement has asked
+   * for it here too.
+   */
+  animate?: string;
   /**
    * Draw a WIDE picture instead of a square one — width ÷ height of the card
    * this is going into.
@@ -94,11 +129,26 @@ export interface LocalRenderOptions {
  */
 export async function renderLocally(
   dna: AvatarDNA,
-  { crop = "full", view, size = 512, detail = "medium", aspect }: LocalRenderOptions = {},
+  { crop = "full", view, size = 512, detail = "medium", aspect, animate }: LocalRenderOptions = {},
 ): Promise<string> {
   const renderSVG = await engine();
-  const svg = aspect
-    ? renderSVG(dna, { size, view, detail, viewBox: widen(renderSVG, dna, crop, view, aspect) })
+  const viewBox = aspect ? widen(renderSVG, dna, crop, view, aspect) : undefined;
+
+  if (animate) {
+    const animatedSVG = await animator();
+    const moving = animatedSVG(dna, {
+      anim: animate,
+      fps: 12,
+      size,
+      view,
+      detail,
+      ...(viewBox ? { viewBox } : { crop }),
+    } as Parameters<AnimatedSVG>[1]);
+    return URL.createObjectURL(new Blob([moving], { type: "image/svg+xml" }));
+  }
+
+  const svg = viewBox
+    ? renderSVG(dna, { size, view, detail, viewBox })
     : renderSVG(dna, { crop, size, view, detail });
   return URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
 }
