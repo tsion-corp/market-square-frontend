@@ -196,14 +196,21 @@ export function ProfileCover({
             src={coverSceneUrl(characterCode)}
             alt=""
             aria-hidden
-            className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl"
+            className="absolute inset-0 h-full w-full scale-125 object-cover blur-3xl"
           />
+          {/*
+            FADED AT THE SIDES, so the two layers meet without a seam. The
+            sharp square and the blurred fill are the same picture at different
+            scales, so a hard edge between them reads as a pasted-on panel —
+            which is exactly what it looked like. The mask dissolves the join
+            instead of trying to hide it.
+          */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={coverSceneUrl(characterCode)}
             alt=""
             aria-hidden
-            className="absolute inset-0 h-full w-full object-contain"
+            className="absolute inset-0 h-full w-full object-contain [mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)]"
           />
         </>
       ) : (

@@ -510,13 +510,16 @@ export function AvatarStudioScreen() {
                 src={preview}
                 alt=""
                 aria-hidden
-                className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl"
+                className="absolute inset-0 h-full w-full scale-125 object-cover blur-3xl"
               />
               {/* eslint-disable-next-line @next/next/no-img-element */}
+              {/* Faded at the sides for the same reason the cover is: the join
+                  between the sharp square and its blurred fill otherwise reads
+                  as a panel pasted onto a different picture. */}
               <img
                 src={preview}
                 alt="Your avatar"
-                className="absolute inset-0 h-full w-full object-contain transition-opacity"
+                className="absolute inset-0 h-full w-full object-contain transition-opacity [mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)]"
                 style={{ opacity: drawing ? 0.55 : 1 }}
               />
             </>
