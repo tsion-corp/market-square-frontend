@@ -10,6 +10,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { errorCode, errorMessage } from "@/lib/api/envelope";
+import { trackMarketEvent } from "@/lib/analytics";
 import { isVideoPost } from "@/lib/media";
 import { videoListKey } from "@/lib/video-context";
 import {
@@ -247,6 +248,22 @@ export function useCreatePost() {
   return useMutation({
     mutationFn: (input: Parameters<typeof createPost>[0]) => createPost(input),
     onSuccess: (post) => {
+      /*
+        POSTING IS THE PRODUCT, and it was measured nowhere — the event name
+        existed in the vocabulary and no call site ever used it, so "what do
+        people do here" could only ever have answered with streams and the
+        store. Fired on SUCCESS, so a draft that failed to publish is not
+        counted as a post.
+      */
+      trackMarketEvent("post_created", {
+        surface: "feed",
+        entityType: "post",
+        entityId: post.id,
+        metadata: {
+          kind: post.kind,
+          hasMedia: Boolean(post.mediaUrl || post.media?.length),
+        },
+      });
       // Two halves, and both are needed. The prepend puts the post on screen
       // instantly; the invalidation below reconciles it with the server, which
       // may reshape it (hydrated author, resolved deep link, moderation).
@@ -377,6 +394,22 @@ export function useLikePost() {
     mutationFn: ({ postId, like }: { postId: string; like: boolean }) => likePost(postId, like),
     onMutate: async ({ postId, like }) => {
       applyLike(postId, like);
+    },
+    /*
+      ONLY THE LIKE, NEVER THE UNLIKE — an undo is not an engagement, and
+      counting both would make a post somebody double-tapped and took back look
+      busier than one they meant. Fired on success rather than optimistically:
+      the tally moves instantly for the reader either way, but a like the
+      service refused is not a like.
+    */
+    onSuccess: (_result, { postId, like }) => {
+      if (like) {
+        trackMarketEvent("post_liked", {
+          surface: "feed",
+          entityType: "post",
+          entityId: postId,
+        });
+      }
     },
     onError: (error, { postId, like }) => {
       applyLike(postId, !like);

@@ -411,6 +411,22 @@ export function useCreateStream() {
     onSuccess: (stream) => {
       invalidateStreamSurfaces(queryClient);
       /*
+        A HOUSE AND A STREAM ARE ONE MUTATION AND TWO ACTS, so they are counted
+        as two. Opening a gist room is the thing this product is for; measuring
+        both under one name would hide it inside the streaming numbers, which is
+        precisely how "eleven of the original eighteen events were streams"
+        happened in the first place.
+      */
+      trackMarketEvent(isHouse(stream) ? "room_opened" : "stream_started", {
+        surface: isHouse(stream) ? "gist_rooms" : "studio",
+        entityType: "stream",
+        entityId: stream.id,
+        metadata: {
+          audience: stream.audience,
+          scheduled: Boolean(stream.scheduledAt),
+        },
+      });
+      /*
         A house is not a stream, and the person who just opened one should not
         be told it is. One mutation creates both — a house IS a stream with
         `category: "house"` — so the confirmation reads off what was actually
@@ -506,6 +522,31 @@ export function useEndStream(options?: {
   return useMutation({
     mutationFn: endStream,
     onSuccess: (stream) => {
+      /*
+        STREAMS ONLY, AND NOT `room_left`.
+
+        I nearly fired `room_left` here for a house, and it would have been
+        wrong in a way no test would catch: `room_left` means a PERSON left a
+        room, and this is the HOST closing it for everybody. Two different facts
+        under one name is worse than a missing one, because the number looks
+        plausible and answers the wrong question.
+
+        Nor is it ours to send. Joins and leaves are recorded SERVER-side —
+        they are the only two events in the analyst's data precisely because
+        they do not depend on a browser reaching anything — so firing them from
+        here would double-count every one of them.
+
+        A host closing a room is a real act with no name in the vocabulary yet.
+        It gets one when somebody needs it, rather than by borrowing a name that
+        already means something else.
+      */
+      if (!isHouse(stream)) {
+        trackMarketEvent("stream_completed", {
+          surface: "studio",
+          entityType: "stream",
+          entityId: stream.id,
+        });
+      }
       // Merged, never replaced: the session may still hold this room (a host's
       // "Close and join"), and the lock screen reads the doorplate from here.
       queryClient.setQueryData<Stream>(["ms", "stream", stream.id], (old) => mergeStreamDetail(old, stream));

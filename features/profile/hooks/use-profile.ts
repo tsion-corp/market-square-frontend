@@ -239,10 +239,17 @@ export function useWink(profile: Profile) {
       // there is no counter on a profile that a wink moves.
       queryClient.invalidateQueries({ queryKey: ["ms", "notifications"] });
       toast.success("Wink sent");
-      // Deliberately NOT tracked. `MarketEventName` is a closed union shared
-      // with the collector's own vocabulary; inventing a name here would send
-      // the analytics service an event it has never been told about. Add
-      // `wink_sent` there first, then here.
+      /*
+        The note that stood here said "add `wink_sent` to the vocabulary first,
+        then here". It WAS added — and nobody came back, so the name sat in the
+        union and the act was measured nowhere. Fifteen events were in that
+        state at once; this is one of them.
+      */
+      trackMarketEvent("wink_sent", {
+        surface: "profile",
+        entityType: "profile",
+        entityId: profile.id,
+      });
     },
     onError: (error) => {
       const code = errorCode(error);

@@ -1,5 +1,7 @@
 "use client";
 
+import { trackMarketEvent } from "@/lib/analytics";
+
 import {
   useInfiniteQuery,
   useMutation,
@@ -139,6 +141,20 @@ export function useAddComment(postId: string) {
     mutationFn: (input: string | AddCommentInput) => {
       const { text, parentId, mentions } = typeof input === "string" ? { text: input } : input;
       return addComment(postId, text, parentId, mentions);
+    },
+    /*
+      Replying is the other half of posting and was measured nowhere. A REPLY to
+      a reply is marked as such, because "people are talking to each other" and
+      "people are talking at a post" are different findings and the tally cannot
+      tell them apart afterwards.
+    */
+    onSuccess: (_comment, input) => {
+      trackMarketEvent("comment_created", {
+        surface: "post_detail",
+        entityType: "post",
+        entityId: postId,
+        metadata: { isReply: typeof input !== "string" && Boolean(input.parentId) },
+      });
     },
     // The reply is visible at once and the tally moves with it, on every
     // surface that draws this post rather than only the one being looked at.
