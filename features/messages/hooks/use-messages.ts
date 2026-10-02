@@ -480,6 +480,27 @@ export function useRemoveGroupMember(conversationId: string) {
   );
 }
 
+/**
+ * TAKE BACK AN INVITATION THAT HAS NOT BEEN ANSWERED.
+ *
+ * The SAME route as removing a member — `DELETE /conversations/:id/members/:id`
+ * — because on the service a pending seat and a membership are the same row in
+ * two states. It is a different ACT though, and gets its own hook for one
+ * reason: the confirmation. "Removed from the house" is wrong for somebody who
+ * was never in it, and it is the sentence the person doing it reads to find out
+ * what they just did.
+ *
+ * Who may is `canManage` on the INVITED row, which the service widens to
+ * include whoever sent the invitation whatever their rank — see the schema.
+ */
+export function useWithdrawInvite(conversationId: string) {
+  return useConversationAction<string>(
+    conversationId,
+    (profileId) => removeGroupMember(conversationId, profileId),
+    "Invitation withdrawn"
+  );
+}
+
 /** "Make admin" / "Remove admin" — owner only. */
 export function useSetMemberRole(conversationId: string) {
   return useConversationAction<{ profileId: string; role: "admin" | "member" }>(

@@ -70,6 +70,7 @@ import {
   useRemoveGroupMember,
   useSetMemberRole,
   useSetMemberMuted,
+  useWithdrawInvite,
   useTransferOwnership,
 } from "@/features/messages/hooks/use-messages";
 import {
@@ -589,6 +590,8 @@ function MembersSheet({
   const transfer = useTransferOwnership(conversation.id);
   const remove = useRemoveGroupMember(conversation.id);
   const setMuted = useSetMemberMuted(conversation.id);
+  /* The same route as remove, a different act — see the hook. */
+  const withdraw = useWithdrawInvite(conversation.id);
   /* Removing someone and handing the house over both ask first: neither can
      be undone from this sheet. */
   const [confirming, setConfirming] = useState<{ kind: "remove" | "owner"; profile: Profile } | null>(null);
@@ -767,6 +770,78 @@ function MembersSheet({
                 </div>
               );
             })
+          )}
+
+          {/*
+            INVITATIONS STILL WAITING, under the people who are actually here.
+
+            Without this a leader adds somebody who does not follow them, the
+            roster does not change, and nothing on screen says an invitation
+            exists. The predictable next move is to add them again — which is
+            the loop the consent gate exists to prevent — and to conclude the
+            product is broken rather than that somebody was asked.
+
+            BELOW the members and visibly dimmer, because they are not in the
+            group: a waiting seat drawn like a membership is the same lie in the
+            other direction. They are absent from `memberCount` for the same
+            reason, which the service already guarantees.
+          */}
+          {members.data && members.data.invited.length > 0 && (
+            <>
+              <p className="mt-2 text-[12px] font-semibold text-meta">
+                Invited · waiting to accept
+              </p>
+              {members.data.invited.map((invite, index) => {
+                const profile = invite.profile;
+                return (
+                  <div
+                    key={profile?.id ?? `invite-${index}`}
+                    className="flex items-start gap-3 opacity-60"
+                  >
+                    <Avatar
+                      name={profile?.displayName ?? "?"}
+                      seed={profile?.id}
+                      src={profile?.avatarUrl}
+                      size={38}
+                    />
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-[14px] font-semibold text-white">
+                        {profile?.displayName ?? "Someone"}
+                      </span>
+                      {/*
+                        WHO ASKED THEM, because any member may invite and the
+                        question a leader has about an outstanding invitation is
+                        usually who sent it rather than when.
+                      */}
+                      <span className="truncate text-[12px] text-meta">
+                        {invite.invitedBy
+                          ? `Invited by ${invite.invitedBy.displayName}`
+                          : "Invited"}
+                      </span>
+                      {/*
+                        `canManage` here is the SERVICE's answer and is wider
+                        than the member ladder: a leader may withdraw, and so
+                        may whoever sent it, whatever their rank. Undoing your
+                        own act is not authority over anybody.
+                      */}
+                      {profile && invite.canManage && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            disabled={withdraw.isPending}
+                            onClick={() => withdraw.mutate(profile.id)}
+                            title={`${profile.displayName} stops being asked. The house is unchanged.`}
+                            className={ACTION}
+                          >
+                            Withdraw
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       )}

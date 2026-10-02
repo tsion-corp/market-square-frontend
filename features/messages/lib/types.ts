@@ -418,8 +418,47 @@ export const ConversationMemberSchema = z.object({
   canManage: z.boolean().optional().default(false).catch(false),
 });
 
+/**
+ * SOMEBODY WHO HAS BEEN ASKED AND HAS NOT ANSWERED — a seat, not a membership.
+ *
+ * A separate row type rather than a flag on a member, because `items` means
+ * "people who are in this group" and a lot of code leans on that. A waiting
+ * seat mixed in behind a boolean makes every one of those callers correct only
+ * if it remembers to check, which is the omission the service's own active-only
+ * default exists to prevent — moved up a layer rather than removed.
+ */
+export const ConversationInviteSchema = z.object({
+  profile: ProfileSchema.nullable().optional().default(null),
+  /** Who asked them. Any member may invite, so this is not always a leader. */
+  invitedBy: ProfileSchema.nullable().optional().default(null),
+  invitedAt: z.string().nullable().optional().default(null),
+  /**
+   * MAY THE VIEWER TAKE THIS INVITATION BACK.
+   *
+   * Wider than the member ladder on purpose, and the service decides it: true
+   * for a leader who could remove them, AND for whoever SENT it whatever their
+   * rank. Any member may invite, so without the second case a member who
+   * mistyped a name leaves a waiting seat only a leader can clear, and the
+   * person wrongly asked stays asked. Undoing your own act is not authority
+   * over anybody.
+   *
+   * It stops at acceptance: once they are in, `canManage` on the MEMBER row
+   * governs, and a plain member who invited them cannot remove them.
+   */
+  canManage: z.boolean().optional().default(false).catch(false),
+});
+
 export const ConversationMemberPageSchema = z.object({
   items: z.array(ConversationMemberSchema),
+  /**
+   * Invitations still waiting, newest first.
+   *
+   * Defaulted to empty, so a service that does not send it draws no invited
+   * rows rather than failing — which is what lets this land before the field
+   * ships. These are deliberately NOT in `items` and NOT in `memberCount`: a
+   * house with three members and six invitations out is a house of three.
+   */
+  invited: z.array(ConversationInviteSchema).optional().default([]),
   /** The group's name. Null on a direct conversation, absent on a service
       that has not shipped it — a gist room's header reads this. */
   title: z.string().nullable().optional().default(null),
