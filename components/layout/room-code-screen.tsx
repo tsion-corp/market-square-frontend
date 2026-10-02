@@ -126,18 +126,31 @@ function Found({ result }: { result: NonNullable<ReturnType<typeof useStreamByCo
               to fail is worse than no button. */}
           <p className="mt-6 text-[15px] font-bold text-heading">This room is private</p>
           {/*
-            IT NAMED A HOUSE THAT MAY NOT EXIST. A private room used to mean one
-            thing — private to the house it was opened from — so "an invite from
-            someone in the house" was always true. It is not any more: a room
-            opened from the `+` menu is private to a GUEST LIST and has no house
-            at all, and that is the shape somebody hit on the day it shipped.
+            ONE SENTENCE, BECAUSE THIS SCREEN CANNOT TELL THE TWO SHAPES APART.
 
-            Being told to find somebody "in the house" sends them looking for a
-            thing that is not there. The host is who can let them in, in both
-            shapes, so the host is who the copy names.
+            It used to read "you need an invite from someone in the house",
+            which was true while private meant one thing: private to the house
+            it was opened from. A room opened from the `+` menu is private to a
+            GUEST LIST and has no house at all, so that sentence sent somebody
+            looking for a thing that does not exist — which is what happened on
+            the day that shape shipped.
+
+            AND IT CANNOT BE BRANCHED. The obvious fix is to check
+            `houseConversationId` and say "the house" or "the host" — but the
+            service deliberately NULLS that field in a refusal: the doorplate
+            tells a stranger which room and whose, and nothing about who else is
+            in it. So a client looking at a refused room genuinely does not know
+            whether there is a house behind it, and code that branches on it
+            would silently take the guest-list wording every time.
+
+            So the sentence has to be true in BOTH. "Ask the host" is: in a
+            guest-list room the host owns the list, and in a house room the host
+            is a member who can add somebody. Naming what the room is private TO
+            is what cannot be said here, and saying it wrongly is what made this
+            a bug rather than a dead end.
           */}
           <p className="ws-meta mt-2">
-            Only people the host invited can go in. Ask them to add you.
+            Ask the host to let you in.
           </p>
         </>
       )}
