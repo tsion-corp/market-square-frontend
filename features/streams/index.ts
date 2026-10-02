@@ -24,3 +24,5 @@ export { getRoom, registerRoom, subscribeRoom, unregisterRoom } from "./lib/live
 // The mini-player's faces and the host's hang-up (components/layout/room-mini-player.tsx).
 export { useStageSlots } from "./hooks/use-stage-slots";
 export { useEndStream } from "./hooks/use-streams";
+/* The private room's guest list — who may come in, read and changed by its host. */
+export { useRoomGuests, useInviteRoomGuest, useRemoveRoomGuest } from "./hooks/use-streams";

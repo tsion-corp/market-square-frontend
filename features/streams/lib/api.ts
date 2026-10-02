@@ -1,8 +1,9 @@
 "use client";
 
+import { z } from "zod";
 import { msApi } from "@/lib/api/service";
 import { errorCode } from "@/lib/api/envelope";
-import type { DeepLink } from "@/lib/api/schemas";
+import { ProfileSchema, type DeepLink } from "@/lib/api/schemas";
 import {
   ActivityListSchema,
   ActivitySchema,
@@ -504,4 +505,51 @@ export async function muteSpeaker(streamId: string, userId: string) {
   return msApi.post<{ userId: string; muted: boolean; reached: boolean; tracksMuted: number }>(
     `/streams/${streamId}/speakers/${encodeURIComponent(userId)}/mute`
   );
+}
+
+/**
+ * WHO MAY ENTER A PRIVATE ROOM THAT BELONGS TO NO HOUSE — the guest list, which
+ * IS that room's membership: the host, whoever they invited, and nobody else.
+ *
+ * HOST ONLY, and that is not an oversight: a guest list names the people who
+ * were invited, so it is not something the invited get to read. A guest asking
+ * gets a 403. A room WITH a house has no guest list — its audience is the group
+ * — and answers 400.
+ */
+export const RoomGuestsSchema = z.object({
+  /*
+    `ProfileSummary` upstream, which `ProfileSchema` is a superset of — parsing
+    with the fuller shape costs nothing here (every field it adds is optional
+    and defaulted) and means a guest row renders with the same component as a
+    person anywhere else.
+  */
+  guests: z.array(ProfileSchema).optional().default([]),
+});
+
+export async function fetchRoomGuests(streamId: string) {
+  return RoomGuestsSchema.parse(await msApi.get(`/streams/${streamId}/guests`));
+}
+
+/**
+ * Let somebody in — `POST /streams/:id/guests`.
+ *
+ * HOST ONLY, deliberately: a guest who could invite would turn the list into a
+ * chain anybody on it can extend, which is the one way a small room stops being
+ * small without its host doing anything.
+ *
+ * Idempotent — inviting somebody already on the list keeps the FIRST
+ * invitation, so the record of who let them in is not rewritten by a later one.
+ */
+export async function inviteRoomGuest(streamId: string, profileId: string) {
+  return msApi.post<unknown>(`/streams/${streamId}/guests`, { profileId });
+}
+
+/**
+ * Take somebody back out — `DELETE /streams/:id/guests/:profileId`.
+ *
+ * The door closes on their next read. The guest list IS the membership here, so
+ * this removes their ACCESS rather than only their name.
+ */
+export async function removeRoomGuest(streamId: string, profileId: string) {
+  return msApi.del<unknown>(`/streams/${streamId}/guests/${profileId}`);
 }

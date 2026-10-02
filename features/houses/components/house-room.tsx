@@ -143,6 +143,16 @@ interface SlotProps {
    * never import each other) and the grid is simply absent for a non-member,
    * while the name and the count are not.
    */
+  /**
+   * WHO MAY COME IN, for a private room that belongs to no house.
+   *
+   * A slot because the guest list is a STREAMS read and this is the houses
+   * slice; slices never import each other. Rendered in the share sheet, beside
+   * the code and the link, because that is where a host goes when they want
+   * somebody to join — and because the code and the link are not permission,
+   * which is the thing a host has to learn in the same place they find them.
+   */
+  guestsSlot?: (streamId: string) => React.ReactNode;
   houseSlot?: (
     conversationId: string,
     stage: {
@@ -244,6 +254,7 @@ export function HouseRoom({
   safetySlot,
   inviteGateSlot,
   houseSlot,
+  guestsSlot,
   personActionsSlot,
   tipSlot,
   joinHouse,
@@ -382,6 +393,7 @@ function HostScheduled({
   stream,
   followSlot,
   houseSlot,
+  guestsSlot,
   personActionsSlot,
   safetySlot,
   inviteGateSlot,
@@ -393,6 +405,7 @@ function HostScheduled({
   safetySlot: SlotProps["safetySlot"];
   inviteGateSlot?: SlotProps["inviteGateSlot"];
   houseSlot?: SlotProps["houseSlot"];
+  guestsSlot?: SlotProps["guestsSlot"];
   personActionsSlot?: SlotProps["personActionsSlot"];
   tipSlot?: SlotProps["tipSlot"];
   upcomingCardSlot?: SlotProps["upcomingCardSlot"];
@@ -625,6 +638,7 @@ function LiveHouse({
   safetySlot,
   inviteGateSlot,
   houseSlot,
+  guestsSlot,
   personActionsSlot,
   tipSlot,
   joinHouse,
@@ -2861,6 +2875,17 @@ function LiveHouse({
           <IconChevronRight className="h-4 w-4 shrink-0 text-meta" />
         </Link>
         )}
+        {/*
+          WHO CAN COME IN — only for the host of a PRIVATE room with no house.
+
+          That is the only shape with a guest list at all: a room belonging to a
+          house takes its audience from the group and the route answers 400,
+          and a guest asking gets a 403 because a list of who was invited is not
+          for the invited to read. So it is drawn exactly where the service will
+          answer, rather than drawn hopefully and the error hidden.
+        */}
+        {isHost && roomIsPrivate && !stream.houseConversationId && guestsSlot?.(stream.id)}
+
         {isHost && (
           <CopyRow
             label="Speaker link"

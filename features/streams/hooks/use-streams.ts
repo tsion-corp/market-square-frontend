@@ -41,6 +41,9 @@ import {
   updateActivity,
   createActivity,
   createStream,
+  fetchRoomGuests,
+  inviteRoomGuest,
+  removeRoomGuest,
   endStream,
   fetchActivities,
   fetchMyTickets,
@@ -1058,4 +1061,59 @@ export function useMuteSpeaker(streamId: string) {
     },
   });
   return { ...mutation, unavailable: unavailable || muteMissing };
+}
+
+const roomGuestsKey = (streamId: string) => ["ms", "room-guests", streamId] as const;
+
+/**
+ * WHO MAY ENTER THIS PRIVATE ROOM — host only, and only for a room with no house.
+ *
+ * A room that belongs to a house answers 400: its audience is the group and
+ * there is no list. A guest asking answers 403, because a guest list names the
+ * people who were invited and is not something the invited get to read.
+ *
+ * So this is asked ONLY where both are already known to be true, rather than
+ * asked optimistically and the error swallowed — an error state that is the
+ * normal case for most callers is not an error state, it is a missing check.
+ */
+export function useRoomGuests(streamId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: roomGuestsKey(streamId),
+    queryFn: () => fetchRoomGuests(streamId),
+    enabled: enabled && Boolean(streamId),
+  });
+}
+
+/**
+ * Let somebody into a private room that is already running.
+ *
+ * THE PIECE THAT WAS MISSING. `guests` on create was the only way anybody was
+ * ever added, so a host who forgot somebody — or whose guest could not get in —
+ * had no move except closing the room and making another one. The route has
+ * been live the whole time and nothing called it.
+ */
+export function useInviteRoomGuest(streamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (profileId: string) => inviteRoomGuest(streamId, profileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: roomGuestsKey(streamId) });
+      toast.success("They can come in now");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't add them.")),
+  });
+}
+
+/** Take somebody back out. The guest list IS the membership, so this removes
+ *  their access rather than only their name — the door closes on their next read. */
+export function useRemoveRoomGuest(streamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (profileId: string) => removeRoomGuest(streamId, profileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: roomGuestsKey(streamId) });
+      toast.success("Removed from the room");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't remove them.")),
+  });
 }
