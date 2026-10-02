@@ -12,6 +12,7 @@ import {
   STABLE_MS,
   speakerSignalOf,
   userTopic,
+  type Gateway,
   type SocketLike,
 } from "./ws-gateway.ts";
 
@@ -440,4 +441,125 @@ test("a connection that lasted earns a fresh ladder", () => {
   } finally {
     globalThis.setTimeout = realTimeout;
   }
+});
+
+/*
+  CONNECTION STATE, so a poll can be slowed while frames are arriving.
+
+  The saving everyone reaches for is deleting the timer. That is wrong: the
+  gateway's replay buffer is bounded, so a socket down longer than its window can
+  miss a frame permanently and a feed with no timer never recovers. Slowing it
+  needs an honest answer to "is a socket open right now".
+
+  CLEANUP RUNS IN `finally`, and that is not fussiness. This runner is configured
+  with `--test-timeout=0`, so a leaked handle does not fail a test — it hangs the
+  process for ever, and a red test is indistinguishable from a stuck machine. The
+  open socket's ping interval is such a handle, and only the LAST unsubscribe
+  closes the socket. Cleanup written after the assertions is skipped by the throw
+  that a failure raises, which is precisely when you need the output.
+*/
+function withGateway(
+  run: (ctx: { gateway: Gateway; sock: Fake; seen: boolean[]; offState: () => void; offTopic: () => void }) => void,
+): void {
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const seen: boolean[] = [];
+  const offState = gateway.onConnectionChange((connected) => seen.push(connected));
+  const offTopic = gateway.subscribe("market-square:feed:for-you", () => {});
+  try {
+    run({ gateway, sock: sockets[0]!, seen, offState, offTopic });
+  } finally {
+    offState();
+    offTopic();
+  }
+}
+
+test("connection state starts false, then follows open and close", () => {
+  withGateway(({ gateway, sock, seen }) => {
+    assert.equal(gateway.connected, false, "nothing has opened yet");
+    assert.deepEqual(seen, [], "registering a listener does not invent a callback");
+
+    sock.state = 1;
+    fire(sock, "onopen");
+    assert.equal(gateway.connected, true);
+    assert.deepEqual(seen, [true]);
+
+    // An open socket staying open is not news.
+    fire(sock, "onopen");
+    assert.deepEqual(seen, [true], "a repeat open reports nothing");
+
+    fire(sock, "onclose");
+    assert.equal(gateway.connected, false);
+    assert.deepEqual(seen, [true, false]);
+  });
+});
+
+test("a listener that unsubscribed hears nothing further", () => {
+  withGateway(({ sock, seen, offState }) => {
+    sock.state = 1;
+    fire(sock, "onopen");
+    assert.deepEqual(seen, [true]);
+    // The STATE listener specifically — the topic subscription stays, so the
+    // socket is still live and the close below is a real one to miss.
+    offState();
+
+    fire(sock, "onclose");
+    assert.deepEqual(seen, [true], "no callback after unsubscribing");
+  });
+});
+
+test("a DELIBERATE close still reports disconnected", () => {
+  /*
+    `disconnect()` nulls the socket before closing it, so the stale-socket guard
+    in `onclose` returns before announcing anything. Without an announcement in
+    `disconnect` itself, a deliberate close left `connected` true for ever and a
+    caller that had slowed its poll kept the slow cadence over a dead socket.
+    This test is what found that.
+  */
+  withGateway(({ gateway, sock, seen, offTopic }) => {
+    sock.state = 1;
+    fire(sock, "onopen");
+    assert.deepEqual(seen, [true]);
+
+    // The last subscriber leaving is what makes the close deliberate.
+    offTopic();
+    assert.deepEqual(seen, [true, false]);
+    assert.equal(gateway.connected, false);
+  });
+});
+
+test("one listener throwing does not stop the others, or the socket", () => {
+  withGateway(({ gateway, sock }) => {
+    const reached: string[] = [];
+    const offBad = gateway.onConnectionChange(() => {
+      throw new Error("a render blew up");
+    });
+    const offGood = gateway.onConnectionChange(() => reached.push("second"));
+    try {
+      sock.state = 1;
+      fire(sock, "onopen");
+      assert.deepEqual(reached, ["second"]);
+      assert.equal(gateway.connected, true);
+    } finally {
+      offBad();
+      offGood();
+    }
+  });
+});
+
+test("no gateway URL means never connected, and subscribing cannot change that", () => {
+  // The hook returns false in this case, so every poll keeps its full cadence
+  // without the caller writing that branch. No socket is ever built, so there is
+  // no handle to release.
+  const gateway = createGateway("", () => fakeSocket());
+  const seen: boolean[] = [];
+  const off = gateway.onConnectionChange((connected) => seen.push(connected));
+  gateway.subscribe("market-square:feed:for-you", () => {})();
+  assert.equal(gateway.connected, false);
+  assert.deepEqual(seen, []);
+  off();
 });

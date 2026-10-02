@@ -204,6 +204,25 @@ export function personalTopicOwner(topic: string): string | null {
 export interface Gateway {
   /** Subscribe a listener to a topic. Returns the unsubscribe. */
   subscribe(topic: string, listener: (frame: GatewayFrame) => void): () => void;
+  /**
+   * Whether a socket is OPEN right now.
+   *
+   * Exposed so a caller can slow a poll down while the push is actually
+   * arriving — and speed it back up the moment it is not. Nothing else should
+   * read it as "realtime works": a socket can be open while a particular topic
+   * has not been subscribed yet, which is why the poll slows rather than stops.
+   */
+  readonly connected: boolean;
+  /**
+   * Called on every open and every close, with the new state. Returns the
+   * unsubscribe.
+   *
+   * A listener is NOT called on registration — React effects read `connected`
+   * for the initial value and subscribe for the changes, and calling back
+   * synchronously inside a subscribe would make that a double render for no
+   * new information.
+   */
+  onConnectionChange(listener: (connected: boolean) => void): () => void;
   /** For tests and diagnostics: how many sockets were ever constructed. */
   readonly socketsOpened: number;
 }
@@ -235,6 +254,32 @@ export interface Gateway {
 export function createGateway(url: string, makeSocket: SocketFactory, options: GatewayOptions = {}): Gateway {
   const { getToken, now = Date.now } = options;
   const listeners = new Map<string, Set<(frame: GatewayFrame) => void>>();
+  /*
+    Who wants to know whether the socket is up.
+
+    Separate from the topic listeners because it is a different question: a
+    topic listener wants frames, these want to know whether frames are coming
+    at all. Kept as a Set so a React effect's unsubscribe is exact, and
+    notified only on a TRANSITION — a reconnect that re-opens is news, an open
+    socket staying open is not.
+  */
+  const connectionListeners = new Set<(connected: boolean) => void>();
+  let connected = false;
+
+  /** Announce a transition, once, and never let one listener's throw stop the rest. */
+  const setConnected = (next: boolean): void => {
+    if (connected === next) return;
+    connected = next;
+    for (const listener of [...connectionListeners]) {
+      try {
+        listener(next);
+      } catch {
+        // A render that throws is the caller's problem, not the socket's. The
+        // remaining listeners still need telling, and the connection itself
+        // must not be taken down by a bad subscriber.
+      }
+    }
+  };
   let socket: SocketLike | null = null;
   let opened = 0;
   let attempt = 0;
@@ -330,6 +375,7 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
         where the connection's lifetime is known.
       */
       openedAt = now();
+      setConnected(true);
       // Everything subscribed before or during the outage, again — the
       // personal topics once the gateway has verified who this is.
       const topics = hearable();
@@ -366,6 +412,16 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
       authedAs = null;
       authenticating = false;
       answered = false;
+      /*
+        An UNEXPECTED drop. Announced before the early return below, because a
+        close with nothing subscribed stops there without scheduling a reconnect
+        and still leaves the socket shut.
+
+        A DELIBERATE close does not reach this line at all — `disconnect()` nulls
+        `socket` before closing, so the stale-socket guard above returns first.
+        That path announces for itself; see `disconnect`.
+      */
+      setConnected(false);
       if (pingTimer) clearInterval(pingTimer);
       pingTimer = null;
       if (closedOnPurpose || listeners.size === 0) return;
@@ -394,6 +450,15 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
     stopTimers();
     const current = socket;
     socket = null;
+    /*
+      Announced HERE, not left to `onclose`, and the reason is the guard in it:
+      `socket` is already null by the time the close fires, so the handler treats
+      its own socket as stale and returns before saying anything. Without this a
+      deliberate disconnect left `connected` true for ever, and a caller that had
+      slowed its poll down kept the slow cadence over a socket that was gone.
+      `setConnected` ignores a repeat, so the two paths cannot double-report.
+    */
+    setConnected(false);
     authedAs = null;
     authenticating = false;
     answered = false;
@@ -403,6 +468,15 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
   return {
     get socketsOpened() {
       return opened;
+    },
+    get connected() {
+      return connected;
+    },
+    onConnectionChange(listener) {
+      connectionListeners.add(listener);
+      return () => {
+        connectionListeners.delete(listener);
+      };
     },
     subscribe(topic, listener) {
       if (!url) return () => {};
