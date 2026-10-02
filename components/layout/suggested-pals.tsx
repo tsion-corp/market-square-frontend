@@ -5,6 +5,7 @@ import { useSettings } from "@/features/settings";
 import { profileHref } from "@/lib/profile-href";
 import { PalCard, RAIL_CARD } from "@/components/layout/pal-card";
 import { usePeople } from "@/features/discovery";
+import { DECK_SORT } from "@/lib/people-filters";
 import { useMe } from "@/hooks/use-me";
 import type { Profile } from "@/lib/api/schemas";
 
@@ -63,7 +64,24 @@ export function SuggestedPals() {
   const settings = useSettings();
   const placeAllowed = settings.data?.privacy?.personalizeByPlace !== false;
   const city = me.data?.city?.trim() ?? "";
-  const people = usePeople("", "followers", Boolean(city) && placeAllowed, {
+  /*
+    RANKED, NOT MERELY POPULAR — the same `foryou` the friends deck uses.
+
+    This asked for `followers`, so a rail headed "Suggested Pals" was the
+    most-followed people who happened to share a city, in follower order.
+    Nothing about it was a suggestion: the same list for everybody in a city,
+    and the loudest accounts at the front of it.
+
+    `foryou` is the service's own ranking — shared interests, place, activity,
+    and people who have winked the reader first. The city facet stays, because
+    the heading promises nearby and the service treats an explicit facet as the
+    reader's request rather than as personalisation. So it is a RANKED list
+    narrowed to a place, instead of a popularity list that is only narrowed.
+
+    Nothing here may depend on what `foryou` returns today; the bands behind it
+    are the service's to change and every change lands without a release.
+  */
+  const people = usePeople("", DECK_SORT, Boolean(city) && placeAllowed, {
     city,
     excludeFollowing: true,
   });
