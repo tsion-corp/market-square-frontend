@@ -258,13 +258,34 @@ export async function createStream(input: {
   topics?: string[];
   /**
    * WHO may find the room. `public` is listed everywhere; `private` is
-   * reachable only by members of `houseConversationId`, which the service
-   * enforces in its listing queries. Distinct from `visibility`, which is a
+   * reachable by the HOST, by members of `houseConversationId`, and by anyone
+   * in `guests` — three doors, enforced in the service's listing query rather
+   * than by the caller. A private room needs at least one of the last two or it
+   * is a room only its host can reach. Distinct from `visibility`, which is a
    * door charge.
    */
   audience?: "public" | "private";
   /** Required when `audience` is `private`; the caller must be a member. */
   houseConversationId?: string;
+  /**
+   * WHO MAY ENTER a private room opened WITHOUT a house — up to 50 profile ids.
+   *
+   * The service's listing filter has three doors: the host, the members of
+   * `houseConversationId`, and a row in `stream_guests`. This writes the third,
+   * which is what lets a private room exist with no house behind it.
+   *
+   * Sent HERE rather than as follow-up invites because the room and its list are
+   * written in one transaction — an invite loop that fails on the third person
+   * leaves a live, half-invited room that nobody asked for and no client can
+   * roll back. An unknown id refuses the whole create rather than silently
+   * shortening the list, so a host never opens a room missing somebody they
+   * chose.
+   *
+   * REFUSED alongside `houseConversationId`: the group is already the audience
+   * there, and a second source of truth for "who is allowed in" is how the two
+   * come to disagree.
+   */
+  guests?: string[];
   /**
    * WHO MAY TYPE in the room's chat (migration 041). `followers` admits the
    * host, the host's followers, and anyone the host has approved as a speaker;

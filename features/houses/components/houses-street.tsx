@@ -61,6 +61,7 @@ export function HousesStreet({
   headingSlot,
   roomCardSlot,
   upcomingCardSlot,
+  guestPickerSlot,
 }: {
   /** The search row at the head of the page (1317:158074). */
   headSlot?: React.ReactNode;
@@ -70,6 +71,12 @@ export function HousesStreet({
   roomCardSlot?: (stream: Stream) => React.ReactNode;
   /** The card for a room that has not opened yet (1295:140164). */
   upcomingCardSlot?: (stream: Stream) => React.ReactNode;
+  /** Who may enter a private room opened from here — see `OpenHouseSheet`. */
+  guestPickerSlot?: (args: {
+    value: string[];
+    onChange: (next: string[]) => void;
+    max: number;
+  }) => React.ReactNode;
 } = {}) {
   const gate = useGate();
   const [opening, setOpening] = useState(false);
@@ -179,7 +186,11 @@ export function HousesStreet({
         </>
       )}
 
-      <OpenHouseSheet open={opening} onClose={() => setOpening(false)} />
+      <OpenHouseSheet
+        open={opening}
+        onClose={() => setOpening(false)}
+        guestPickerSlot={guestPickerSlot}
+      />
     </div>
   );
 }

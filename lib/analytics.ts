@@ -24,6 +24,14 @@ import { api, SQUARE_BASE } from "./square-path.ts";
 export type MarketEventName =
   // The community: what this product is for.
   | "post_created"
+  /*
+    THE MOST COMMON ACT IN THE PRODUCT, and it had no name at all until now —
+    so "what do users do most" could never have been answered honestly. Only
+    the LIKE is counted, never the unlike: an undo is not an engagement, and
+    counting both would make a double-tapped-then-undone post look busier than
+    one somebody meant.
+  */
+  | "post_liked"
   | "comment_created"
   | "gift_sent"
   | "room_opened"
@@ -213,13 +221,11 @@ export function trackMarketEvent(name: MarketEventName, input: MarketEventInput)
   lastSurface = input.surface;
 
   /*
-    MIXPANEL IS THE TRANSPORT THAT EXISTS.
+    TWO TRANSPORTS, AND THEY ARE NOT THE SAME RECORD.
 
-    `POST /analytics/events` is still not deployed, so the call below has never
-    delivered anything — it 404s once per page load and latches. It stays,
-    because when a collector of ours does land it is the one that keeps the raw
-    events and can attach the viewer from the SESSION rather than trusting the
-    browser. Mixpanel is the tool for reading them, not the record.
+    Mixpanel is the tool for READING events. The collector is the record: it
+    keeps the raw event and attaches the viewer from the SESSION rather than
+    trusting a browser's claim about who it is.
 
     Both are fire-and-forget and neither can fail the action.
   */
@@ -228,10 +234,30 @@ export function trackMarketEvent(name: MarketEventName, input: MarketEventInput)
   void apiFetch(api("/api/market-square/analytics/events"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    /*
+      A BATCH OF ONE, because the route takes `{ events: [...] }`. The envelope
+      is here from the start rather than added when batching arrives: a shape
+      that changes later is a deploy where one side speaks the old one.
+
+      `occurredAt` is OURS and is not the record's clock — the service stamps
+      its own on arrival. A device's clock is wrong by minutes routinely and
+      jumps backwards across a sleep, so ordering within one session uses this
+      and anything time-series uses the server's. Sending only one of the two is
+      how a single skewed phone corrupts every funnel it appears in.
+    */
+    body: JSON.stringify({ events: [{ ...payload, occurredAt: new Date().toISOString() }] }),
     keepalive: true,
   })
     .then((response) => {
+      /*
+        LATCH ON 404 ONLY — "this collector does not exist here", which is a
+        fact about the deployment and will not change under the reader's feet.
+
+        A 429 or a 5xx is a service having a moment, and latching on those would
+        turn a bad minute into a session that reports nothing. Those are exactly
+        the states where the events are still worth keeping, so they simply fall
+        through: this one is lost, the next is attempted.
+      */
       if (response.status === 404) collectorMissing = true;
     })
     // Analytics never gets to be the reason something breaks: a failed

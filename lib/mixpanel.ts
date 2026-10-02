@@ -33,17 +33,41 @@
  *    question that was asked.
  */
 
+import { api } from "./square-path.ts";
+
 const TOKEN = process.env.NEXT_PUBLIC_MIXPANEL_TOKEN ?? "";
 
 /**
- * A first-party path to proxy ingest through, when one exists.
+ * THE FIRST-PARTY PATH, AND IT IS THE DEFAULT NOW — not an opt-in.
  *
- * Empty today. Set it to a route on our own origin and the ad-blocker problem
- * above goes away without touching a single call site.
+ * This used to be empty, so every event went straight to `api.mixpanel.com`,
+ * which on a phone is a hostname that a great many ad-blockers, content
+ * blockers and privacy browsers simply refuse. Nothing reported it: ingest is
+ * fire-and-forget, so a blocked send is indistinguishable from one that worked.
+ *
+ * Measured, the product looked like a place where 35-57 people a day arrived on
+ * mobile and then did nothing. The only events in the data were gist room joins
+ * and leaves — the two the SERVER records, and so the only two no blocker could
+ * touch.
+ *
+ * `/api/mx` is on our own origin, which is first-party and on nobody's list. It
+ * is the DEFAULT rather than something to switch on, because a fix that has to
+ * be remembered in an environment variable is a fix that is off in the
+ * environment nobody checked — and this one was off in production for the
+ * entire life of the feature.
+ *
+ * The variable survives for an operator who wants to point ingest somewhere
+ * else entirely, and setting it to an absolute URL still works.
  */
 const PROXY = process.env.NEXT_PUBLIC_MIXPANEL_PROXY ?? "";
 
-const INGEST = PROXY || "https://api.mixpanel.com/track";
+const INGEST = PROXY || api("/api/mx");
+
+/*
+  SAME-ORIGIN unless somebody has deliberately pointed ingest off-site. Our own
+  route is same-origin by construction; an absolute override is not.
+*/
+const SAME_ORIGIN = !/^https?:\/\//u.test(INGEST);
 
 /** Configured at all? Everything here is a no-op without a token. */
 export function mixpanelReady(): boolean {
@@ -104,7 +128,7 @@ export function sendToMixpanel(
       keepalive: true,
       // Ingest is write-only and cross-origin; no cookies belong on it.
       credentials: "omit",
-      mode: PROXY ? "same-origin" : "cors",
+      mode: SAME_ORIGIN ? "same-origin" : "cors",
     }).catch(() => {});
   } catch {
     // An ad-blocker can make `fetch` itself throw synchronously.

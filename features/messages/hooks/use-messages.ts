@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { errorCode, errorMessage } from "@/lib/api/envelope";
+import { trackMarketEvent } from "@/lib/analytics";
 import { inviteErrorCopy } from "@/features/messages/lib/invites";
 import { useAuth } from "@/hooks/use-auth";
 import { useRefreshUnread } from "@/hooks/use-unread";
@@ -26,6 +27,9 @@ import {
   updateGroup,
   type GroupEdit,
   setMemberRole,
+  setMemberMuted,
+  setWhoCanPost,
+  moderateMessage,
   transferOwnership,
   sendMessage,
   openSnap,
@@ -41,6 +45,7 @@ import {
   openedConversationKey,
 } from "@/features/messages/lib/open-conversation";
 import type { Profile } from "@/lib/api/schemas";
+import { useThreadSignal } from "@/features/messages/hooks/use-thread-signal";
 
 /*
   THE SIGNAL EXISTS AND THIS CLIENT CANNOT HEAR IT YET.
@@ -70,16 +75,30 @@ import type { Profile } from "@/lib/api/schemas";
   That ordering is deliberate — reaching the public branch would hand every
   private thread to anyone who opens a socket.
 
-  `lib/ws-gateway-shared.ts` knows two modes: public topics subscribed on open,
+  `lib/ws-gateway-shared.ts` knew two modes: public topics subscribed on open,
   and personal `user:<id>` topics behind an `authenticate` frame. A grant is a
-  THIRD mode — fetch `GET /realtime/grant`, present it, and re-present it when
-  a socket reopens, because the grant is per conversation and not per session.
+  THIRD mode — fetch `GET /realtime/grant`, present it, and re-present it when a
+  socket reopens, because a grant is per conversation and not per session.
 
-  Until that is built, this is the mechanism rather than a floor, and it stays
-  at 5s. A slower interval with no subscriber behind it is a straight downgrade
-  for every reader, paid now for a benefit that does not exist — subscriber
-  first, confirm frames in prod, relax only after, which is the order ADR-0009
+  THAT IS NOW BUILT: `lib/realtime-grant.ts` mints and renews one, the client
+  carries it per topic and re-presents it on reconnect, and
+  `useThreadSignal` subscribes an open thread. So a message now arrives rather
+  than being waited for.
+
+  THE POLL STILL STAYS AT 5s, which is this file's own plan and not timidity:
+  subscriber first, confirm frames in production, relax only after. A slower
+  interval with no confirmed subscriber behind it is a straight downgrade for
+  every reader, paid now for a benefit nobody has measured — the order ADR-0009
   and the room chat signal both used.
+
+  AND WHEN IT DOES MOVE IT CANNOT JUST GO, for two reasons of which only the
+  first is obvious. The grant is CAPPED, filled with the most recently active
+  rooms, so a reader in more conversations than the cap has threads it does not
+  name — pinning the open one fixes that thread and no others. And a grant can be
+  UNAVAILABLE: the service answers SERVICE_UNAVAILABLE when realtime is not
+  configured and its own documentation calls that a working deployment where the
+  client keeps polling. So the condition is "this conversation is covered by a
+  grant we hold", never "the socket is up".
 
   What was actually costing the most here was never this poll: an open thread
   re-renders on every tick, and each re-render used to re-prefetch a profile
@@ -108,6 +127,9 @@ export function useConversations(tab: InboxTab = "all") {
 }
 
 export function useMessages(conversationId: string, open: boolean) {
+  // Hears `chatMessageArrived` while this thread is open. The poll below is
+  // deliberately unchanged — see the note above `THREAD_POLL_MS`.
+  useThreadSignal(conversationId, open);
   return useQuery({
     queryKey: ["ms", "messages", conversationId],
     queryFn: () => fetchMessages(conversationId),
@@ -171,10 +193,27 @@ export function useSendMessage(conversationId: string) {
   const refreshUnread = useRefreshUnread();
   return useMutation({
     mutationFn: (body: OutgoingMessage) => sendMessage(conversationId, body),
-    onSuccess: () => {
+    onSuccess: (_sent, body) => {
       client.invalidateQueries({ queryKey: ["ms", "messages", conversationId] });
       client.invalidateQueries({ queryKey: ["ms", "conversations"] });
       refreshUnread();
+      /*
+        NO MESSAGE CONTENT, EVER — the conversation id and the shape of what was
+        sent, nothing else. Analytics must never be a copy of what people say to
+        each other, and a `text` field here would become exactly that.
+      */
+      trackMarketEvent("message_sent", {
+        surface: "thread",
+        entityType: "conversation",
+        entityId: conversationId,
+        metadata: {
+          hasMedia: Boolean(body.media),
+          isReply: Boolean(body.replyToId),
+          // A snap is a different act from a photo and the tally cannot
+          // separate them afterwards.
+          viewOnce: Boolean(body.viewOnce),
+        },
+      });
     },
     onError: (error, body) => toast.error(sendErrorCopy(error, body)),
   });
@@ -448,6 +487,65 @@ export function useSetMemberRole(conversationId: string) {
     ({ profileId, role }) => setMemberRole(conversationId, profileId, role),
     "Role updated"
   );
+}
+
+/**
+ * MUTE OR UNMUTE SOMEBODY IN A GROUP.
+ *
+ * Reuses the shared action, so the roster and the inbox both refetch — the
+ * roster because the switch draws from `muted` on the row, and the inbox
+ * because the composer's own gate reads the viewer's state from there.
+ */
+export function useSetMemberMuted(conversationId: string) {
+  return useConversationAction<{ profileId: string; muted: boolean; name: string }>(
+    conversationId,
+    ({ profileId, muted }) => setMemberMuted(conversationId, profileId, muted),
+    "Updated"
+  );
+}
+
+/** Who may TYPE in this house — leaders only. `admins` is an announcement board. */
+export function useSetWhoCanPost(conversationId: string) {
+  return useConversationAction<"everyone" | "admins">(
+    conversationId,
+    (whoCanPost) => setWhoCanPost(conversationId, whoCanPost),
+    "Updated"
+  );
+}
+
+/**
+ * TAKE SOMEBODY ELSE'S MESSAGE DOWN, as a leader.
+ *
+ * The route answers the EMPTIED message, so the row the thread already holds is
+ * replaced in place rather than the whole thread being refetched — the reader
+ * stays exactly where they were scrolled, which matters most in the long house
+ * threads where moderating actually happens.
+ *
+ * The message keeps its row: `status` becomes `removed` and `moderatedBy`
+ * carries the leader. That pairing is what lets the bubble say a moderator did
+ * it rather than the author, and it is why a reply quoting it still makes sense.
+ */
+export function useModerateMessage(conversationId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => moderateMessage(conversationId, messageId),
+    /*
+      INVALIDATED, NOT PATCHED INTO THE CACHE.
+
+      The route answers the emptied message and it is tempting to write it
+      straight into the thread. `useMessages` is a plain query, not an infinite
+      one, so a hand-rolled `{pages: [...]}` update would have matched nothing
+      and quietly done nothing — the message would have sat there looking
+      un-moderated until something else refetched. This mirrors the author's own
+      unsend exactly, which is the same act with a different subject.
+    */
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["ms", "messages", conversationId] });
+      client.invalidateQueries({ queryKey: ["ms", "conversations"] });
+      toast.success("Message removed");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't remove that message.")),
+  });
 }
 
 /** "Make owner" — the owner hands the house over and stays on as an admin. */

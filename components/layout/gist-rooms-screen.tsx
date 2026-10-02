@@ -1,6 +1,7 @@
 "use client";
 
 import { HousesStreet } from "@/features/houses";
+import { GuestPicker } from "@/components/layout/guest-picker";
 import { LiveRoomCard } from "@/features/streams/components/live-room-card";
 import { ComingSoonCard } from "@/components/layout/coming-soon-card";
 import { useState } from "react";
@@ -55,6 +56,12 @@ export function GistRoomsScreen() {
   return (
     <HousesStreet
       headSlot={row}
+      /* The people a private room is private TO, when it was opened from the
+         street rather than from a house. The directory is the discovery
+         slice's, so it is composed here like every other cross-slice object. */
+      guestPickerSlot={({ value, onChange, max }) => (
+        <GuestPicker value={value} onChange={onChange} max={max} />
+      )}
       headingSlot={(section) =>
         section === "live" ? (
           <SectionHeading id="live-gistrooms" lead="Live" accent="GistRooms" />

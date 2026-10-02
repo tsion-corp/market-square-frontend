@@ -52,8 +52,8 @@ export function isSafePath(path: string[]): boolean {
 }
 
 /**
- * The TWO writes a signed-out visitor may make through the BFF, both optional-
- * auth in the spec (`[{}, { bearerAuth: [] }]`):
+ * The THREE writes a signed-out visitor may make through the BFF, all
+ * optional-auth in the spec (`[{}, { bearerAuth: [] }]`):
  *
  *  · `POST /email/unsubscribe` — turning off the daily email summary from the
  *    link in the email. The signed token in its query names the one person it
@@ -62,12 +62,63 @@ export function isSafePath(path: string[]): boolean {
  *    preview. It mints a subscribe-only, roster-hidden grant on a throwaway
  *    identity, changes nothing, and the page it sits on is public.
  *
+ *  · `POST /analytics/events` — the event collector, and the reason it has to
+ *    be here is the whole point of measuring anything: the ANONYMOUS half is
+ *    where acquisition lives. Somebody arrives from a campaign, looks around,
+ *    and signs up later — or does not. Requiring a session throws away every
+ *    event before the sign-up, which is most of what a question about mobile
+ *    traffic is actually asking.
+ *
+ *    The service is explicitly optional-auth here and records `profileId: null`
+ *    for an anonymous caller. Our proxy answered 401 and dropped them on the
+ *    floor, so the service's decision had no effect: the events never reached
+ *    it. A gate on one side of a contract that the other side did not ask for
+ *    is still a gate.
+ *
+ *    The session is still FORWARDED when there is one, so a signed-in reader's
+ *    events are attributed. Public here means "does not require", never
+ *    "ignores".
+ *
  * These exact shapes only — every other write needs a session.
  */
 export function isPublicPost(path: string[]): boolean {
   if (!isSafePath(path)) return false;
   if (path.length === 2 && path[0] === "email" && path[1] === "unsubscribe") return true;
-  return path.length === 3 && path[0] === "streams" && path[2] === "preview-token";
+  if (path.length === 2 && path[0] === "analytics" && path[1] === "events") return true;
+  /*
+    THE THREE WRITES A LIVE ROOM NEEDS FROM A VISITOR WHO IS NOT SIGNED IN.
+
+    All three are `[{}, {bearerAuth}]` in the PRODUCTION spec — optional auth,
+    anonymous allowed — and two of them were being refused here, which is why
+    this is a list of three rather than the one it used to be:
+
+     · `playback-token` mints the LiveKit grant that plays the stream. The
+       service issues a fresh `anon-<uuid>` identity for a caller with no
+       session, which only makes sense because it EXPECTS anonymous callers.
+       Refused here, a signed-out visitor cannot watch a public room at all.
+     · `heartbeat` renews a viewer's place in the live presence set, and is
+       documented "anonymous allowed on public streams". Refused here,
+       signed-out listeners silently drop out of `viewerCount` and out of the
+       participants sample, so a host sees fewer people than are in the room —
+       an error nobody reports, because the number is merely wrong rather than
+       missing.
+     · `preview-token` is the room card's hover preview: listen-only,
+       roster-hidden, on a page a signed-out reader can already see.
+
+    None of these was broken by a change — they have been anonymous-capable
+    since they shipped, and this proxy has been refusing two of them the whole
+    time. A gate on one side of a contract the other side did not ask for is
+    still a gate, and it is invisible from both ends: the service sees no
+    request, the client sees a 401 nobody logs.
+  */
+  if (
+    path.length === 3 &&
+    path[0] === "streams" &&
+    (path[2] === "playback-token" || path[2] === "preview-token" || path[2] === "heartbeat")
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function isPublicGet(path: string[]): boolean {

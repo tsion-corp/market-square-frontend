@@ -10,6 +10,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { errorCode, errorMessage } from "@/lib/api/envelope";
+import { trackMarketEvent } from "@/lib/analytics";
 import { isVideoPost } from "@/lib/media";
 import { videoListKey } from "@/lib/video-context";
 import {
@@ -28,6 +29,8 @@ import {
   pinPost,
 } from "@/features/feed/lib/api";
 import type { FeedPage, Lane, Post } from "@/features/feed/lib/types";
+import { laneTopic } from "@/lib/ws-gateway";
+import { useGatewayConnected } from "@/hooks/use-gateway-connected";
 import { invalidateContentSurfaces } from "@/lib/api/invalidate";
 import { clearPinnedEverywhere, invalidatePostLists, isInfiniteFeed, patchPostEverywhere, reconcilePost } from "@/features/feed/lib/cache";
 
@@ -76,13 +79,47 @@ export function useFeed(lane: Lane, topics: readonly string[] = [], enabled = tr
  */
 export const FEED_HEAD_INTERVAL_MS = 30_000;
 
+/**
+ * The cadence once the socket is carrying this lane: a FLOOR, not freshness.
+ *
+ * `useLaneSignal` already invalidates this exact query the moment the service
+ * says the head moved, so while a socket is up this timer is not what makes the
+ * feed fresh — it is what catches a frame that never arrived. The gateway's
+ * replay buffer is bounded (a window of recent frames per topic, not forever),
+ * so a socket down longer than that window can miss one permanently, and a
+ * feed with no timer at all would then never recover.
+ *
+ * Five minutes against thirty seconds is a tenth of the requests for a worst
+ * case of five minutes' staleness in the one situation where a push was lost.
+ */
+export const FEED_HEAD_IDLE_MS = 300_000;
+
 export function useFeedHead(lane: Lane, topics: readonly string[] = [], enabled = true) {
   const key = topics.join(",");
+  const connected = useGatewayConnected();
+  /*
+    SLOWED, NEVER STOPPED, and only for a lane something actually publishes.
+
+    This timer was unconditional, so every open tab asked "anything new?" every
+    thirty seconds whether or not the push had already told it — the most
+    expensive read in the service, answered "no" almost every time.
+
+    Two conditions, and dropping either one is a bug rather than a saving:
+
+      - CONNECTED, not "a gateway is configured". A reader whose socket died
+        gets nothing pushed, so they need the fast cadence back. Gating on
+        configuration would freeze the feed for exactly the people already
+        having the worst day.
+      - A lane with a TOPIC. `laneTopic` is null for `following` (it is
+        per-reader) and `platform` (not broadcast), so nothing will ever push
+        them. Slowing those down would buy nothing and cost freshness.
+  */
+  const pushed = connected && laneTopic(lane) !== null;
   return useQuery({
     queryKey: ["ms", "feed", lane, key, "head"],
     queryFn: () => fetchFeed(lane, undefined, [...topics], undefined, 10),
     enabled,
-    refetchInterval: FEED_HEAD_INTERVAL_MS,
+    refetchInterval: pushed ? FEED_HEAD_IDLE_MS : FEED_HEAD_INTERVAL_MS,
     refetchIntervalInBackground: false,
     // The check is the freshness; nothing else should read this as current.
     staleTime: 0,
@@ -211,6 +248,22 @@ export function useCreatePost() {
   return useMutation({
     mutationFn: (input: Parameters<typeof createPost>[0]) => createPost(input),
     onSuccess: (post) => {
+      /*
+        POSTING IS THE PRODUCT, and it was measured nowhere — the event name
+        existed in the vocabulary and no call site ever used it, so "what do
+        people do here" could only ever have answered with streams and the
+        store. Fired on SUCCESS, so a draft that failed to publish is not
+        counted as a post.
+      */
+      trackMarketEvent("post_created", {
+        surface: "feed",
+        entityType: "post",
+        entityId: post.id,
+        metadata: {
+          kind: post.kind,
+          hasMedia: Boolean(post.mediaUrl || post.media?.length),
+        },
+      });
       // Two halves, and both are needed. The prepend puts the post on screen
       // instantly; the invalidation below reconciles it with the server, which
       // may reshape it (hydrated author, resolved deep link, moderation).
@@ -341,6 +394,22 @@ export function useLikePost() {
     mutationFn: ({ postId, like }: { postId: string; like: boolean }) => likePost(postId, like),
     onMutate: async ({ postId, like }) => {
       applyLike(postId, like);
+    },
+    /*
+      ONLY THE LIKE, NEVER THE UNLIKE — an undo is not an engagement, and
+      counting both would make a post somebody double-tapped and took back look
+      busier than one they meant. Fired on success rather than optimistically:
+      the tally moves instantly for the reader either way, but a like the
+      service refused is not a like.
+    */
+    onSuccess: (_result, { postId, like }) => {
+      if (like) {
+        trackMarketEvent("post_liked", {
+          surface: "feed",
+          entityType: "post",
+          entityId: postId,
+        });
+      }
     },
     onError: (error, { postId, like }) => {
       applyLike(postId, !like);

@@ -201,6 +201,11 @@ export function CreateGroupFlow({ open, onClose, onStarted }: NewChatPickerProps
           onStarted({
             id: conversation.id,
             kind: "group",
+            // A new house talks: nobody makes an announcement board by default,
+            // and the caller who just created it is its owner, so they may open
+            // a room in it. Both are what the service will say on the next read.
+            whoCanPost: "everyone",
+            canOpenRoom: true,
       // Both stated rather than defaulted: this group was just created BY the
       // caller, and with the visibility they chose on the form.
       createdBy: me.data?.id ?? null,

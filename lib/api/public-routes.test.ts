@@ -339,16 +339,68 @@ describe("isPublicPost", () => {
     // `[{}, {bearerAuth}]` on the served spec: a subscribe-only grant on a
     // throwaway identity, for a page a signed-out reader can see.
     assert.equal(isPublicPost(["streams", "s1", "preview-token"]), true);
+    /*
+      THE ANALYTICS COLLECTOR, and the anonymous half is the point.
+
+      The service is optional-auth here and records `profileId: null` for a
+      caller with no session. Our proxy answered 401, so that decision had no
+      effect — the events never reached it, and every event before somebody
+      signs up was dropped by us. That is most of what a question about mobile
+      acquisition is asking: arrive from a campaign, look around, sign up later
+      or not at all.
+
+      Verified end to end against the running service: anonymous POST through
+      the BFF answers 202 and the row lands with a null profile.
+    */
+    assert.equal(isPublicPost(["analytics", "events"]), true);
+    /*
+      THE THREE A LIVE ROOM NEEDS FROM A SIGNED-OUT VISITOR. All `[{}, {bearerAuth}]`
+      in the PRODUCTION spec, and two of them were refused here for the whole life
+      of the feature:
+
+        playback-token  the LiveKit grant. Refused, a signed-out visitor cannot
+                        WATCH a public room at all — the service mints an
+                        `anon-<uuid>` identity precisely because it expects them.
+        heartbeat       renews a place in the presence set. Refused, signed-out
+                        listeners drop out of `viewerCount` and the host sees
+                        fewer people than are in the room. Nobody reports that,
+                        because the number is wrong rather than absent.
+        preview-token   the card's listen-only hover preview.
+
+      Verified anonymously through the running BFF: all three now reach the
+      service and get the service's own answer instead of our 401.
+    */
+    assert.equal(isPublicPost(["streams", "s1", "playback-token"]), true);
+    assert.equal(isPublicPost(["streams", "s1", "heartbeat"]), true);
     for (const path of [
+      // Public means "does not require a session", never "is a wildcard".
+      ["analytics"],
+      ["analytics", "events", "x"],
+      ["analytics", "profiles"],
+      // A stream write that is NOT one of the three stays closed — the list is
+      // three named actions, not "anything under a stream".
+      ["streams", "s1", "go-live"],
+      ["streams", "s1", "end"],
+      ["streams", "s1", "guests"],
+      ["streams", "s1"],
       ["email"],
       ["email", "unsubscribe", "x"],
       ["posts"],
       ["me", "settings"],
       ["webhooks", "resend"],
       ["..", "email", "unsubscribe"],
-      // The playback grant and the heartbeat stay behind a session.
-      ["streams", "s1", "playback-token"],
-      ["streams", "s1", "heartbeat"],
+      /*
+        THESE TWO USED TO BE ASSERTED FALSE HERE, and the assertion was the bug
+        wearing a test's clothes: "the playback grant and the heartbeat stay
+        behind a session" was a decision this repo made and the SERVICE never
+        asked for. Both are `[{}, {bearerAuth}]` in the production spec, and
+        refusing the playback grant means a signed-out visitor cannot watch a
+        public room at all.
+
+        It is worth leaving the scar rather than deleting the lines silently:
+        a test that pins the wrong behaviour is harder to find than no test,
+        because it answers "is this deliberate?" with a confident yes.
+      */
       ["streams", "s1", "preview-token", "x"],
       ["streams", "..", "preview-token"],
       // Invite to speak, its answers and the host's mute are all signed-in,
