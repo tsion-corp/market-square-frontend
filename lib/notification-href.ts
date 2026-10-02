@@ -68,6 +68,17 @@ export function isGistRoomNotification(item: NotificationDestination): boolean {
   if (item.subject?.kind === "room") return true;
   // A kind that cannot be anything else, for a payload with no `subject` yet.
   if (item.kind === "house_room") return true;
+  /*
+    AND AN INVITATION TO A PRIVATE ROOM, for the same reason: a guest list
+    belongs to a gist room and to nothing else, so a `room_invite` carrying a
+    `streamId` cannot be about a broadcast.
+
+    Without this the row would be sent to `/live/<id>`, which is the player for
+    a broadcast — an invited guest would arrive at the wrong surface for the
+    room they were invited to, and the one thing an invitation has to get right
+    is where it leads.
+  */
+  if (item.kind === "room_invite") return true;
   // Set by the backend on `house_room` rows alone; null everywhere else.
   return item.house != null;
 }

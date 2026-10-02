@@ -94,6 +94,30 @@ export const NotificationKindSchema = z
      */
     "house_room",
     /**
+     * SOMEBODY PUT YOU ON THE GUEST LIST OF A PRIVATE ROOM.
+     *
+     * Listed BEFORE the service sends one, which is the rule the four notes
+     * above were all written to establish. The service has not shipped this
+     * kind yet; when it does, an unlisted kind would arrive through
+     * `.catch("follow")` and tell somebody they had a new follower when what
+     * actually happened is that they were invited somewhere private. Of all the
+     * kinds that has bitten, this would be among the worst — the invitation is
+     * the only signal the person gets, and it would be replaced by a different
+     * event entirely.
+     *
+     * It is why this is NOT hypothetical: twice tonight a real person was
+     * invited to a private room and learned about it from a WhatsApp message,
+     * because nothing in the product told them. A private room is reachable
+     * only by its guest list, so an invitation nobody receives is a room nobody
+     * can enter.
+     *
+     * Expected to carry the inviter as the actor and `streamId` for the room.
+     * Nothing is rendered for a room that has ended beyond saying so — see the
+     * copy — because the invitation does not expire but what you can do about
+     * it depends on the room.
+     */
+    "room_invite",
+    /**
      * AN ADMIN IS SHOWING YOUR POST TO EVERYONE (backend, 2026-09-12).
      *
      * Listed before the service sends one, for the reason the three notes above

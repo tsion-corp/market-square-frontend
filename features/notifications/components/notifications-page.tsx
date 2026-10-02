@@ -91,6 +91,10 @@ const GLYPHS: Partial<Record<MarketNotification["kind"], string>> = {
   speaker_request: asset("/notifications/notif-trending.svg"),
   // A room opening in a house is a live room, like a raised hand.
   house_room: asset("/notifications/notif-trending.svg"),
+  // An invitation to a private room is a live room too, so it takes the same
+  // mark rather than the follow glyph — being invited somewhere is not a fact
+  // about people the way a follow or a house add is.
+  room_invite: asset("/notifications/notif-trending.svg"),
 };
 
 /**
@@ -156,6 +160,10 @@ function headline(item: MarketNotification): string {
       return "Speaker request";
     case "house_room":
       return "Gist room opened";
+    case "room_invite":
+      // "Invited" rather than "Room invite": the headline says what somebody
+      // DID, the way every other line in this list does.
+      return "Invited to a room";
     case "post_announced":
       // Present tense, and it says what is happening. "Featured" reads like a
       // prize and hides the thing the author most needs to understand: that it
@@ -256,6 +264,18 @@ function describe(item: MarketNotification): string {
       return item.house?.title
         ? `${who} opened a gist room in ${item.house.title}.`
         : `${who} opened a gist room in one of your houses.`;
+    /*
+      A PRIVATE ROOM IS REACHABLE ONLY BY ITS GUEST LIST, so this is not a
+      courtesy — it is the only way the person learns they can go in at all.
+      Twice tonight somebody was invited and found out over WhatsApp.
+
+      It names WHO invited them, because that is the question somebody actually
+      has about an invitation to somewhere private, and it is the difference
+      between accepting because you recognise the person and accepting because
+      the room looked fine.
+    */
+    case "room_invite":
+      return `${who} invited you to a private room.`;
     case "post_announced":
       // No `who`: this row deliberately carries no actor, so naming one would
       // invent a person. It reads as coming from Market Square.
