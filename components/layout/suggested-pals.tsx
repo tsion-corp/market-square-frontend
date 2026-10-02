@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { useSettings } from "@/features/settings";
+import { profileHref } from "@/lib/profile-href";
 import { PalCard, RAIL_CARD } from "@/components/layout/pal-card";
 import { usePeople } from "@/features/discovery";
 import { useMe } from "@/hooks/use-me";
@@ -44,17 +47,79 @@ const WANTED = 12;
  */
 export function SuggestedPals() {
   const me = useMe();
+  /*
+    THIS RAIL IS PLACE PERSONALISATION, so it obeys the setting that governs it.
+
+    It asks for people in the viewer's own city. That is exactly what
+    "Personalize based on places" turns off, and a rail that keeps doing it
+    after somebody switched the setting off makes the settings screen a lie —
+    the same gap the pals DECK had, where two surfaces used one fact about a
+    person and only one of them asked.
+
+    Undefined is not "off": a service that does not carry the field has not
+    been asked, and defaulting a privacy answer to the restrictive side here
+    would silently remove a working section for everybody on an older service.
+  */
+  const settings = useSettings();
+  const placeAllowed = settings.data?.privacy?.personalizeByPlace !== false;
   const city = me.data?.city?.trim() ?? "";
-  const people = usePeople("", "followers", Boolean(city), { city, excludeFollowing: true });
+  const people = usePeople("", "followers", Boolean(city) && placeAllowed, {
+    city,
+    excludeFollowing: true,
+  });
 
   const items: Profile[] = (people.data?.pages ?? [])
     .flatMap((page) => page.items)
     .slice(0, WANTED);
 
-  // No place to ask about, nothing worth showing, or the request failed: the
-  // rail is a suggestion, so it costs the reader nothing to be absent and a
-  // skeleton for a section nobody asked for is worse than silence.
-  if (!city || items.length === 0) return null;
+  /*
+    TURNED OFF, OR NOBODY TO SHOW: absent, and that is right. The rail is a
+    suggestion; a skeleton for a section nobody asked for is worse than silence,
+    and somebody who switched place personalisation off asked for exactly this.
+  */
+  if (!placeAllowed || (city && items.length === 0)) return null;
+
+  /*
+    NO CITY ON THE PROFILE — and this used to be silence too, which is how
+    ogazboiz ended up saying "i cant see the pals" with nothing on screen to
+    explain it.
+
+    The original reasoning stands and is not being undone: showing a GENERAL
+    list under a heading that promises a local one would be the section lying
+    about what it is. But "do not lie" and "say nothing at all" are different
+    answers, and only one of them tells somebody what to do about it. The
+    heading is dropped along with the list, so nothing promises nearby people;
+    what is left is the one line that makes the rail appear.
+  */
+  if (!city) {
+    return (
+      <section aria-label="Suggested pals">
+        <h2 className="text-[19.5px] font-medium leading-[24.9px] text-white">
+          Find pals near you
+        </h2>
+        <p className="mt-[0.9px] text-[10.65px] font-bold leading-[14.2px] text-white/40">
+          Add your city and we&apos;ll show people around you.
+        </p>
+        {/*
+          THE PROFILE, not settings. City is a profile field — it is edited in
+          the profile sheet, and `/settings` is not even a route (settings live
+          at `/u/<username>/settings`). A prompt that lands somewhere without
+          the field it names is worse than no prompt.
+        */}
+        {me.data && (
+          <Link
+            href={profileHref(me.data)}
+            /* The repo's rule for every profile link: a page's worth of
+               JavaScript per link is not worth paying before somebody taps. */
+            prefetch={false}
+            className="ws-press mt-[18px] inline-flex rounded-full border border-white/20 px-4 py-1.5 text-[13px] font-bold text-body transition-colors hover:bg-white/10"
+          >
+            Add your city
+          </Link>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section aria-label="Suggested pals to follow nearby you">
