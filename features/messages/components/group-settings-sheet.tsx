@@ -5,7 +5,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/cn";
 import { Spinner } from "@/components/ui/button";
 import { ensureUploadLimits, uploadFile, validateUpload } from "@/lib/api/upload";
-import { useUpdateGroup } from "@/features/messages/hooks/use-messages";
+import { useUpdateGroup, useSetWhoCanPost } from "@/features/messages/hooks/use-messages";
 import type { Conversation } from "@/features/messages/lib/types";
 
 /**
@@ -80,6 +80,14 @@ export function GroupSettingsSheet({
     worse than not offering it.
   */
   const isOwner = conversation.viewerRole === "owner";
+  /*
+    WHO MAY TYPE — leaders, which is a WIDER gate than the owner-only fields
+    above. The service lets an owner or an admin set it, so gating it on the
+    owner alone would hide a control from people who may legitimately use it.
+  */
+  const isLeader = isOwner || conversation.viewerRole === "admin";
+  const whoCanPost = useSetWhoCanPost(conversation.id);
+  const announcementOnly = conversation.whoCanPost === "admins";
 
   // The picture goes through the same verification a message attachment does,
   // so a group image can only ever be a file this service stored.
@@ -307,6 +315,52 @@ export function GroupSettingsSheet({
               {roomLimitValid
                 ? "How many gist rooms this house can open in any 7 days. Empty means no limit."
                 : "Pick a whole number from 1 to 50, or empty it for no limit."}
+            </p>
+          </div>
+        )}
+
+        {/*
+          WHO CAN POST — saved on the spot, NOT with the form.
+
+          Everything above is a draft the Save button commits. This is a switch
+          with an immediate effect on everybody else in the house, and burying
+          it in a form that also renames the group would mean somebody silencing
+          a hundred people as a side effect of fixing a typo. It is its own route
+          on the service for the same reason.
+
+          Reading is never affected and the copy says so: a member of an
+          announcement house sees every word and simply cannot add one.
+        */}
+        {isLeader && (
+          <div>
+            <span className="block text-[13px] font-semibold text-heading">Who can post</span>
+            <div className="mt-1.5 flex gap-2">
+              {(["everyone", "admins"] as const).map((option) => {
+                const on = conversation.whoCanPost === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    disabled={whoCanPost.isPending || on}
+                    onClick={() => whoCanPost.mutate(option)}
+                    className={cn(
+                      "ws-press flex-1 rounded-full border px-4 py-2 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed",
+                      on
+                        ? "border-white bg-white text-black"
+                        : "border-white/20 text-body hover:bg-white/10 disabled:opacity-60"
+                    )}
+                  >
+                    {option === "everyone" ? "Everyone" : "Admins only"}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-[12px] leading-4 text-meta">
+              {announcementOnly
+                ? "Only admins can send messages. Everyone else still reads the whole conversation."
+                : "Every member can send messages."}
             </p>
           </div>
         )}

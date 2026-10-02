@@ -162,6 +162,25 @@ export const MessageSchema = z.object({
   // thread; a removed message keeps its row but not its body.
   status: z.enum(["active", "removed"]).optional().default("active").catch("active"),
   /**
+   * WHO took this message down, when it was not its author.
+   *
+   * `status` is `removed` for BOTH kinds of removal and this is the only thing
+   * that tells them apart:
+   *
+   *   null  — the author unsent it themselves
+   *   an id — a leader moderated it, and the room should be told who
+   *
+   * Deliberately NOT a fourth `status`: that enum is shared with posts and
+   * comments, and a new value would be one that every older client has never
+   * seen. So an existing bubble keeps drawing a removed message correctly
+   * without reading this at all; reading it is what lets the two be drawn
+   * differently.
+   *
+   * A removal is attributable on purpose. A message that simply vanishes makes
+   * a house argue about whether it was ever said.
+   */
+  moderatedBy: z.string().nullable().optional().default(null).catch(null),
+  /**
    * The message this one answers — ONE level, no threading: a reply to a
    * reply points at that message. The service embeds the original's
    * 140-character excerpt and its media kind so the quote draws without a
@@ -262,6 +281,30 @@ export const ConversationSchema = z.object({
   visibility: z.enum(["public", "private"]).optional().default("private").catch("private"),
   /** The reader's own role in a GROUP row. Null on a 1:1, and on a service that predates roles. */
   viewerRole: z.enum(["owner", "admin", "member"]).nullable().optional().default(null).catch(null),
+  /**
+   * WHO MAY TYPE IN THIS GROUP. `admins` makes it an announcement board.
+   *
+   * Reading is never affected by it — a member of an admins-only house sees
+   * every word and simply cannot add one.
+   *
+   * Defaults to `everyone`, which is both the service's default and the
+   * historic behaviour, so a row from a service that predates the setting
+   * describes the group it actually is.
+   */
+  whoCanPost: z.enum(["everyone", "admins"]).optional().default("everyone").catch("everyone"),
+  /**
+   * May the reader open a gist room in this house's name?
+   *
+   * The SERVER's answer to the question the UI asks, rather than a role for the
+   * client to re-derive. Only a house's owner and admins may open a room, and a
+   * client that worked that out from `viewerRole` would be a second copy of an
+   * authorisation rule that lives on the service — which is how the two come to
+   * disagree, silently, on the day the rule changes.
+   *
+   * False by default: offering a control that 403s is worse than not offering
+   * it, so a service that does not answer is read as "not allowed".
+   */
+  canOpenRoom: z.boolean().optional().default(false).catch(false),
   /** The reader's notification levels for a GROUP row. Null on a 1:1, and before stage 2b. */
   notificationSettings: HouseNotificationSettingsSchema.nullable().optional().default(null).catch(null),
   /** Groups only: who wrote `lastMessage`, so the inbox row can prefix it. */
@@ -345,6 +388,34 @@ export const ConversationMemberSchema = z.object({
   // which offers the fewest controls rather than the most.
   role: z.enum(["owner", "admin", "member"]).optional().default("member").catch("member"),
   joinedAt: z.string().nullable().optional().default(null),
+  /**
+   * SILENCED IN THIS GROUP — they may still read everything.
+   *
+   * Defaulted to false rather than left optional: a roster that does not carry
+   * the field is a service older than muting, where nobody is muted, and that
+   * is a true statement rather than an absence. The danger runs the other way —
+   * an UNDEFINED here would render as "not muted" anyway while silently
+   * disabling the control that fixes it.
+   */
+  muted: z.boolean().optional().default(false).catch(false),
+  /**
+   * MAY THE VIEWER ACT ON THIS PERSON — remove, mute, or moderate their words.
+   *
+   * The server's answer to the question the menu asks, rather than a ladder for
+   * the client to re-derive. The rule is "an admin acts on members, the owner
+   * acts on admins, nobody acts on the owner, nobody acts on themselves", and
+   * every client that works that out from two `role` values is a second copy of
+   * an authorisation rule that lives on the service — which is how the two come
+   * to disagree, silently, on the day the rule changes.
+   *
+   * False on your own row and false throughout a DM, where nobody is a leader.
+   *
+   * Defaults FALSE: a service that does not answer offers no controls, which is
+   * the safe direction. A control that 403s is worse than one that is absent,
+   * because the reader cannot tell whether they lack the right or the product
+   * is broken.
+   */
+  canManage: z.boolean().optional().default(false).catch(false),
 });
 
 export const ConversationMemberPageSchema = z.object({

@@ -367,3 +367,52 @@ export async function acceptInvite(token: string) {
 export async function deleteConversation(conversationId: string) {
   return msApi.del<unknown>(`/conversations/${conversationId}`);
 }
+
+/**
+ * SILENCE SOMEBODY IN A GROUP — `PUT /conversations/:id/members/:profileId/muted`.
+ *
+ * It takes away WRITING and nothing else: a muted member still sees every
+ * message, which is the point — a house where somebody is silenced but present
+ * is a different thing from one they were thrown out of, and removal already
+ * exists for the other case.
+ *
+ * The ladder is the same one removal uses, because on the service it is
+ * literally the same check: an admin may mute members, the owner may mute
+ * admins, nobody may mute the owner, and nobody may mute themselves.
+ */
+export async function setMemberMuted(conversationId: string, profileId: string, muted: boolean) {
+  return msApi.put<unknown>(`/conversations/${conversationId}/members/${profileId}/muted`, {
+    muted,
+  });
+}
+
+/**
+ * TURN A HOUSE INTO AN ANNOUNCEMENT BOARD, or back — 
+ * `PUT /conversations/:id/who-can-post`. Leaders only.
+ *
+ * `admins` stops members WRITING. It does not stop them reading, and the thread
+ * must never be hidden from them on account of it.
+ */
+export async function setWhoCanPost(conversationId: string, whoCanPost: "everyone" | "admins") {
+  return msApi.put<unknown>(`/conversations/${conversationId}/who-can-post`, { whoCanPost });
+}
+
+/**
+ * TAKE SOMEBODY ELSE'S MESSAGE DOWN — 
+ * `POST /conversations/:id/messages/:messageId/moderate`. No body.
+ *
+ * Answers the EMPTIED message, so the thread can replace the row it already has
+ * rather than refetching to find out what happened.
+ *
+ * It is not the unsend route wearing a different name. Unsend is the author
+ * withdrawing their own words; this is a leader removing somebody else's, which
+ * reads differently to everybody in the room and is recorded as `moderatedBy`
+ * so it can say who. The service refuses it on your OWN message with a 400 that
+ * tells you to unsend instead — the two write different rows — and in a DM,
+ * where nobody is a leader.
+ */
+export async function moderateMessage(conversationId: string, messageId: string) {
+  return MessageSchema.parse(
+    await msApi.post<unknown>(`/conversations/${conversationId}/messages/${messageId}/moderate`)
+  );
+}

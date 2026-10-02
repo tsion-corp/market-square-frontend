@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { errorCode, errorMessage } from "@/lib/api/envelope";
+import { trackMarketEvent } from "@/lib/analytics";
 import { inviteErrorCopy } from "@/features/messages/lib/invites";
 import { useAuth } from "@/hooks/use-auth";
 import { useRefreshUnread } from "@/hooks/use-unread";
@@ -26,6 +27,9 @@ import {
   updateGroup,
   type GroupEdit,
   setMemberRole,
+  setMemberMuted,
+  setWhoCanPost,
+  moderateMessage,
   transferOwnership,
   sendMessage,
   openSnap,
@@ -189,10 +193,27 @@ export function useSendMessage(conversationId: string) {
   const refreshUnread = useRefreshUnread();
   return useMutation({
     mutationFn: (body: OutgoingMessage) => sendMessage(conversationId, body),
-    onSuccess: () => {
+    onSuccess: (_sent, body) => {
       client.invalidateQueries({ queryKey: ["ms", "messages", conversationId] });
       client.invalidateQueries({ queryKey: ["ms", "conversations"] });
       refreshUnread();
+      /*
+        NO MESSAGE CONTENT, EVER — the conversation id and the shape of what was
+        sent, nothing else. Analytics must never be a copy of what people say to
+        each other, and a `text` field here would become exactly that.
+      */
+      trackMarketEvent("message_sent", {
+        surface: "thread",
+        entityType: "conversation",
+        entityId: conversationId,
+        metadata: {
+          hasMedia: Boolean(body.media),
+          isReply: Boolean(body.replyToId),
+          // A snap is a different act from a photo and the tally cannot
+          // separate them afterwards.
+          viewOnce: Boolean(body.viewOnce),
+        },
+      });
     },
     onError: (error, body) => toast.error(sendErrorCopy(error, body)),
   });
@@ -466,6 +487,65 @@ export function useSetMemberRole(conversationId: string) {
     ({ profileId, role }) => setMemberRole(conversationId, profileId, role),
     "Role updated"
   );
+}
+
+/**
+ * MUTE OR UNMUTE SOMEBODY IN A GROUP.
+ *
+ * Reuses the shared action, so the roster and the inbox both refetch — the
+ * roster because the switch draws from `muted` on the row, and the inbox
+ * because the composer's own gate reads the viewer's state from there.
+ */
+export function useSetMemberMuted(conversationId: string) {
+  return useConversationAction<{ profileId: string; muted: boolean; name: string }>(
+    conversationId,
+    ({ profileId, muted }) => setMemberMuted(conversationId, profileId, muted),
+    "Updated"
+  );
+}
+
+/** Who may TYPE in this house — leaders only. `admins` is an announcement board. */
+export function useSetWhoCanPost(conversationId: string) {
+  return useConversationAction<"everyone" | "admins">(
+    conversationId,
+    (whoCanPost) => setWhoCanPost(conversationId, whoCanPost),
+    "Updated"
+  );
+}
+
+/**
+ * TAKE SOMEBODY ELSE'S MESSAGE DOWN, as a leader.
+ *
+ * The route answers the EMPTIED message, so the row the thread already holds is
+ * replaced in place rather than the whole thread being refetched — the reader
+ * stays exactly where they were scrolled, which matters most in the long house
+ * threads where moderating actually happens.
+ *
+ * The message keeps its row: `status` becomes `removed` and `moderatedBy`
+ * carries the leader. That pairing is what lets the bubble say a moderator did
+ * it rather than the author, and it is why a reply quoting it still makes sense.
+ */
+export function useModerateMessage(conversationId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => moderateMessage(conversationId, messageId),
+    /*
+      INVALIDATED, NOT PATCHED INTO THE CACHE.
+
+      The route answers the emptied message and it is tempting to write it
+      straight into the thread. `useMessages` is a plain query, not an infinite
+      one, so a hand-rolled `{pages: [...]}` update would have matched nothing
+      and quietly done nothing — the message would have sat there looking
+      un-moderated until something else refetched. This mirrors the author's own
+      unsend exactly, which is the same act with a different subject.
+    */
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["ms", "messages", conversationId] });
+      client.invalidateQueries({ queryKey: ["ms", "conversations"] });
+      toast.success("Message removed");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't remove that message.")),
+  });
 }
 
 /** "Make owner" — the owner hands the house over and stays on as an admin. */
