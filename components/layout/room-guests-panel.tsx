@@ -4,7 +4,14 @@ import { useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/button";
 import { GuestPicker } from "@/components/layout/guest-picker";
-import { useRoomGuests, useInviteRoomGuest, useRemoveRoomGuest } from "@/features/streams";
+import {
+  useRoomGuests,
+  useInviteRoomGuest,
+  useRemoveRoomGuest,
+  useWaitingKnocks,
+  useResolveKnock,
+} from "@/features/streams";
+import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 /**
@@ -39,6 +46,9 @@ import { cn } from "@/lib/cn";
  */
 export function RoomGuestsPanel({ streamId }: { streamId: string }) {
   const guests = useRoomGuests(streamId, true);
+  const knocks = useWaitingKnocks(streamId, true);
+  const resolve = useResolveKnock(streamId);
+  const waiting = knocks.data?.items ?? [];
   const invite = useInviteRoomGuest(streamId);
   const remove = useRemoveRoomGuest(streamId);
   const [adding, setAdding] = useState(false);
@@ -59,6 +69,65 @@ export function RoomGuestsPanel({ streamId }: { streamId: string }) {
 
   return (
     <div className="mt-5">
+      {/*
+        PEOPLE WAITING, ABOVE THE LIST, because a person standing at the door is
+        more urgent than the list of who is already allowed through it. A knock
+        the host never sees is somebody waiting on a door nobody answers, and
+        they will conclude the product is broken rather than that they were
+        refused.
+
+        DECLINING IS SILENT by the service's design: the person is told nothing,
+        their own knock still reads "waiting", and they cannot ask again. So this
+        row disappearing is the only signal that anything happened, which is why
+        it is the host's queue that has to be right rather than a confirmation
+        sent to them.
+      */}
+      {waiting.length > 0 && (
+        <div className="mb-5">
+          <p className="text-[13px] font-semibold text-heading">
+            {waiting.length === 1 ? "Someone is asking to come in" : `${waiting.length} people are asking to come in`}
+          </p>
+          <div className="mt-2 flex flex-col gap-2">
+            {waiting.map((knock) => {
+              const who = knock.profile;
+              if (!who) return null;
+              return (
+                <div key={knock.id} className="flex items-center gap-2.5">
+                  <Avatar name={who.displayName} seed={who.id} src={who.avatarUrl} size={32} />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-[13px] text-white">{who.displayName}</span>
+                    {/* How long they have been standing there is the thing a
+                        host actually weighs. */}
+                    {knock.createdAt && (
+                      <span className="truncate text-[11px] text-meta">
+                        asking {relativeTime(knock.createdAt)}
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={resolve.isPending}
+                    onClick={() => resolve.mutate({ knockId: knock.id, action: "admit" })}
+                    className="ws-press rounded-full bg-white px-3 py-1 text-[11px] font-bold text-black transition-opacity hover:opacity-90 disabled:opacity-40"
+                  >
+                    Let in
+                  </button>
+                  <button
+                    type="button"
+                    disabled={resolve.isPending}
+                    onClick={() => resolve.mutate({ knockId: knock.id, action: "decline" })}
+                    title={`${who.displayName} is not told, and cannot ask again.`}
+                    className="ws-press rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-semibold text-body transition-colors hover:bg-white/10 disabled:opacity-40"
+                  >
+                    No
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-[13px] font-semibold text-heading">Who can come in</p>
         <button

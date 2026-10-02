@@ -26,3 +26,10 @@ export { useStageSlots } from "./hooks/use-stage-slots";
 export { useEndStream } from "./hooks/use-streams";
 /* The private room's guest list — who may come in, read and changed by its host. */
 export { useRoomGuests, useInviteRoomGuest, useRemoveRoomGuest } from "./hooks/use-streams";
+/* Knock-to-join: the code lets you ask, and the host answers. */
+export {
+  useKnockWithCode,
+  useMyKnock,
+  useWaitingKnocks,
+  useResolveKnock,
+} from "./hooks/use-streams";

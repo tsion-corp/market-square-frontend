@@ -553,3 +553,88 @@ export async function inviteRoomGuest(streamId: string, profileId: string) {
 export async function removeRoomGuest(streamId: string, profileId: string) {
   return msApi.del<unknown>(`/streams/${streamId}/guests/${profileId}`);
 }
+
+/**
+ * ASKING TO COME INTO A PRIVATE ROOM — knock-to-join.
+ *
+ * THE CODE LETS YOU ASK, NOT IN. That is the whole model: a host can share a
+ * code freely because holding it is not permission, and the person who wants in
+ * announces themselves rather than the host having to know in advance exactly
+ * who will turn up.
+ *
+ * FOUR STATES, and the two unobvious ones carry the meaning:
+ *
+ *  · `declined` is PERMANENT — it is what stops a knock being looped, and a
+ *    host who declines once should not have to decline forty times — but the
+ *    knocker NEVER SEES IT. `GET /knocks/me` reports it as `pending` for ever,
+ *    because a decline somebody can detect is one they can retry against, and
+ *    it reports a decision that is not theirs to know.
+ *  · `expired` is what an outstanding knock becomes when the ROOM ENDS, and is
+ *    deliberately not `declined`: "the room ended" is not about them.
+ *
+ * So nothing here should ever render "you were declined". The state does not
+ * exist from this side.
+ */
+export const StreamKnockSchema = z.object({
+  id: z.string(),
+  streamId: z.string().optional().default(""),
+  profileId: z.string().optional().default(""),
+  status: z.enum(["pending", "admitted", "declined", "expired"]).optional().default("pending").catch("pending"),
+  createdAt: z.string().optional().default(""),
+  resolvedAt: z.string().nullable().optional().default(null),
+  /** Who opened the door. Null until somebody does, and on every other outcome. */
+  admittedBy: z.string().nullable().optional().default(null),
+});
+
+/**
+ * A row of the HOST's queue — the knock plus WHO is asking.
+ *
+ * Its own type rather than a widened knock, because the knocker's own read has
+ * no use for the profile: they know who they are. The service hydrates it in
+ * ONE read; a profile fetch per row would be an N+1 on a list whose only
+ * purpose is to be looked at.
+ *
+ * A knock whose profile has gone is DROPPED by the service rather than returned
+ * blank, which is the right call and means this never has to render a nameless
+ * row: an unidentifiable person is not somebody a host can decide about.
+ */
+export const WaitingKnockSchema = StreamKnockSchema.extend({
+  profile: ProfileSchema.nullable().optional().default(null),
+});
+
+export const WaitingKnocksSchema = z.object({
+  items: z.array(WaitingKnockSchema).optional().default([]),
+});
+
+export type StreamKnock = z.infer<typeof StreamKnockSchema>;
+export type WaitingKnock = z.infer<typeof WaitingKnockSchema>;
+
+/** Ask to come in, with the code somebody gave you. */
+export async function knockWithCode(code: string) {
+  return StreamKnockSchema.parse(await msApi.post("/streams/knocks", { code }));
+}
+
+/**
+ * What became of my own knock.
+ *
+ * Remember that `declined` is reported as `pending` here, permanently. There is
+ * no polling schedule that will ever turn it into a refusal, and a UI that
+ * implies one is promising an answer that is not coming.
+ */
+export async function fetchMyKnock(streamId: string) {
+  return StreamKnockSchema.parse(await msApi.get(`/streams/${streamId}/knocks/me`));
+}
+
+/** HOST: who is asking to come in, newest first, with their profiles. */
+export async function fetchWaitingKnocks(streamId: string) {
+  return WaitingKnocksSchema.parse(await msApi.get(`/streams/${streamId}/knocks`));
+}
+
+/** HOST: open the door, or do not. A decline tells the person nothing. */
+export async function resolveKnock(
+  streamId: string,
+  knockId: string,
+  action: "admit" | "decline"
+) {
+  return msApi.post<unknown>(`/streams/${streamId}/knocks/${knockId}/${action}`);
+}
