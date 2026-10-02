@@ -80,6 +80,12 @@ interface DockItem {
   size: { width: number; height: number };
   /** Live count, or null where we genuinely do not have one. */
   badge?: number | null;
+  /**
+   * Something is waiting, with no number — chat requests. See the sidebar's
+   * `dot`: a stranger may say that there IS something for you and may not say
+   * how much, or being added to houses becomes a way to run up somebody's nav.
+   */
+  dot?: boolean;
 }
 
 export function BottomDock({
@@ -143,6 +149,9 @@ export function BottomDock({
       size: { width: 32.4, height: 29.91 },
       // The real global unread, the same number the bell reads.
       badge: unread.data?.messages ?? null,
+      // A stranger's first message, or a house seat waiting to be accepted.
+      // Never added into the badge above — see `dot`.
+      dot: (unread.data?.chatRequests ?? 0) > 0,
     },
   ];
 
@@ -202,6 +211,20 @@ export function BottomDock({
                 key={item.href}
                 href={sq(item.href)}
                 aria-current={active ? "page" : undefined}
+                /*
+                  The label is drawn only on the ACTIVE item, so an inactive
+                  glyph has no accessible name of its own — and the dot beside
+                  it is `aria-hidden`, which is right visually and silent. Both
+                  are said here instead: "requests waiting" rather than a count,
+                  because the mark deliberately carries none.
+                */
+                aria-label={
+                  typeof item.badge === "number" && item.badge > 0
+                    ? `${item.label}, ${item.badge} unread`
+                    : item.dot
+                      ? `${item.label}, requests waiting`
+                      : item.label
+                }
                 className={cn(
                   "ws-press relative flex flex-col items-center justify-center rounded-full transition-colors",
                   active ? "text-white" : "text-[#9B9B9B] hover:text-white"
@@ -253,6 +276,15 @@ export function BottomDock({
                     <span className="tnum absolute -right-2 -top-1.5 grid h-[15px] min-w-[15px] place-items-center rounded-full bg-spotlight px-1 text-[9px] font-bold leading-none text-white">
                       {item.badge > 99 ? "99+" : item.badge}
                     </span>
+                  )}
+                  {/* The dot takes the badge's corner and never shares it: a
+                      count already draws the eye, and two marks on one glyph
+                      is noise rather than two pieces of news. */}
+                  {!(typeof item.badge === "number" && item.badge > 0) && item.dot && (
+                    <span
+                      aria-hidden
+                      className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-spotlight ring-2 ring-chrome"
+                    />
                   )}
                 </span>
                 {/* 748:15732 — only the active item is labelled. Manrope in the

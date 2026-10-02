@@ -397,11 +397,26 @@ function NavLink({
   item,
   active,
   badge = 0,
+  dot = false,
 }: {
   item: NavItem;
   active: boolean;
   /** Unread tally shown on the glyph. 0 renders nothing. */
   badge?: number;
+  /**
+   * SOMETHING IS WAITING, WITHOUT SAYING HOW MUCH — a plain mark, no number.
+   *
+   * Chat requests are counted separately from unread messages on purpose: a
+   * stranger must not be able to put a NUMBER on somebody's nav. Adding them
+   * into the badge would hand exactly that lever to anybody who can add you to
+   * a house, which is the thing the separation exists to prevent.
+   *
+   * A dot says "there is something here for you" and nothing more, which is all
+   * a request needs to say and all a stranger should be able to make it say.
+   * Shown only when there is no badge: a count already draws the eye, and two
+   * marks on one 24px glyph is noise.
+   */
+  dot?: boolean;
 }) {
   const Icon = item.icon;
   return (
@@ -417,7 +432,11 @@ function NavLink({
             ? `${item.label} (opens in a new tab)`
             : badge > 0
               ? `${item.label}, ${badge} unread`
-              : item.label
+              : dot
+                ? // A dot is silent to a screen reader unless it is said. "Waiting"
+                  // rather than a count, because the mark deliberately carries none.
+                  `${item.label}, requests waiting`
+                : item.label
       }
       aria-disabled={item.soon ? true : undefined}
       title={item.soon}
@@ -462,6 +481,13 @@ function NavLink({
             {badge > 99 ? "99+" : badge}
           </span>
         )}
+        {/* The same corner as the count, and never both — see `dot`. */}
+        {badge === 0 && dot && (
+          <span
+            aria-hidden
+            className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-spotlight ring-2 ring-chrome"
+          />
+        )}
       </span>
       {/* Roboto in the measurement, Geist here per CLAUDE.md — the weight,
           size and line-height are the design's. */}
@@ -491,6 +517,27 @@ const BADGE_FOR: Record<
 > = {
   "/notifications": (counts) => counts?.notifications ?? 0,
   "/messages": (counts) => counts?.messages ?? 0,
+};
+
+/**
+ * Which nav hrefs wear a plain DOT, and what puts it there.
+ *
+ * Separate from `BADGE_FOR` because the question is different: a badge says how
+ * many, a dot says that there is something. `chatRequests` counts a stranger's
+ * first message and a house seat somebody wants you to take — neither of which
+ * may become a number on the nav, because that number would be a lever anybody
+ * could pull on a person who has never agreed to hear from them.
+ *
+ * Until this existed the count was returned by the service and read by nothing,
+ * so a pending house seat arrived in a tab with no sign anywhere that it had —
+ * which from the reader's side is indistinguishable from having been put in a
+ * house without being asked.
+ */
+const DOT_FOR: Record<
+  string,
+  ((counts: { chatRequests: number } | undefined) => boolean) | undefined
+> = {
+  "/messages": (counts) => (counts?.chatRequests ?? 0) > 0,
 };
 
 /**
@@ -1038,6 +1085,7 @@ export function Sidebar({
               item={item}
               active={isActive(pathname, item.href)}
               badge={BADGE_FOR[item.href]?.(unread.data) ?? 0}
+              dot={DOT_FOR[item.href]?.(unread.data) ?? false}
             />
           ))}
         {/* Expanded rail shows everything; the icon rail folds the rest away. */}

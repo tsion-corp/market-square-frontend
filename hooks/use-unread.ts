@@ -24,6 +24,21 @@ import { useUnreadSignal } from "@/hooks/use-unread-signal";
 const UnreadSchema = z.object({
   messages: z.number().optional().default(0),
   notifications: z.number().optional().default(0),
+  /**
+   * CONVERSATIONS WAITING FOR THE READER'S ANSWER — a stranger's first DM, and
+   * a house SEAT somebody added them to without being allowed to do it silently.
+   *
+   * Deliberately NOT part of `messages`: a stranger must not be able to put a
+   * number on somebody's nav. So it badges the Gist Requests tab and the Chat
+   * entry separately, and the two are never added together.
+   *
+   * It was returned by the service and read by NOTHING until now, which is why
+   * a pending house seat landed in a tab with no indication anywhere that it
+   * was there — indistinguishable, from the reader's side, from being put in a
+   * house without being asked. Which is the complaint this whole feature
+   * answers.
+   */
+  chatRequests: z.number().optional().default(0),
 });
 
 export const UNREAD_KEY = ["ms", "unread"] as const;
