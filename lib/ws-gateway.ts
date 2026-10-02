@@ -407,6 +407,19 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
       // to show — a down socket is invisible and the poll continues.
     };
     next.onclose = () => {
+      /*
+        A STALE socket's close, ignored — and a trap for whoever edits below it.
+
+        `disconnect()` nulls `socket` BEFORE calling close(), so a DELIBERATE
+        close always returns right here and nothing further down this handler
+        runs. Today nothing is lost by that, because `disconnect` repeats by hand
+        what this handler would have done. But it means anything added below is
+        silently dead whenever the app closes the socket itself — it will work
+        when you test it by pulling the network and do nothing when a component
+        unmounts, which is the worst shape a latent bug has.
+
+        So: add cleanup to BOTH, or add it to `disconnect` alone. Not here only.
+      */
       if (socket !== next) return;
       socket = null;
       authedAs = null;
