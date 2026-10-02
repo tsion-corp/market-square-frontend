@@ -79,6 +79,15 @@ export function isGistRoomNotification(item: NotificationDestination): boolean {
     is where it leads.
   */
   if (item.kind === "room_invite") return true;
+  /*
+    AND BOTH HALVES OF A KNOCK. A knock is a request to enter a gist room and
+    its answer is about the same room — neither can be about a broadcast, so
+    neither should be left to `subject` to classify. A host tapping "asking to
+    join" must land in their room, and somebody just admitted must land in the
+    room they were admitted to; `/live/<id>` is the broadcast player and would
+    be the wrong surface for both.
+  */
+  if (item.kind === "room_knock" || item.kind === "room_knock_admitted") return true;
   // Set by the backend on `house_room` rows alone; null everywhere else.
   return item.house != null;
 }
