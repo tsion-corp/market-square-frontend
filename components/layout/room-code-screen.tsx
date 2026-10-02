@@ -125,8 +125,19 @@ function Found({ result }: { result: NonNullable<ReturnType<typeof useStreamByCo
               no join, because the join would refuse, and a button that exists
               to fail is worse than no button. */}
           <p className="mt-6 text-[15px] font-bold text-heading">This room is private</p>
+          {/*
+            IT NAMED A HOUSE THAT MAY NOT EXIST. A private room used to mean one
+            thing — private to the house it was opened from — so "an invite from
+            someone in the house" was always true. It is not any more: a room
+            opened from the `+` menu is private to a GUEST LIST and has no house
+            at all, and that is the shape somebody hit on the day it shipped.
+
+            Being told to find somebody "in the house" sends them looking for a
+            thing that is not there. The host is who can let them in, in both
+            shapes, so the host is who the copy names.
+          */}
           <p className="ws-meta mt-2">
-            You need an invite from someone in the house to go in.
+            Only people the host invited can go in. Ask them to add you.
           </p>
         </>
       )}
