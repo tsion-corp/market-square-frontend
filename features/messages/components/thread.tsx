@@ -451,7 +451,12 @@ function ThreadHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-3">
-        {group && <CreateGistRoomButton onClick={onCreateGistRoom} />}
+        {group && (
+          <CreateGistRoomButton
+            onClick={onCreateGistRoom}
+            allowed={conversation.canOpenRoom}
+          />
+        )}
 
         {/*
           THE OVERFLOW CONTROL — the three vertical dots.
@@ -532,7 +537,29 @@ function ThreadHeader({
  * joins the two. Same route-slot pattern the inbox's `+` uses for the people
  * picker.
  */
-function CreateGistRoomButton({ onClick }: { onClick?: () => void }) {
+function CreateGistRoomButton({
+  onClick,
+  allowed = true,
+}: {
+  onClick?: () => void;
+  /**
+   * MAY THIS READER OPEN A ROOM IN THIS HOUSE'S NAME — the service's own answer
+   * (`canOpenRoom` on the inbox row), never a role compared here.
+   *
+   * Only a house's owner and admins may, and the service 403s everybody else.
+   * So a plain member was being shown a live, inviting button that filled in a
+   * whole composer and then refused on submit — the worst shape of all, because
+   * the refusal arrives after the work.
+   *
+   * Hidden rather than disabled, unlike the "not wired up" case below. A
+   * disabled control says "this will be yours later"; this one will not, and a
+   * greyed button with no explanation only invites "why is this off?". It is
+   * the same rule the live room follows for the speaker control on an
+   * Ark-originated stream.
+   */
+  allowed?: boolean;
+}) {
+  if (!allowed) return null;
   return (
     <button
       type="button"
@@ -3855,7 +3882,13 @@ export function Thread({
               !group && conversation.peer ? safetyRowsSlot?.(conversation.peer) : undefined
             }
             actions={{
-              onCreateGistRoom,
+              /*
+                THE SAME GATE AS THE HEADER PILL. This row is the phone's copy
+                of that action — without the check it would be hidden on desktop
+                and live on a phone, which is where most people would meet it.
+                Undefined here removes the row, exactly as "not wired up" does.
+              */
+              onCreateGistRoom: conversation.canOpenRoom ? onCreateGistRoom : undefined,
               onAddMembers,
               onViewMembers: () => setMembersOpen(true),
               onShareInvite: canShareInvite ? shareInvite : undefined,

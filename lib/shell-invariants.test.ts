@@ -1355,7 +1355,10 @@ describe("Your Story works like WhatsApp's My status", () => {
   });
 
   it("posts a photo, video or text story through the ordinary upload and create path", () => {
-    assert.match(creator, /create\.mutate\(\{ kind: "story"/);
+    /* The call is multi-line now that a text story carries `storyStyle`; what
+       this is about is that stories go through the ORDINARY create path, not
+       how that call is spelled. */
+    assert.match(creator, /create\.mutate\(\s*\{\s*kind: "story"/u);
     assert.match(creator, /upload\.mutateAsync\(stage\.file\)/);
     assert.match(creator, /validateUpload\(file, "media"\)/);
     assert.match(creator, /createPortal\(/);

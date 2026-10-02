@@ -1,4 +1,5 @@
 "use client";
+import type { StoryStyle } from "@/lib/story-style";
 
 import { msApi } from "@/lib/api/service";
 import { uploadFile } from "@/lib/api/upload";
@@ -80,6 +81,20 @@ export async function createPost(input: {
   mediaUrl?: string;
   /** Two or more photos, in order — sent INSTEAD of `mediaUrl` (`mediaFields`). */
   media?: { url: string; kind: "image" | "video" }[];
+  /**
+   * A TEXT STORY'S BACKGROUND AND FACE — `kind: "story"` only.
+   *
+   * Sending it on an update is a 400 rather than being ignored, and both fields
+   * are required together when the object is present: it is all-or-nothing, not
+   * a partial. The eight backgrounds are an allowlist and a ninth is a 400, so
+   * it is typed off the shared list rather than as a string.
+   *
+   * Declared here because a spread bypasses TypeScript's excess-property check
+   * — `guests` on stream create typechecked perfectly while being absent from
+   * its own input type, and the type is what tells the next caller the field
+   * exists at all.
+   */
+  storyStyle?: StoryStyle;
   deepLink?: DeepLink;
   quotedPostId?: string;
   mentions?: Mention[];

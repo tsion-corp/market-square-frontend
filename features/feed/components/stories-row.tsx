@@ -18,6 +18,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
+import { storyFontClass } from "@/lib/story-style";
 import { relativeTime } from "@/lib/format";
 import { resolveCta } from "@/lib/deeplink";
 import { Avatar } from "@/components/ui/avatar";
@@ -797,11 +798,33 @@ function StoryViewer({
         {/* Card ground: the seeded texture, lifted so the frame separates
             from the dimmed page, then a scrim top and bottom so the header
             and the CTA stay readable over any artwork. */}
-        <GradientThumb
-          seed={story.id}
-          className="absolute inset-0 h-full w-full rounded-none sm:rounded-3xl"
-        />
-        <div className="absolute inset-0 bg-white/[0.07]" />
+        {/*
+          THE GROUND THE AUTHOR CHOSE, where they chose one.
+
+          `storyStyle` has been on the service for weeks with nothing reading
+          it, so every story played on the seeded texture whatever its author
+          picked. Null is NOT a gap — the service's own words are that it means
+          the default background, which is how every story posted before this
+          existed — so a story without a style keeps exactly the ground it has
+          always had rather than turning a colour.
+
+          A PICTURE STILL WINS. Media fills the frame, so a background behind it
+          would never be seen, and painting one would only tint the scrims.
+        */}
+        {story.storyStyle && !story.mediaUrl ? (
+          <div
+            className="absolute inset-0 h-full w-full rounded-none sm:rounded-3xl"
+            style={{ background: story.storyStyle.background }}
+          />
+        ) : (
+          <>
+            <GradientThumb
+              seed={story.id}
+              className="absolute inset-0 h-full w-full rounded-none sm:rounded-3xl"
+            />
+            <div className="absolute inset-0 bg-white/[0.07]" />
+          </>
+        )}
 
         {/* Where the reader is in the set, for anyone who cannot see the
             segments. `role="status"` re-announces it as the story turns. */}
@@ -994,7 +1017,16 @@ function StoryViewer({
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-black/65" />
 
         <div className="relative z-0 flex flex-1 flex-col items-center justify-center px-8 text-center">
-          <p className="ws-display ws-text-shadow text-2xl leading-snug text-white">{story.text}</p>
+          {/* The face is the author's too — `ws-display` is what `display`
+              means here, and stays the answer for a story with no style. */}
+          <p
+            className={cn(
+              "ws-text-shadow text-2xl leading-snug text-white",
+              story.storyStyle ? storyFontClass(story.storyStyle) : "ws-display"
+            )}
+          >
+            {story.text}
+          </p>
         </div>
 
         {mine && viewerTotal !== null && (
