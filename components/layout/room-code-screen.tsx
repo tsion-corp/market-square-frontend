@@ -149,8 +149,23 @@ function Found({ result }: { result: NonNullable<ReturnType<typeof useStreamByCo
             is what cannot be said here, and saying it wrongly is what made this
             a bug rather than a dead end.
           */}
+          {/*
+            IT MUST NOT TELL THEM TO DO SOMETHING THEY CANNOT DO HERE.
+
+            This said "Ask the host to let you in", which is an instruction with
+            no control under it — ogazboiz read it and asked, correctly, how. The
+            answer today is that they ask the host somewhere else entirely, by
+            message or in person, and the room has no way to carry a request.
+
+            So it states the RULE instead of issuing an instruction. A closed
+            door that explains itself is honest; a closed door that tells you to
+            knock, with nothing to knock on, is worse than one that says nothing.
+
+            This becomes "Ask to join" — a real button — the day knock-to-join
+            exists. Until then the sentence does not promise it.
+          */}
           <p className="ws-meta mt-2">
-            Ask the host to let you in.
+            Only people the host has added can go in.
           </p>
         </>
       )}
