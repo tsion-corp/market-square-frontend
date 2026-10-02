@@ -124,17 +124,32 @@ export function OpenHouseSheet({
    * The house group this composer was opened from, when it was opened from
    * one — a GROUP thread's "Create Gist Room".
    *
-   * It is what makes Private selectable: a private room is reachable only by
-   * members of a house group, so without one there is no group to be private
-   * TO. Opened from the street there is no group, and Private says so rather
-   * than offering a choice that would be refused on submit.
+   * It decides what PRIVATE MEANS here, which is the whole of ogazboiz's
+   * simplification: the two words are the same in both places and the context
+   * supplies the rest. Opened from a house, private is that house's members.
+   * Opened from the street, private is the people picked in `guestPickerSlot`.
    */
   houseConversationId,
+  /**
+   * The people picker for a private room opened WITHOUT a house.
+   *
+   * A slot, because the directory belongs to the discovery slice and slices
+   * never import each other — it is composed in `components/layout` like every
+   * other cross-slice object. Absent, Private stays house-only, which is
+   * exactly what this sheet did before guests existed: a surface that cannot
+   * pick anybody must not offer a privacy it cannot deliver.
+   */
+  guestPickerSlot,
 }: {
   open: boolean;
   onClose: () => void;
   initialTopic?: string;
   houseConversationId?: string;
+  guestPickerSlot?: (args: {
+    value: string[];
+    onChange: (next: string[]) => void;
+    max: number;
+  }) => React.ReactNode;
 }) {
   const router = useRouter();
   const create = useCreateStream();
@@ -161,6 +176,28 @@ export function OpenHouseSheet({
   const [audience, setAudience] = useState<"public" | "private">(
     houseConversationId ? "private" : "public"
   );
+  /*
+    THE GUEST LIST — who may walk into a private room that has no house.
+
+    Only ever sent for a house-less private room. From a house the group IS the
+    audience, and the service refuses `guests` there rather than accepting a
+    second source of truth for the same question — which is the right call: two
+    answers to "who is allowed in" is how they come to disagree.
+
+    Written with the room in ONE transaction (`guests` on create, not follow-up
+    invites), so a failure cannot leave a live, half-invited room standing. An
+    unknown id refuses the whole create rather than quietly shortening the list.
+  */
+  const [guests, setGuests] = useState<string[]>([]);
+  /** The service's own ceiling on one create. */
+  const GUEST_MAX = 50;
+  /*
+    Private WITHOUT a house needs somewhere to put the people, so the option is
+    only offered where this sheet was actually given a picker. Without one it
+    behaves exactly as it did before guests existed.
+  */
+  const canInvite = Boolean(guestPickerSlot);
+  const privateByGuests = audience === "private" && !houseConversationId;
   /* Who may TYPE in the room (migration 041). `open` is the default and the
      historic behaviour, so a host who never touches this gets the room every
      room used to be. */
@@ -182,7 +219,16 @@ export function OpenHouseSheet({
 
   // "Later" needs a time; whether that time has already passed is checked on
   // submit, where the clock may be read.
-  const valid = isValidTopic(topic) && (!startsLater || startsAt !== "");
+  /*
+    A private room with no house and nobody invited is reachable by its host
+    alone — a room with no one in it. Refused here rather than created, because
+    the service would accept it quite happily and the host would only find out
+    when nobody arrived.
+  */
+  const valid =
+    isValidTopic(topic) &&
+    (!startsLater || startsAt !== "") &&
+    (!privateByGuests || guests.length > 0);
 
   const takeImage = async (file: File | undefined) => {
     if (!file || imageBusy) return;
@@ -241,6 +287,13 @@ export function OpenHouseSheet({
           group and that the caller is a member of it.
         */
         ...(houseConversationId ? { houseConversationId } : {}),
+        /*
+          THE GUEST LIST, for a private room with no house and only then.
+
+          Never sent alongside a house: the service refuses the pair outright,
+          and it is right to — the group is already the audience there.
+        */
+        ...(privateByGuests && guests.length > 0 ? { guests } : {}),
         // `visibility` is the door CHARGE and is unrelated to `audience`: a
         // gist room is never ticketed in this slice.
           // Who may TYPE in the room. `open` is the default and the historic
@@ -308,14 +361,21 @@ export function OpenHouseSheet({
             />
             <RadioPill
               text="Private"
-              hint="(only group members)"
+              /*
+                THE HINT NAMES WHO, AND WHO DEPENDS ON WHERE YOU ARE.
+
+                "(only group members)" was true when a house was the only thing
+                a room could be private to. From the street it is now the people
+                you invite, and leaving the old words there would have told a
+                host their room was shut to a group they never chose.
+              */
+              hint={houseConversationId ? "(only group members)" : "(only people you invite)"}
               selected={audience === "private"}
-              // Private needs a group to be private TO. Opened from the street
-              // there is none, so the option says why instead of failing on
-              // submit with a 400 the reader cannot act on.
-              disabled={!houseConversationId}
+              // Still unavailable where this sheet was given no way to pick
+              // anybody — see `canInvite`.
+              disabled={!houseConversationId && !canInvite}
               title={
-                houseConversationId
+                houseConversationId || canInvite
                   ? undefined
                   : "Open a gist room from a house group to make it private to that group."
               }
@@ -335,11 +395,31 @@ export function OpenHouseSheet({
               <circle cx="9" cy="9" r="7" />
               <path d="M2.4 9h13.2M9 2a13 13 0 0 1 0 14M9 2a13 13 0 0 0 0 14" />
             </svg>
+            {/*
+              PUBLIC FROM INSIDE A HOUSE MEANS PUBLIC TO SQUARE, and it has to
+              say so. Read inside a house, "public" is taken to mean "public to
+              the house" — which is the opposite of what it does.
+            */}
             {audience === "private"
-              ? "Only members of this house group can find or join it."
-              : "Visible to anyone on Square — it shows on the home page."}
+              ? houseConversationId
+                ? "Only members of this house group can find or join it."
+                : "Only the people you invite can find or join it."
+              : houseConversationId
+                ? "Visible to everyone on Square, not just this house — it shows on the home page."
+                : "Visible to anyone on Square — it shows on the home page."}
           </p>
         </div>
+
+        {/*
+          THE GUEST LIST SITS UNDER VISIBILITY, because it is the rest of that
+          answer rather than a separate decision — choosing Private from the
+          street is only half a sentence until somebody is named.
+
+          It appears only for a house-less private room: from a house the group
+          already is the audience, and a picker there would be offering a second
+          answer to a question the house has already settled.
+        */}
+        {privateByGuests && guestPickerSlot?.({ value: guests, onChange: setGuests, max: GUEST_MAX })}
 
         <div className="flex flex-col gap-2">
           <label className={LABEL} htmlFor="gistroom-title">

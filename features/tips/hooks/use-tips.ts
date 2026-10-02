@@ -1,5 +1,7 @@
 "use client";
 
+import { trackMarketEvent } from "@/lib/analytics";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorCode } from "@/lib/api/envelope";
 import { isTipRouteMissing } from "@/lib/tip-errors";
@@ -342,6 +344,22 @@ export function useSendTip() {
       if (isRouteMissing(error)) markTippingUnavailable();
     },
     onSuccess: (tip) => {
+      /*
+        MONEY MOVING IS THE ACT, so it is counted once the service has confirmed
+        it and never optimistically. The AMOUNT rides along because "how many
+        gifts" and "how much was gifted" are different questions and a count
+        cannot answer the second — it is the service's own decimal string,
+        never a float.
+
+        No recipient id: who was paid is between the two of them, and an
+        analytics row is the wrong place to make that durable.
+      */
+      trackMarketEvent("gift_sent", {
+        surface: "tip_sheet",
+        entityType: "tip",
+        entityId: tip.tipId,
+        metadata: { amountKash: tip.amountKash },
+      });
       // Narrow on purpose. A tip changes the RECIPIENT's profile (whatever
       // totals the service decides to show there) and nothing else we cache —
       // the post's own tallies do not carry tips, so sweeping the feed would

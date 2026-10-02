@@ -1,5 +1,7 @@
 "use client";
 
+import { useRecordProfileView } from "@/features/profile/hooks/use-profile-view";
+
 import { PostText } from "@/components/ui/post-text";
 import { placeLine } from "@/lib/countries";
 import { profileHref } from "@/lib/profile-href";
@@ -454,6 +456,13 @@ export function ProfilePage({
     { surface: "profile", entityType: "profile", entityId: profile.data?.id },
     Boolean(profile.data),
   );
+  /*
+    AND THE RECORD THE PROFILE'S OWNER WILL READ — a different thing from the
+    analytics event above, which measures the product. This one puts the viewer
+    in somebody's "who viewed my profile" list, so it waits for real dwell and
+    is never sent for your own profile.
+  */
+  useRecordProfileView(profile.data?.id, Boolean(profile.data) && !isMe);
 
   if (profile.isPending) {
     return (

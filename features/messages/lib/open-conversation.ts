@@ -46,6 +46,14 @@ export function conversationFromRef(ref: ConversationRef, peer: Profile): Conver
     createdBy: null,
     // Nobody is invited into a 1:1; it is opened, by one of the two people in it.
     invitedBy: null,
+    /*
+      Neither setting exists in a 1:1 and both are stated rather than left to a
+      default. Nobody is a leader in a direct thread, so there is no one to
+      restrict posting TO and no house whose name a room could be opened in —
+      which is also why moderation is refused there by the service.
+    */
+    whoCanPost: "everyone",
+    canOpenRoom: false,
     // House fields. A 1:1 has no link and no room cap.
     website: null,
     weeklyRoomLimit: null,

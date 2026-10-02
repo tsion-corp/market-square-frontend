@@ -64,10 +64,12 @@ import {
   useSendMessage,
   useOpenSnap,
   useRemoveMessage,
+  useModerateMessage,
   useEditMessage,
   useCreateInvite,
   useRemoveGroupMember,
   useSetMemberRole,
+  useSetMemberMuted,
   useTransferOwnership,
 } from "@/features/messages/hooks/use-messages";
 import {
@@ -586,6 +588,7 @@ function MembersSheet({
   const setRole = useSetMemberRole(conversation.id);
   const transfer = useTransferOwnership(conversation.id);
   const remove = useRemoveGroupMember(conversation.id);
+  const setMuted = useSetMemberMuted(conversation.id);
   /* Removing someone and handing the house over both ask first: neither can
      be undone from this sheet. */
   const [confirming, setConfirming] = useState<{ kind: "remove" | "owner"; profile: Profile } | null>(null);
@@ -598,6 +601,15 @@ function MembersSheet({
       profile,
       role: "member" as const,
       joinedAt: null,
+      /*
+        The PREVIEW roster carries neither, and both are false deliberately.
+        These four names come off the conversation summary, which says nothing
+        about muting or about what this viewer may do — the same reason the
+        existing controls are gated on `members.data` rather than on these rows.
+        Guessing either one here would offer a control against a stand-in.
+      */
+      muted: false,
+      canManage: false,
     }));
   const house = conversation.title ?? "this house";
   const ACTION =
@@ -709,6 +721,46 @@ function MembersSheet({
                             Remove
                           </button>
                         )}
+                        {/*
+                          MUTE — gated on the SERVICE's own answer, never on a
+                          comparison of two roles.
+
+                          `canManage` is the server saying whether this viewer
+                          may act on this person. The ladder behind it (an admin
+                          acts on members, the owner acts on admins, nobody acts
+                          on the owner or on themselves) lives on the service,
+                          and a client that recomputes it is a second copy of an
+                          authorisation rule waiting to disagree with the first.
+
+                          It defaults FALSE, so against a service that does not
+                          send it the control is simply absent — which is the
+                          right way to be wrong.
+
+                          Muting takes away WRITING only. The copy says so,
+                          because "mute" in most products means "I stop hearing
+                          them" and here it means "they stop speaking".
+                        */}
+                        {member.canManage && (
+                          <button
+                            type="button"
+                            disabled={setMuted.isPending}
+                            onClick={() =>
+                              setMuted.mutate({
+                                profileId: profile.id,
+                                muted: !member.muted,
+                                name: profile.displayName,
+                              })
+                            }
+                            title={
+                              member.muted
+                                ? `${profile.displayName} can send messages again.`
+                                : `${profile.displayName} keeps reading ${house} but can't send messages.`
+                            }
+                            className={ACTION}
+                          >
+                            {member.muted ? "Unmute" : "Mute"}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -719,6 +771,74 @@ function MembersSheet({
         </div>
       )}
     </Sheet>
+  );
+}
+
+/**
+ * A LEADER TAKING SOMEBODY ELSE'S MESSAGE DOWN.
+ *
+ * Its own control rather than a branch of `OwnMessageActions`, because the two
+ * are different acts: that one withdraws your own words, this removes another
+ * person's in front of everybody. The confirmation says so — it names the
+ * consequence that matters here, which is that the room will be told a
+ * moderator did it, not merely that the words go.
+ *
+ * The service refuses this on your own message (it says to unsend instead,
+ * because the two write different rows) and in a DM, where nobody is a leader.
+ * Neither refusal should ever be reachable: the caller only draws this where
+ * the roster says `canManage`.
+ */
+function ModerateMessageAction({
+  revealed,
+  onModerate,
+}: {
+  revealed: boolean;
+  onModerate: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Moderate message"
+        title="Remove as moderator"
+        className={cn(
+          "ws-press absolute -top-2 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white/70 transition-opacity hover:text-white",
+          revealed ? "opacity-100" : "opacity-0"
+        )}
+      >
+        <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
+          <path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.6 8.3h6.8l.6-8.3" />
+        </svg>
+      </button>
+
+      <Sheet open={open} onClose={() => setOpen(false)} title="Remove this message">
+        <div className="p-4">
+          <p className="text-[13px] leading-5 text-body">
+            This takes the message down for everyone. It will show as removed by a
+            moderator, so the room can see that a leader did it rather than the
+            person who wrote it.
+          </p>
+          <div className="mt-5 flex gap-2">
+            <Button variant="ghost" className="flex-1" onClick={() => setOpen(false)}>
+              Keep it
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              onClick={() => {
+                setOpen(false);
+                onModerate();
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        </div>
+      </Sheet>
+    </>
   );
 }
 
@@ -1054,6 +1174,7 @@ function TextBubble({
   group,
   tail,
   quote,
+  moderatorName,
 }: {
   message: Message;
   mine: boolean;
@@ -1061,6 +1182,14 @@ function TextBubble({
   tail: boolean;
   /** The quoted original, when this message is a reply. */
   quote?: React.ReactNode;
+  /**
+   * WHICH leader took this message down, when one did and we can name them.
+   *
+   * Null is the honest answer rather than a gap: a moderator who has left the
+   * house is not in the roster the names come from, and the row still has to
+   * say that a leader did it. "A moderator" is the floor, not the goal.
+   */
+  moderatorName?: string | null;
 }) {
   const removed = message.status === "removed";
 
@@ -1087,7 +1216,22 @@ function TextBubble({
               mine ? "text-[#5A5A5A]" : "text-white"
             )}
           >
-            Message removed
+            {/*
+              WHO TOOK IT DOWN. `status` is `removed` for both kinds and
+              `moderatedBy` is the only thing that tells them apart: null is the
+              author withdrawing their own words, an id is a leader removing
+              somebody else's.
+
+              A moderator's removal is said out loud on purpose. A message that
+              simply vanishes leaves a house arguing about whether it was ever
+              there, and leaves the person who wrote it unable to tell whether
+              anybody saw it.
+            */}
+            {!message.moderatedBy
+              ? "Message removed"
+              : moderatorName
+                ? `Removed by ${moderatorName}`
+                : "Removed by a moderator"}
           </p>
         ) : (
           <BubbleText message={message} mine={mine} />
@@ -2027,10 +2171,27 @@ function MessageRow({
   openingSnap,
   onEdit,
   onRemove,
+  onModerate,
+  canModerate,
+  moderatorName,
   showSender,
   senderRole,
 }: {
   message: Message;
+  /**
+   * WHICH leader removed this message, when one did and the roster can name
+   * them. Resolved by the thread, which holds the roster; `nameOf` is no use
+   * here because it answers "Member" for somebody it cannot find, and
+   * "Removed by Member" is worse than not naming anybody.
+   */
+  moderatorName?: string | null;
+  /** Take somebody else's message down as a leader — see ModerateMessageAction. */
+  onModerate: (message: Message) => void;
+  /**
+   * May THIS viewer moderate THIS sender — the roster's `canManage` for them.
+   * Never computed from two roles here; see the field's own note.
+   */
+  canModerate: boolean;
   mine: boolean;
   group: boolean;
   sender: Profile | null;
@@ -2234,7 +2395,14 @@ function MessageRow({
         card={roomCardSlot?.(message.deepLink!.ref)}
       />
     ) : removed || !kind ? (
-      <TextBubble message={message} mine={mine} group={group} tail={tail} quote={quote} />
+      <TextBubble
+        message={message}
+        mine={mine}
+        group={group}
+        tail={tail}
+        quote={quote}
+        moderatorName={moderatorName}
+      />
     ) : kind === "audio" ? (
       <VoiceBubble message={message} mine={mine} group={group} tail={tail} quote={quote} />
     ) : kind === "file" ? (
@@ -2344,6 +2512,23 @@ function MessageRow({
           onRemove={() => onRemove(message)}
         />
       )}
+      {/*
+        SOMEBODY ELSE'S MESSAGE, AND A LEADER WHO MAY TAKE IT DOWN.
+
+        Deliberately NOT a branch inside `OwnMessageActions`. That control edits
+        and withdraws your own words; this removes another person's, which is a
+        different act with a different meaning to everybody watching, and the
+        service writes a different row for it. Folding them together is how the
+        wrong confirmation copy ends up on the more serious of the two.
+
+        `canModerate` is the SERVICE's answer for this sender, never a role
+        comparison made here — see `canManage` on the roster. It is false on
+        your own messages and false throughout a DM, so this cannot appear
+        where the route would refuse it.
+      */}
+      {!mine && !removed && !invite && canModerate && (
+        <ModerateMessageAction revealed={revealed} onModerate={() => onModerate(message)} />
+      )}
     </div>
   );
 }
@@ -2364,8 +2549,23 @@ function Composer({
   onCancelEdit,
   onSaveEdit,
   savingEdit,
+  silenced,
 }: {
   conversationId: string;
+  /**
+   * WHY THIS READER MAY NOT WRITE HERE, or null when they may.
+   *
+   * Two states produce it and both are NORMAL rather than errors: a member who
+   * has been muted, and any member of a house whose leaders set it to
+   * admins-only. The service refuses the send with a 403 in both cases, so
+   * without this the field accepts a message, the reader presses send, and the
+   * words they typed come back as a failure.
+   *
+   * It never hides the thread. Reading is not restricted in either case, and a
+   * disappearing conversation would be a far bigger claim than the one the
+   * service is making.
+   */
+  silenced: string | null;
   /** The message whose words are being changed, or null for an ordinary send. */
   editing: Message | null;
   onCancelEdit: () => void;
@@ -2515,7 +2715,7 @@ function Composer({
         }
       : {}),
   };
-  const canSend = canSendMessage(outgoing) && !send.isPending;
+  const canSend = canSendMessage(outgoing) && !send.isPending && !silenced;
   // The staged gallery image's editor (draw/text/stickers/crop), asked for its
   // baked result on send.
   const galleryEditorRef = useRef<MediaEditorHandle | null>(null);
@@ -3099,8 +3299,16 @@ function Composer({
                 }
               }
             }}
+            disabled={Boolean(silenced)}
+            /*
+              The REASON stands where the invitation to type used to. A greyed
+              field with no words is indistinguishable from a broken one, and
+              the reader's next move depends entirely on which of the two states
+              they are in — a mute is about them, an announcement house is about
+              everybody.
+            */
             placeholder={
-              attachment ? "Add a caption…" : replyTo ? "Write a reply…" : "Write a message…"
+              silenced ?? (attachment ? "Add a caption…" : replyTo ? "Write a reply…" : "Write a message…")
             }
             // The design's caret is #008CFF — the one place in this pane a
             // colour is specified for something the house has no token for.
@@ -3252,6 +3460,7 @@ export function Thread({
   */
   const [editing, setEditing] = useState<Message | null>(null);
   const remove = useRemoveMessage(conversation.id);
+  const moderate = useModerateMessage(conversation.id);
   const edit = useEditMessage(conversation.id);
   const openSnapMutation = useOpenSnap(conversation.id);
   const [openingSnapId, setOpeningSnapId] = useState<string | null>(null);
@@ -3301,12 +3510,54 @@ export function Thread({
   // a 1:1 reads identity from `peer` and never issues the request.
   const members = useConversationMembers(conversation.id, group);
   /*
+    WHO THIS VIEWER MAY MODERATE, by sender id, straight off the roster.
+
+    A Map rather than a find per bubble: a long house thread draws hundreds of
+    rows and each one would otherwise scan the whole member list.
+
+    Absent means FALSE — a roster still loading, or a sender who has left the
+    group, offers no control. The alternative is a button that appears a second
+    after the thread does, on messages the viewer may turn out not to be allowed
+    to touch.
+  */
+  const manageable = new Map(
+    (members.data?.items ?? []).flatMap((row) =>
+      row.profile ? [[row.profile.id, row.canManage] as const] : []
+    )
+  );
+
+  /*
     YOUR ROLE IN THE HOUSE comes from the roster: owner, admin or member.
     `createdBy` only says who MADE the house — ownership can be handed over,
     and passes on when an owner leaves — so it stands in only until the roster
     has loaded.
   */
   const myRole = viewerRole(members.data?.items, me.data?.id, conversation.createdBy);
+  /*
+    WHY THIS READER CANNOT WRITE HERE — null when they can.
+
+    Two independent settings, both of which the service enforces on SEND with a
+    403, and both of which are ordinary states rather than failures. Checked in
+    this order because a mute is the more specific fact: somebody muted in an
+    announcement house should be told they are muted, which is the thing that
+    singles them out and the thing they would have to ask about.
+
+    The viewer's own mute is read from the ROSTER rather than the inbox row —
+    `muted` is per member and the row does not carry the reader's own. A roster
+    that has not loaded yet silences nobody: a composer that greys itself out
+    while a request is in flight accuses the reader of something on the strength
+    of not knowing yet.
+  */
+  const myMembership = (members.data?.items ?? []).find(
+    (row) => row.profile?.id && row.profile.id === me.data?.id
+  );
+  const silenced = !group
+    ? null
+    : myMembership?.muted
+      ? "You can't send messages in this group"
+      : conversation.whoCanPost === "admins" && myRole === "member"
+        ? "Only admins can post in this group"
+        : null;
   const isOwner = myRole === "owner";
   const manages = myRole === "owner" || myRole === "admin";
   const canShareInvite = group && canMakeInvite({ visibility: conversation.visibility, manages });
@@ -3336,6 +3587,24 @@ export function Thread({
     if (me.data && senderId === me.data.id) return "You";
     return senders.get(senderId)?.displayName ?? "Member";
   };
+  /**
+   * WHICH leader removed a message, or null when we cannot say.
+   *
+   * Separate from `nameOf` on purpose: that one answers "Member" for an id it
+   * does not hold, which is a fine fallback inside a quote and a bad one here —
+   * "Removed by Member" reads like a bug, while "Removed by a moderator" is
+   * true and is what the row falls back to.
+   *
+   * A moderator who has since left the house is exactly that case, and it is
+   * the common one over time. Naming the reader as "you" rather than by their
+   * own display name is the same courtesy every other line in this thread pays.
+   */
+  const moderatorNameOf = (moderatorId: string | null): string | null => {
+    if (!moderatorId) return null;
+    if (me.data && moderatorId === me.data.id) return "you";
+    return senders.get(moderatorId)?.displayName ?? null;
+  };
+
   /** Who the composer may @-mention: everyone here but the reader. */
   const mentionable: MentionableMember[] = [...senders.values()].map((profile) => ({
     id: profile.id,
@@ -3594,6 +3863,9 @@ export function Thread({
                     message={message}
                     mine={Boolean(me.data && message.senderId === me.data.id)}
                     group={group}
+                    canModerate={Boolean(manageable.get(message.senderId))}
+                    moderatorName={moderatorNameOf(message.moderatedBy)}
+                    onModerate={(target) => moderate.mutate(target.id)}
                     sender={senders.get(message.senderId) ?? null}
                     showSender={index === 0}
                     senderRole={roleOf(run.senderId)}
@@ -3633,6 +3905,7 @@ export function Thread({
         members={mentionable}
         meId={me.data?.id}
         conversationKind={conversation.kind}
+        silenced={silenced}
         editing={editing}
         onCancelEdit={() => setEditing(null)}
         onSaveEdit={(text) => {

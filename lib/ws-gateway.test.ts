@@ -12,6 +12,13 @@ import {
   STABLE_MS,
   speakerSignalOf,
   userTopic,
+  CHAT_MESSAGE_ARRIVED,
+  UNREAD_CHANGED,
+  isUnreadSignal,
+  chatSignalOf,
+  conversationTopic,
+  conversationTopicOwner,
+  type Gateway,
   type SocketLike,
 } from "./ws-gateway.ts";
 
@@ -439,5 +446,346 @@ test("a connection that lasted earns a fresh ladder", () => {
     assert.ok(afterGood <= 1_250, `expected ~1s after a good connection, got ${afterGood}`);
   } finally {
     globalThis.setTimeout = realTimeout;
+  }
+});
+
+/*
+  CONNECTION STATE, so a poll can be slowed while frames are arriving.
+
+  The saving everyone reaches for is deleting the timer. That is wrong: the
+  gateway's replay buffer is bounded, so a socket down longer than its window can
+  miss a frame permanently and a feed with no timer never recovers. Slowing it
+  needs an honest answer to "is a socket open right now".
+
+  CLEANUP RUNS IN `finally`, and that is not fussiness. This runner is configured
+  with `--test-timeout=0`, so a leaked handle does not fail a test — it hangs the
+  process for ever, and a red test is indistinguishable from a stuck machine. The
+  open socket's ping interval is such a handle, and only the LAST unsubscribe
+  closes the socket. Cleanup written after the assertions is skipped by the throw
+  that a failure raises, which is precisely when you need the output.
+*/
+function withGateway(
+  run: (ctx: { gateway: Gateway; sock: Fake; seen: boolean[]; offState: () => void; offTopic: () => void }) => void,
+): void {
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const seen: boolean[] = [];
+  const offState = gateway.onConnectionChange((connected) => seen.push(connected));
+  const offTopic = gateway.subscribe("market-square:feed:for-you", () => {});
+  try {
+    run({ gateway, sock: sockets[0]!, seen, offState, offTopic });
+  } finally {
+    offState();
+    offTopic();
+  }
+}
+
+test("connection state starts false, then follows open and close", () => {
+  withGateway(({ gateway, sock, seen }) => {
+    assert.equal(gateway.connected, false, "nothing has opened yet");
+    assert.deepEqual(seen, [], "registering a listener does not invent a callback");
+
+    sock.state = 1;
+    fire(sock, "onopen");
+    assert.equal(gateway.connected, true);
+    assert.deepEqual(seen, [true]);
+
+    // An open socket staying open is not news.
+    fire(sock, "onopen");
+    assert.deepEqual(seen, [true], "a repeat open reports nothing");
+
+    fire(sock, "onclose");
+    assert.equal(gateway.connected, false);
+    assert.deepEqual(seen, [true, false]);
+  });
+});
+
+test("a listener that unsubscribed hears nothing further", () => {
+  withGateway(({ sock, seen, offState }) => {
+    sock.state = 1;
+    fire(sock, "onopen");
+    assert.deepEqual(seen, [true]);
+    // The STATE listener specifically — the topic subscription stays, so the
+    // socket is still live and the close below is a real one to miss.
+    offState();
+
+    fire(sock, "onclose");
+    assert.deepEqual(seen, [true], "no callback after unsubscribing");
+  });
+});
+
+test("a DELIBERATE close still reports disconnected", () => {
+  /*
+    `disconnect()` nulls the socket before closing it, so the stale-socket guard
+    in `onclose` returns before announcing anything. Without an announcement in
+    `disconnect` itself, a deliberate close left `connected` true for ever and a
+    caller that had slowed its poll kept the slow cadence over a dead socket.
+    This test is what found that.
+  */
+  withGateway(({ gateway, sock, seen, offTopic }) => {
+    sock.state = 1;
+    fire(sock, "onopen");
+    assert.deepEqual(seen, [true]);
+
+    // The last subscriber leaving is what makes the close deliberate.
+    offTopic();
+    assert.deepEqual(seen, [true, false]);
+    assert.equal(gateway.connected, false);
+  });
+});
+
+test("one listener throwing does not stop the others, or the socket", () => {
+  withGateway(({ gateway, sock }) => {
+    const reached: string[] = [];
+    const offBad = gateway.onConnectionChange(() => {
+      throw new Error("a render blew up");
+    });
+    const offGood = gateway.onConnectionChange(() => reached.push("second"));
+    try {
+      sock.state = 1;
+      fire(sock, "onopen");
+      assert.deepEqual(reached, ["second"]);
+      assert.equal(gateway.connected, true);
+    } finally {
+      offBad();
+      offGood();
+    }
+  });
+});
+
+test("no gateway URL means never connected, and subscribing cannot change that", () => {
+  // The hook returns false in this case, so every poll keeps its full cadence
+  // without the caller writing that branch. No socket is ever built, so there is
+  // no handle to release.
+  const gateway = createGateway("", () => fakeSocket());
+  const seen: boolean[] = [];
+  const off = gateway.onConnectionChange((connected) => seen.push(connected));
+  gateway.subscribe("market-square:feed:for-you", () => {})();
+  assert.equal(gateway.connected, false);
+  assert.deepEqual(seen, []);
+  off();
+});
+
+/*
+  GATED CONVERSATION TOPICS.
+
+  The gateway refuses `market-square:conversation:<id>` on a socket that has not
+  presented a grant naming it, and a refusal is not reported back — so a
+  subscribe sent without one leaves a listener that looks live and never fires.
+  The client therefore carries grants and withholds the subscribe until it has
+  one. Minting and renewing are the caller's, not the client's.
+*/
+test("a conversation topic is not sent until a grant arrives, then is sent with it", () => {
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const topic = conversationTopic("c1")!;
+  // Both registered BEFORE any assertion, and released in `finally`. A release
+  // written after a failing assertion is skipped, and the leftover listener keeps
+  // the socket — and its ping interval — alive for ever.
+  const offUngranted = gateway.subscribe(topic, () => {});
+  const sock = sockets[0]!;
+  sock.state = 1;
+  fire(sock, "onopen");
+  let offGranted: (() => void) | null = null;
+  try {
+    assert.deepEqual(sock.sent, [], "no grant, so nothing was claimed");
+
+    // The same topic again, now with a grant: it supersedes and IS sent, even
+    // though the topic is already subscribed — that is how renewal arrives.
+    offGranted = gateway.subscribe(topic, () => {}, { grant: "g1" });
+    assert.deepEqual(JSON.parse(sock.sent[0]!), {
+      type: "subscribe",
+      topics: [topic],
+      grant: "g1",
+    });
+
+    // The SAME grant again is not re-sent: renewal means a different token.
+    sock.sent.length = 0;
+    gateway.subscribe(topic, () => {}, { grant: "g1" })();
+    assert.deepEqual(sock.sent, [], "an unchanged grant re-claims nothing");
+  } finally {
+    offGranted?.();
+    offUngranted();
+  }
+});
+
+test("a reconnect re-presents each topic's own grant", () => {
+  /*
+    The gateway forgets everything when the socket goes, and one reader can hold
+    conversations covered by DIFFERENT grants — the protocol carries one grant per
+    subscribe, so a reconnect has to send a frame per grant, not one frame for
+    everything.
+  */
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const a = conversationTopic("c1")!;
+  const b = conversationTopic("c2")!;
+  const lane = laneTopic("for-you")!;
+  const offA = gateway.subscribe(a, () => {}, { grant: "gA" });
+  const offB = gateway.subscribe(b, () => {}, { grant: "gB" });
+  const offLane = gateway.subscribe(lane, () => {});
+  const sock = sockets[0]!;
+  try {
+    sock.state = 1;
+    fire(sock, "onopen");
+    const frames = sock.sent.map((raw) => JSON.parse(raw) as Record<string, unknown>);
+    // The public lane in one ungated frame...
+    assert.deepEqual(
+      frames.find((f) => f.grant === undefined),
+      { type: "subscribe", topics: [lane] },
+    );
+    // ...and one frame per grant, never two conversations under one token.
+    assert.deepEqual(
+      frames.filter((f) => f.grant !== undefined),
+      [
+        { type: "subscribe", topics: [a], grant: "gA" },
+        { type: "subscribe", topics: [b], grant: "gB" },
+      ],
+    );
+  } finally {
+    offA();
+    offB();
+    offLane();
+  }
+});
+
+test("two conversations under ONE grant go in one frame", () => {
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const a = conversationTopic("c1")!;
+  const b = conversationTopic("c2")!;
+  const offA = gateway.subscribe(a, () => {}, { grant: "shared" });
+  const offB = gateway.subscribe(b, () => {}, { grant: "shared" });
+  const sock = sockets[0]!;
+  try {
+    sock.state = 1;
+    fire(sock, "onopen");
+    const gated = sock.sent
+      .map((raw) => JSON.parse(raw) as Record<string, unknown>)
+      .filter((f) => f.grant !== undefined);
+    assert.deepEqual(gated, [{ type: "subscribe", topics: [a, b], grant: "shared" }]);
+  } finally {
+    offA();
+    offB();
+  }
+});
+
+test("the last listener leaving takes the grant with it", () => {
+  // Otherwise the next reconnect re-presents a token for a topic nobody is on.
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const topic = conversationTopic("c1")!;
+  const keepAlive = gateway.subscribe(laneTopic("for-you")!, () => {});
+  const off = gateway.subscribe(topic, () => {}, { grant: "g1" });
+  const sock = sockets[0]!;
+  try {
+    sock.state = 1;
+    fire(sock, "onopen");
+    off();
+    sock.sent.length = 0;
+    // A reconnect must not claim it again.
+    fire(sock, "onclose");
+    sock.state = 1;
+    fire(sock, "onopen");
+    const claimed = sock.sent.map((raw) => JSON.parse(raw) as { topics?: string[] });
+    assert.ok(
+      !claimed.some((f) => f.topics?.includes(topic)),
+      "a released conversation is not re-presented",
+    );
+  } finally {
+    keepAlive();
+  }
+});
+
+test("a conversation topic reads its id out, and nothing else does", () => {
+  assert.equal(conversationTopicOwner("market-square:conversation:c1"), "c1");
+  assert.equal(conversationTopicOwner("market-square:conversation:"), null);
+  assert.equal(conversationTopicOwner("market-square:feed:for-you"), null);
+  assert.equal(conversationTopic(null), null);
+  assert.equal(
+    chatSignalOf({ type: CHAT_MESSAGE_ARRIVED, data: { conversationId: "c1" }, timestamp: 1 }),
+    "c1",
+  );
+  // A frame with no conversation, and a frame of the wrong type, are both nothing.
+  assert.equal(chatSignalOf({ type: CHAT_MESSAGE_ARRIVED, data: {}, timestamp: 1 }), null);
+  assert.equal(chatSignalOf({ type: FEED_HEAD_CHANGED, data: { conversationId: "c1" }, timestamp: 1 }), null);
+});
+
+/*
+  THE NAV BADGE FRAME.
+
+  `unreadChanged` on `user:<id>` carries no counts, so there is nothing to read
+  out of it — only whether it is the frame. The client re-reads `GET /me/unread`,
+  which is what keeps two counts moving in the same instant from racing into the
+  wrong order.
+*/
+test("the badge frame is recognised by type alone, and nothing else is", () => {
+  assert.equal(isUnreadSignal({ type: UNREAD_CHANGED, data: {}, timestamp: 1 }), true);
+  // No payload to require: a frame with data is the same frame.
+  assert.equal(isUnreadSignal({ type: UNREAD_CHANGED, data: { messages: 3 }, timestamp: 1 }), true);
+  assert.equal(isUnreadSignal({ type: FEED_HEAD_CHANGED, data: {}, timestamp: 1 }), false);
+  assert.equal(isUnreadSignal({ type: CHAT_MESSAGE_ARRIVED, data: {}, timestamp: 1 }), false);
+  assert.equal(isUnreadSignal(null), false);
+});
+
+test("a personal topic needs no grant, unlike a conversation topic", async () => {
+  /*
+    Both are private, by different mechanisms: `user:<id>` is gated on the socket
+    being AUTHENTICATED as that reader, a conversation on a signed grant naming
+    it. So the badge subscription needs no grant plumbing — which is why it can
+    be a plain subscribe where the thread signal could not.
+  */
+  const sockets: Fake[] = [];
+  const gateway = createGateway(
+    "wss://gw.example/",
+    () => {
+      const sock = fakeSocket();
+      sockets.push(sock);
+      return sock;
+    },
+    { getToken: () => Promise.resolve("tok") },
+  );
+  const topic = userTopic(ME)!;
+  const off = gateway.subscribe(topic, () => {});
+  const sock = sockets[0]!;
+  try {
+    sock.state = 1;
+    fire(sock, "onopen");
+    // `authenticate` awaits the token source, so its frame is a microtask away —
+    // asserting synchronously here reads an empty buffer and proves nothing.
+    await Promise.resolve();
+    await Promise.resolve();
+    // Authenticated first, never subscribed-and-refused, and never with a grant.
+    const frames = sock.sent.map((raw) => JSON.parse(raw) as Record<string, unknown>);
+    assert.ok(
+      frames.every((f) => f.grant === undefined),
+      "a personal topic is never sent with a grant",
+    );
+    assert.ok(
+      frames.some((f) => f.type === "authenticate"),
+      "it authenticates instead",
+    );
+  } finally {
+    off();
   }
 });

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
+import { isPublicPost } from "./api/public-routes.ts";
 
 /**
  * Three shell invariants that only exist as source.
@@ -2701,7 +2702,17 @@ describe("Gist rooms can be scheduled, and upcoming ones look like open ones", (
     const api = stripComments(read("features/streams/lib/api.ts"));
     // POST /streams/:id/preview-token — on the served spec (2026-09-12), optional auth.
     assert.match(api, /msApi\.post\(`\/streams\/\$\{streamId\}\/preview-token`\)/);
-    assert.match(stripComments(read("lib/api/public-routes.ts")), /path\[0\] === "streams" && path\[2\] === "preview-token"/);
+    /*
+      The allowlist no longer names `preview-token` on its own line: it names
+      THREE stream actions, because `playback-token` and `heartbeat` are
+      optional-auth in the production spec too and this proxy was refusing both
+      — a signed-out visitor could not watch a public room at all.
+
+      Asserted through the PREDICATE rather than by matching the source text.
+      The old assertion pinned a particular spelling, so widening the list
+      correctly broke a test that had nothing to say about the thing it broke on.
+    */
+    assert.equal(isPublicPost(["streams", "s1", "preview-token"]), true);
     // THE HARD RULE: a previewing card must not count itself as audience.
     assert.doesNotMatch(hook, /heartbeat|sendHeartbeat/i, "the preview sends heartbeats");
     // Subscribe side only, audio only, registered under its own key, torn down on leave.

@@ -351,3 +351,27 @@ export async function applyForCreator(note?: string) {
 export async function reverseGeocode(input: { latitude: number; longitude: number }) {
   return ReverseGeocodeSchema.parse(await msApi.post("/geo/reverse", input));
 }
+/**
+ * RECORD THAT SOMEBODY STAYED ON A PROFILE — `POST /profiles/:id/views`.
+ *
+ * The WRITER behind "who viewed my profile" and `profileViewCount`. It has been
+ * live on the service and called by nothing, so the table is empty — which means
+ * the read side would have shown a truthful zero and looked like a broken
+ * feature. Both halves have to exist or neither is worth shipping.
+ *
+ * ─── ON DWELL, NEVER ON LOAD ────────────────────────────────────────────────
+ * The service says so explicitly and it is the whole ethics of the thing: a
+ * prefetch, a hover card or a mistyped URL must not tell somebody they were
+ * looked at. Appearing in that list is a claim about a person's attention, and
+ * it should be true.
+ *
+ * ─── IT ANSWERS 204 FOR THINGS IT DID NOT RECORD ────────────────────────────
+ * Your own profile, a viewer with `privateBrowsing` on, and either party having
+ * blocked the other all answer exactly as a recorded view does. That is
+ * deliberate: a different answer would let the caller detect a block or somebody
+ * else's privacy setting. So there is nothing here to branch on and nothing to
+ * report — which is also why a failure is swallowed.
+ */
+export async function recordProfileView(profileId: string) {
+  await msApi.post(`/profiles/${profileId}/views`);
+}

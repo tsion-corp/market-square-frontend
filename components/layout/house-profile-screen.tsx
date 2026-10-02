@@ -1,5 +1,7 @@
 "use client";
 
+import { isHttpUrl } from "@/lib/http-url";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { HouseMemberTile } from "@/components/layout/house-member-tile";
@@ -448,12 +450,29 @@ export function HouseProfileScreen({ id }: { id: string }) {
           </p>
         )}
 
-        {/* `Frame 2147230510` — the link, its chain glyph in the accent. The
-            service allows http(s) only and refuses anything else at its own
-            boundary, so this renders whatever it sent without re-judging it —
-            and still opens in a new tab with `noreferrer`, because it carries
-            a stranger's name. */}
-        {data?.website && (
+        {/*
+          `Frame 2147230510` — the link, its chain glyph in the accent.
+
+          THE COMMENT THAT STOOD HERE SAID THE SERVICE ALREADY GUARANTEED THIS,
+          AND IT DID NOT. It read: "the service allows http(s) only and refuses
+          anything else at its own boundary, so this renders whatever it sent
+          without re-judging it." The service's scheme check is real, is tested,
+          and is sitting unmerged — so in production today this field accepts
+          `javascript:…`, and the only thing between a stranger's house page and
+          script running in a visitor's session was a sentence describing a
+          guard that had not shipped.
+
+          A house's `website` is user-set and renders as an ANCHOR, which is the
+          one shape where a `javascript:` URL actually executes — an `<img src>`
+          has not run one since the IE era, and most of the fields in this
+          family are image sources and were never a vector. This is the field
+          that matters, and it is checked HERE now.
+
+          It stays checked after the service's own fix lands. Two guards is not
+          duplication when one of them is a network away: this is the layer that
+          cannot be wrong about which version of the service it is talking to.
+        */}
+        {isHttpUrl(data?.website) && (
           <a
             href={data.website}
             target="_blank"
