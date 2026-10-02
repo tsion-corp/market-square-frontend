@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { msApi } from "@/lib/api/service";
 import { useAuth } from "@/hooks/use-auth";
+import { useMe } from "@/hooks/use-me";
+import { useUnreadSignal } from "@/hooks/use-unread-signal";
 
 /**
  * The primary nav's unread badges.
@@ -29,6 +31,17 @@ const UNREAD_POLL_MS = 45_000;
 
 export function useUnread() {
   const { authenticated } = useAuth();
+  const me = useMe();
+  /*
+    The service says when a count moves, in both directions, on the reader's own
+    topic — so the timer below no longer has to be the only way to find out.
+
+    The POLL IS UNCHANGED on purpose: subscriber first, confirm frames in
+    production, relax only after. Until the publisher is deployed no frame
+    arrives, nothing is invalidated, and the poll carries the badge exactly as it
+    does today, which is what makes this safe to land first.
+  */
+  useUnreadSignal(me.data?.id ?? null, authenticated, UNREAD_KEY);
   return useQuery({
     queryKey: UNREAD_KEY,
     queryFn: async () => UnreadSchema.parse(await msApi.authedGet("/me/unread")),

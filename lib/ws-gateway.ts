@@ -172,6 +172,28 @@ export function chatSignalOf(frame: GatewayFrame | null): string | null {
   return typeof conversationId === "string" && conversationId.length > 0 ? conversationId : null;
 }
 
+/* ─── THE NAV BADGE, on the reader's own personal topic ──────────────────────
+ * `unreadChanged` on `user:<id>` says "one of your three badge counts moved".
+ * It carries NO counts, deliberately: the client re-reads `GET /me/unread`, so
+ * what it shows is as fresh as the API rather than as fresh as whichever frame
+ * arrived last, and two counts moving in the same instant cannot race into the
+ * wrong order.
+ *
+ * It fires in BOTH directions — a message or notification arriving, and one
+ * being read — which is what makes it capable of replacing a timer rather than
+ * merely shortening one. Reading on a phone has to clear the dot on a desktop,
+ * and the desktop cannot know it happened.
+ *
+ * The poll stays the floor regardless. A frame is an optimisation on top of a
+ * read that still works.
+ */
+export const UNREAD_CHANGED = "unreadChanged";
+
+/** Whether this frame says the reader's badge moved. */
+export function isUnreadSignal(frame: GatewayFrame | null): boolean {
+  return frame?.type === UNREAD_CHANGED;
+}
+
 /** The conversation a topic names, or null when it is not a conversation topic. */
 export function conversationTopicOwner(topic: string): string | null {
   const prefix = "market-square:conversation:";

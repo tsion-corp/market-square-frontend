@@ -13,6 +13,8 @@ import {
   speakerSignalOf,
   userTopic,
   CHAT_MESSAGE_ARRIVED,
+  UNREAD_CHANGED,
+  isUnreadSignal,
   chatSignalOf,
   conversationTopic,
   conversationTopicOwner,
@@ -727,4 +729,63 @@ test("a conversation topic reads its id out, and nothing else does", () => {
   // A frame with no conversation, and a frame of the wrong type, are both nothing.
   assert.equal(chatSignalOf({ type: CHAT_MESSAGE_ARRIVED, data: {}, timestamp: 1 }), null);
   assert.equal(chatSignalOf({ type: FEED_HEAD_CHANGED, data: { conversationId: "c1" }, timestamp: 1 }), null);
+});
+
+/*
+  THE NAV BADGE FRAME.
+
+  `unreadChanged` on `user:<id>` carries no counts, so there is nothing to read
+  out of it — only whether it is the frame. The client re-reads `GET /me/unread`,
+  which is what keeps two counts moving in the same instant from racing into the
+  wrong order.
+*/
+test("the badge frame is recognised by type alone, and nothing else is", () => {
+  assert.equal(isUnreadSignal({ type: UNREAD_CHANGED, data: {}, timestamp: 1 }), true);
+  // No payload to require: a frame with data is the same frame.
+  assert.equal(isUnreadSignal({ type: UNREAD_CHANGED, data: { messages: 3 }, timestamp: 1 }), true);
+  assert.equal(isUnreadSignal({ type: FEED_HEAD_CHANGED, data: {}, timestamp: 1 }), false);
+  assert.equal(isUnreadSignal({ type: CHAT_MESSAGE_ARRIVED, data: {}, timestamp: 1 }), false);
+  assert.equal(isUnreadSignal(null), false);
+});
+
+test("a personal topic needs no grant, unlike a conversation topic", async () => {
+  /*
+    Both are private, by different mechanisms: `user:<id>` is gated on the socket
+    being AUTHENTICATED as that reader, a conversation on a signed grant naming
+    it. So the badge subscription needs no grant plumbing — which is why it can
+    be a plain subscribe where the thread signal could not.
+  */
+  const sockets: Fake[] = [];
+  const gateway = createGateway(
+    "wss://gw.example/",
+    () => {
+      const sock = fakeSocket();
+      sockets.push(sock);
+      return sock;
+    },
+    { getToken: () => Promise.resolve("tok") },
+  );
+  const topic = userTopic(ME)!;
+  const off = gateway.subscribe(topic, () => {});
+  const sock = sockets[0]!;
+  try {
+    sock.state = 1;
+    fire(sock, "onopen");
+    // `authenticate` awaits the token source, so its frame is a microtask away —
+    // asserting synchronously here reads an empty buffer and proves nothing.
+    await Promise.resolve();
+    await Promise.resolve();
+    // Authenticated first, never subscribed-and-refused, and never with a grant.
+    const frames = sock.sent.map((raw) => JSON.parse(raw) as Record<string, unknown>);
+    assert.ok(
+      frames.every((f) => f.grant === undefined),
+      "a personal topic is never sent with a grant",
+    );
+    assert.ok(
+      frames.some((f) => f.type === "authenticate"),
+      "it authenticates instead",
+    );
+  } finally {
+    off();
+  }
 });
