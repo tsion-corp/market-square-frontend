@@ -12,6 +12,10 @@ import {
   STABLE_MS,
   speakerSignalOf,
   userTopic,
+  CHAT_MESSAGE_ARRIVED,
+  chatSignalOf,
+  conversationTopic,
+  conversationTopicOwner,
   type Gateway,
   type SocketLike,
 } from "./ws-gateway.ts";
@@ -562,4 +566,165 @@ test("no gateway URL means never connected, and subscribing cannot change that",
   assert.equal(gateway.connected, false);
   assert.deepEqual(seen, []);
   off();
+});
+
+/*
+  GATED CONVERSATION TOPICS.
+
+  The gateway refuses `market-square:conversation:<id>` on a socket that has not
+  presented a grant naming it, and a refusal is not reported back — so a
+  subscribe sent without one leaves a listener that looks live and never fires.
+  The client therefore carries grants and withholds the subscribe until it has
+  one. Minting and renewing are the caller's, not the client's.
+*/
+test("a conversation topic is not sent until a grant arrives, then is sent with it", () => {
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const topic = conversationTopic("c1")!;
+  // Both registered BEFORE any assertion, and released in `finally`. A release
+  // written after a failing assertion is skipped, and the leftover listener keeps
+  // the socket — and its ping interval — alive for ever.
+  const offUngranted = gateway.subscribe(topic, () => {});
+  const sock = sockets[0]!;
+  sock.state = 1;
+  fire(sock, "onopen");
+  let offGranted: (() => void) | null = null;
+  try {
+    assert.deepEqual(sock.sent, [], "no grant, so nothing was claimed");
+
+    // The same topic again, now with a grant: it supersedes and IS sent, even
+    // though the topic is already subscribed — that is how renewal arrives.
+    offGranted = gateway.subscribe(topic, () => {}, { grant: "g1" });
+    assert.deepEqual(JSON.parse(sock.sent[0]!), {
+      type: "subscribe",
+      topics: [topic],
+      grant: "g1",
+    });
+
+    // The SAME grant again is not re-sent: renewal means a different token.
+    sock.sent.length = 0;
+    gateway.subscribe(topic, () => {}, { grant: "g1" })();
+    assert.deepEqual(sock.sent, [], "an unchanged grant re-claims nothing");
+  } finally {
+    offGranted?.();
+    offUngranted();
+  }
+});
+
+test("a reconnect re-presents each topic's own grant", () => {
+  /*
+    The gateway forgets everything when the socket goes, and one reader can hold
+    conversations covered by DIFFERENT grants — the protocol carries one grant per
+    subscribe, so a reconnect has to send a frame per grant, not one frame for
+    everything.
+  */
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const a = conversationTopic("c1")!;
+  const b = conversationTopic("c2")!;
+  const lane = laneTopic("for-you")!;
+  const offA = gateway.subscribe(a, () => {}, { grant: "gA" });
+  const offB = gateway.subscribe(b, () => {}, { grant: "gB" });
+  const offLane = gateway.subscribe(lane, () => {});
+  const sock = sockets[0]!;
+  try {
+    sock.state = 1;
+    fire(sock, "onopen");
+    const frames = sock.sent.map((raw) => JSON.parse(raw) as Record<string, unknown>);
+    // The public lane in one ungated frame...
+    assert.deepEqual(
+      frames.find((f) => f.grant === undefined),
+      { type: "subscribe", topics: [lane] },
+    );
+    // ...and one frame per grant, never two conversations under one token.
+    assert.deepEqual(
+      frames.filter((f) => f.grant !== undefined),
+      [
+        { type: "subscribe", topics: [a], grant: "gA" },
+        { type: "subscribe", topics: [b], grant: "gB" },
+      ],
+    );
+  } finally {
+    offA();
+    offB();
+    offLane();
+  }
+});
+
+test("two conversations under ONE grant go in one frame", () => {
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const a = conversationTopic("c1")!;
+  const b = conversationTopic("c2")!;
+  const offA = gateway.subscribe(a, () => {}, { grant: "shared" });
+  const offB = gateway.subscribe(b, () => {}, { grant: "shared" });
+  const sock = sockets[0]!;
+  try {
+    sock.state = 1;
+    fire(sock, "onopen");
+    const gated = sock.sent
+      .map((raw) => JSON.parse(raw) as Record<string, unknown>)
+      .filter((f) => f.grant !== undefined);
+    assert.deepEqual(gated, [{ type: "subscribe", topics: [a, b], grant: "shared" }]);
+  } finally {
+    offA();
+    offB();
+  }
+});
+
+test("the last listener leaving takes the grant with it", () => {
+  // Otherwise the next reconnect re-presents a token for a topic nobody is on.
+  const sockets: Fake[] = [];
+  const gateway = createGateway("wss://gw.example/", () => {
+    const sock = fakeSocket();
+    sockets.push(sock);
+    return sock;
+  });
+  const topic = conversationTopic("c1")!;
+  const keepAlive = gateway.subscribe(laneTopic("for-you")!, () => {});
+  const off = gateway.subscribe(topic, () => {}, { grant: "g1" });
+  const sock = sockets[0]!;
+  try {
+    sock.state = 1;
+    fire(sock, "onopen");
+    off();
+    sock.sent.length = 0;
+    // A reconnect must not claim it again.
+    fire(sock, "onclose");
+    sock.state = 1;
+    fire(sock, "onopen");
+    const claimed = sock.sent.map((raw) => JSON.parse(raw) as { topics?: string[] });
+    assert.ok(
+      !claimed.some((f) => f.topics?.includes(topic)),
+      "a released conversation is not re-presented",
+    );
+  } finally {
+    keepAlive();
+  }
+});
+
+test("a conversation topic reads its id out, and nothing else does", () => {
+  assert.equal(conversationTopicOwner("market-square:conversation:c1"), "c1");
+  assert.equal(conversationTopicOwner("market-square:conversation:"), null);
+  assert.equal(conversationTopicOwner("market-square:feed:for-you"), null);
+  assert.equal(conversationTopic(null), null);
+  assert.equal(
+    chatSignalOf({ type: CHAT_MESSAGE_ARRIVED, data: { conversationId: "c1" }, timestamp: 1 }),
+    "c1",
+  );
+  // A frame with no conversation, and a frame of the wrong type, are both nothing.
+  assert.equal(chatSignalOf({ type: CHAT_MESSAGE_ARRIVED, data: {}, timestamp: 1 }), null);
+  assert.equal(chatSignalOf({ type: FEED_HEAD_CHANGED, data: { conversationId: "c1" }, timestamp: 1 }), null);
 });

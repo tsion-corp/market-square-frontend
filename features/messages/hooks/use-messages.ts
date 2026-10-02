@@ -41,6 +41,7 @@ import {
   openedConversationKey,
 } from "@/features/messages/lib/open-conversation";
 import type { Profile } from "@/lib/api/schemas";
+import { useThreadSignal } from "@/features/messages/hooks/use-thread-signal";
 
 /*
   THE SIGNAL EXISTS AND THIS CLIENT CANNOT HEAR IT YET.
@@ -70,16 +71,30 @@ import type { Profile } from "@/lib/api/schemas";
   That ordering is deliberate — reaching the public branch would hand every
   private thread to anyone who opens a socket.
 
-  `lib/ws-gateway-shared.ts` knows two modes: public topics subscribed on open,
+  `lib/ws-gateway-shared.ts` knew two modes: public topics subscribed on open,
   and personal `user:<id>` topics behind an `authenticate` frame. A grant is a
-  THIRD mode — fetch `GET /realtime/grant`, present it, and re-present it when
-  a socket reopens, because the grant is per conversation and not per session.
+  THIRD mode — fetch `GET /realtime/grant`, present it, and re-present it when a
+  socket reopens, because a grant is per conversation and not per session.
 
-  Until that is built, this is the mechanism rather than a floor, and it stays
-  at 5s. A slower interval with no subscriber behind it is a straight downgrade
-  for every reader, paid now for a benefit that does not exist — subscriber
-  first, confirm frames in prod, relax only after, which is the order ADR-0009
+  THAT IS NOW BUILT: `lib/realtime-grant.ts` mints and renews one, the client
+  carries it per topic and re-presents it on reconnect, and
+  `useThreadSignal` subscribes an open thread. So a message now arrives rather
+  than being waited for.
+
+  THE POLL STILL STAYS AT 5s, which is this file's own plan and not timidity:
+  subscriber first, confirm frames in production, relax only after. A slower
+  interval with no confirmed subscriber behind it is a straight downgrade for
+  every reader, paid now for a benefit nobody has measured — the order ADR-0009
   and the room chat signal both used.
+
+  AND WHEN IT DOES MOVE IT CANNOT JUST GO, for two reasons of which only the
+  first is obvious. The grant is CAPPED, filled with the most recently active
+  rooms, so a reader in more conversations than the cap has threads it does not
+  name — pinning the open one fixes that thread and no others. And a grant can be
+  UNAVAILABLE: the service answers SERVICE_UNAVAILABLE when realtime is not
+  configured and its own documentation calls that a working deployment where the
+  client keeps polling. So the condition is "this conversation is covered by a
+  grant we hold", never "the socket is up".
 
   What was actually costing the most here was never this poll: an open thread
   re-renders on every tick, and each re-render used to re-prefetch a profile
@@ -108,6 +123,9 @@ export function useConversations(tab: InboxTab = "all") {
 }
 
 export function useMessages(conversationId: string, open: boolean) {
+  // Hears `chatMessageArrived` while this thread is open. The poll below is
+  // deliberately unchanged — see the note above `THREAD_POLL_MS`.
+  useThreadSignal(conversationId, open);
   return useQuery({
     queryKey: ["ms", "messages", conversationId],
     queryFn: () => fetchMessages(conversationId),

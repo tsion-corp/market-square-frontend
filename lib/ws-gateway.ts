@@ -145,6 +145,41 @@ export function roomChatSignalOf(frame: GatewayFrame | null): string | null {
   return typeof streamId === "string" && streamId.length > 0 ? streamId : null;
 }
 
+/* ─── A CONVERSATION'S PRIVATE TOPIC ────────────────────────────────────────
+ * `market-square:conversation:<id>` says "a message arrived in this thread".
+ * Like every other frame here it is a REFETCH SIGNAL: it carries the message's
+ * id and nothing else — no body, no sender, no profile — so the thread still
+ * renders from `GET /conversations/:id/messages` exactly as it does on the
+ * poll, and a forged or stale frame can cause at most one extra read.
+ *
+ * UNLIKE the public lane and room topics, this one is GATED. The gateway will
+ * not issue it on a socket that has not presented a grant naming this
+ * conversation, because the alternative is anybody subscribing to anybody's
+ * thread. See `lib/realtime-grant.ts` for how one is obtained and why the poll
+ * cannot simply be deleted once it is.
+ */
+export const CHAT_MESSAGE_ARRIVED = "chatMessageArrived";
+
+/** A thread's private topic, or null without an id. */
+export function conversationTopic(conversationId: string | null | undefined): string | null {
+  return conversationId ? `market-square:conversation:${conversationId}` : null;
+}
+
+/** The conversation a message arrived in, or null for anything else. */
+export function chatSignalOf(frame: GatewayFrame | null): string | null {
+  if (!frame || frame.type !== CHAT_MESSAGE_ARRIVED) return null;
+  const conversationId = frame.data.conversationId;
+  return typeof conversationId === "string" && conversationId.length > 0 ? conversationId : null;
+}
+
+/** The conversation a topic names, or null when it is not a conversation topic. */
+export function conversationTopicOwner(topic: string): string | null {
+  const prefix = "market-square:conversation:";
+  if (!topic.startsWith(prefix)) return null;
+  const id = topic.slice(prefix.length);
+  return id.length > 0 ? id : null;
+}
+
 export const PING_MS = 25_000;
 export const BACKOFF_CAP_MS = 30_000;
 
@@ -202,8 +237,21 @@ export function personalTopicOwner(topic: string): string | null {
 
 
 export interface Gateway {
-  /** Subscribe a listener to a topic. Returns the unsubscribe. */
-  subscribe(topic: string, listener: (frame: GatewayFrame) => void): () => void;
+  /**
+   * Subscribe a listener to a topic. Returns the unsubscribe.
+   *
+   * A CONVERSATION topic is gated and needs `grant` — a token from
+   * `GET /realtime/grant` that names this conversation. The client only carries
+   * it: minting, pinning and renewing belong to the caller, which is the thing
+   * that knows which thread is on screen and can hold a timer. A conversation
+   * topic subscribed without one is simply never sent, because the gateway would
+   * refuse it and a refusal is invisible here.
+   */
+  subscribe(
+    topic: string,
+    listener: (frame: GatewayFrame) => void,
+    options?: { grant?: string },
+  ): () => void;
   /**
    * Whether a socket is OPEN right now.
    *
@@ -264,6 +312,16 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
     socket staying open is not.
   */
   const connectionListeners = new Set<(connected: boolean) => void>();
+  /*
+    The grant most recently supplied for a gated topic.
+
+    Held per topic rather than globally because one reader can hold several
+    conversations covered by different grants, and because a reconnect has to
+    re-present whatever each topic was subscribed with — the gateway forgets
+    everything when the socket goes. Replaced rather than accumulated: a renewed
+    grant supersedes the one it replaces.
+  */
+  const topicGrants = new Map<string, string>();
   let connected = false;
 
   /** Announce a transition, once, and never let one listener's throw stop the rest. */
@@ -299,6 +357,34 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
     if (socket && socket.readyState === OPEN) socket.send(JSON.stringify(frame));
   };
 
+  /**
+   * Subscribe these topics, carrying each one's grant.
+   *
+   * Ungated topics go in one frame, as they always did. Gated ones are grouped
+   * by the grant that covers them and sent one frame per grant, because the
+   * protocol carries a single `grant` per subscribe and one reader can hold
+   * conversations covered by different ones. A gated topic with no grant is
+   * dropped here rather than sent — see `hearable`.
+   */
+  const subscribeTopics = (topics: string[]) => {
+    if (topics.length === 0) return;
+    const ungated: string[] = [];
+    const byGrant = new Map<string, string[]>();
+    for (const topic of topics) {
+      if (conversationTopicOwner(topic) === null) {
+        ungated.push(topic);
+        continue;
+      }
+      const grant = topicGrants.get(topic);
+      if (grant === undefined) continue;
+      const group = byGrant.get(grant);
+      if (group) group.push(topic);
+      else byGrant.set(grant, [topic]);
+    }
+    if (ungated.length > 0) send({ type: "subscribe", topics: ungated });
+    for (const [grant, gated] of byGrant) send({ type: "subscribe", topics: gated, grant });
+  };
+
   const stopTimers = () => {
     if (pingTimer) clearInterval(pingTimer);
     pingTimer = null;
@@ -306,9 +392,18 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
     reconnectTimer = null;
   };
 
-  /** Topics this socket can be heard on as it stands: every public one, and the personal ones it is authenticated for. */
+  /**
+   * Topics this socket can be heard on as it stands: every public one, the
+   * personal ones it is authenticated for, and the conversations it holds a
+   * grant for.
+   *
+   * A gated topic with no grant is left out rather than sent and refused — the
+   * gateway's refusal is not reported back, so sending it would leave a listener
+   * that looks subscribed and never fires.
+   */
   const hearable = () =>
     [...listeners.keys()].filter((topic) => {
+      if (conversationTopicOwner(topic) !== null) return topicGrants.has(topic);
       const owner = personalTopicOwner(topic);
       return owner === null || owner === authedAs;
     });
@@ -344,7 +439,7 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
     if (!userId) return;
     // Held until now: a subscribe sent before the verification was refused.
     const mine = [...listeners.keys()].filter((topic) => personalTopicOwner(topic) === userId);
-    if (mine.length > 0) send({ type: "subscribe", topics: mine });
+    subscribeTopics(mine);
   };
 
   const open = (address: string) => {
@@ -378,8 +473,7 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
       setConnected(true);
       // Everything subscribed before or during the outage, again — the
       // personal topics once the gateway has verified who this is.
-      const topics = hearable();
-      if (topics.length > 0) send({ type: "subscribe", topics });
+      subscribeTopics(hearable());
       if (unheardPersonal().length > 0) authenticate();
       if (pingTimer) clearInterval(pingTimer);
       pingTimer = setInterval(() => send({ type: "ping" }), PING_MS);
@@ -491,7 +585,7 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
         connectionListeners.delete(listener);
       };
     },
-    subscribe(topic, listener) {
+    subscribe(topic, listener, options) {
       if (!url) return () => {};
       let set = listeners.get(topic);
       const fresh = !set;
@@ -500,8 +594,34 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
         listeners.set(topic, set);
       }
       set.add(listener);
+      /*
+        A GRANT SUPERSEDES, even when the topic is already subscribed. A renewed
+        grant arrives through this call for a topic somebody is already listening
+        to, and it has to replace the spent one — otherwise the reconnect after
+        the old one expires re-presents an expired token and the topic silently
+        stops being issued.
+      */
+      /*
+        A GRANT SUPERSEDES, and re-claims the topic even when somebody is already
+        listening to it.
+
+        Renewal arrives exactly this way: the caller subscribes again with a fresh
+        token for a thread already on screen. Gating the send on `fresh` meant a
+        renewed grant was stored and never presented — the gateway kept the spent
+        one, and the topic stopped being issued the moment it expired, which looks
+        like "messages stopped arriving" and nothing else. A test caught it.
+      */
+      const renewed = options?.grant !== undefined && topicGrants.get(topic) !== options.grant;
+      if (options?.grant !== undefined) topicGrants.set(topic, options.grant);
+      const gated = conversationTopicOwner(topic) !== null;
       const owner = personalTopicOwner(topic);
-      if (fresh && (owner === null || owner === authedAs)) send({ type: "subscribe", topics: [topic] });
+      if (gated && (fresh || renewed)) {
+        // Sent only with a grant; `subscribeTopics` drops it otherwise, and the
+        // reconnect will carry it once one has been supplied.
+        subscribeTopics([topic]);
+      } else if (fresh && (owner === null || owner === authedAs)) {
+        send({ type: "subscribe", topics: [topic] });
+      }
       // A personal topic on an open socket that is not yet this account: it
       // is subscribed once the gateway has verified the reader's token.
       else if (fresh) authenticate();
@@ -512,6 +632,9 @@ export function createGateway(url: string, makeSocket: SocketFactory, options: G
         current.delete(listener);
         if (current.size > 0) return;
         listeners.delete(topic);
+        // The grant goes with the last listener. Keeping it would re-present a
+        // token for a topic nobody is on, after the next reconnect.
+        topicGrants.delete(topic);
         send({ type: "unsubscribe", topics: [topic] });
         // Last subscriber gone: the socket has nothing to carry.
         if (listeners.size === 0) disconnect();
