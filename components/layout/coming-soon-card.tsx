@@ -239,13 +239,25 @@ export function ComingSoonCard({ stream }: { stream: Stream }) {
           the card-wide link below, so each keeps its own target. The decorative
           layers between them are `pointer-events-none`, so a tap on the cover
           falls through to the card link rather than landing on an image. */}
-      <div className="relative z-10 flex h-full items-start gap-[35px] pl-[64px] pr-[16px]">
+      {/*
+        POINTER-EVENTS-NONE ON THE COLUMN, AUTO ON WHAT IS ACTUALLY PRESSABLE.
+
+        This div fills the whole card and sits above the card-wide link, so with
+        pointer events it swallowed EVERY click and had no handler of its own —
+        which is why lifting it to `z-10` fixed the paint order and left the card
+        exactly as dead as before. The layers it was lifted over were already
+        transparent to clicks; this one was the only thing in the way.
+
+        So the column passes clicks through and the two things that are really
+        controls — the title link and Share — take them back.
+      */}
+      <div className="pointer-events-none relative z-10 flex h-full items-start gap-[35px] pl-[64px] pr-[16px]">
         {/* `Frame 2147230720` — 16 down, 12 gap; the column that flexes. */}
         <div className="mt-[16px] flex min-w-0 flex-1 flex-col gap-[12px]">
           <div className="flex flex-col gap-[8px]">
             <Link
               href={href}
-              className="ws-press line-clamp-2 text-[14px] font-semibold leading-[16px] text-white"
+              className="ws-press pointer-events-auto line-clamp-2 text-[14px] font-semibold leading-[16px] text-white"
             >
               {stream.title}
             </Link>
@@ -356,7 +368,7 @@ export function ComingSoonCard({ stream }: { stream: Stream }) {
           <button
             type="button"
             onClick={() => setSharing(true)}
-            className="ws-press flex h-[19px] items-center gap-[4px] rounded-full bg-[linear-gradient(180deg,#9f65fd_0%,#5b05e6_100%)] px-[8.83px] text-[8px] font-medium leading-[10.4px] text-white transition-opacity hover:opacity-90"
+            className="ws-press pointer-events-auto flex h-[19px] items-center gap-[4px] rounded-full bg-[linear-gradient(180deg,#9f65fd_0%,#5b05e6_100%)] px-[8.83px] text-[8px] font-medium leading-[10.4px] text-white transition-opacity hover:opacity-90"
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- the node's own export */}
             <img
