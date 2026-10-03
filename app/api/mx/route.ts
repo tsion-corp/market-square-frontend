@@ -52,6 +52,11 @@ const INGEST = "https://api.mixpanel.com/track";
  */
 const TOKEN = process.env.NEXT_PUBLIC_MIXPANEL_TOKEN ?? "";
 
+/** So a missing token is said once per instance rather than once per event. */
+let warnedNoToken = false;
+/** Likewise for a batch Mixpanel refuses while answering 200. */
+let warnedRejected = false;
+
 /**
  * Generous for a batch of events and far below anything worth relaying.
  * A payload over this is not an event, so it is dropped rather than forwarded.
@@ -119,6 +124,30 @@ export async function POST(request: Request) {
     everything else this route declines.
   */
   if (!TOKEN) {
+    /*
+      SAY IT ONCE, SERVER-SIDE. Dropping is right — forwarding with the caller's
+      own token is the relay the stamping exists to prevent — but dropping
+      SILENTLY is how this becomes undiagnosable.
+
+      `NEXT_PUBLIC_*` is inlined into the browser bundle at BUILD time, and that
+      is a different thing from being present in the server RUNTIME environment.
+      So this route can be running in a deployment whose bundle carries the
+      token while `process.env` here does not, and every event is discarded
+      while the browser, the network tab and this response all look perfect. The
+      symptom reaching anybody is "analytics is not recording", with nothing
+      anywhere to contradict it.
+
+      Latched, because this is per-request and the condition is a deployment
+      fact that will not change until somebody redeploys — one line in the log
+      is a signal, one per event is a bill.
+    */
+    if (!warnedNoToken) {
+      warnedNoToken = true;
+      console.error(
+        "[mx] NEXT_PUBLIC_MIXPANEL_TOKEN is not set in this runtime — every event is being dropped. " +
+          "It is inlined into the browser bundle at build time; it must ALSO be set for the server runtime."
+      );
+    }
     return new NextResponse(null, { status: 204 });
   }
 
@@ -134,12 +163,41 @@ export async function POST(request: Request) {
   );
 
   try {
-    await fetch(INGEST, {
+    /*
+      THE RESPONSE IS READ, and this is the part that was missing.
+
+      Mixpanel answers HTTP 200 WHETHER OR NOT IT ACCEPTED THE EVENTS. The body
+      is the whole signal: `1` means at least one event was taken, `0` means
+      none were — and their own spec is explicit that a 200 "does not signify a
+      valid project token or secret". So a wrong token, a malformed payload or a
+      rejected batch all look identical to success from the status line.
+
+      This route was fire-and-forget, so every one of those was invisible. That
+      is the same shape as the silent drop above, one layer further out: the
+      thing reporting success is not the thing that decides.
+    */
+    const answer = await fetch(INGEST, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: stamped,
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+
+    /*
+      `0` is a refusal wearing a 200. Latched like the missing token, because
+      the realistic causes — a bad project token, a project that has been
+      deleted, a payload shape they stopped accepting — are deployment facts
+      rather than per-request accidents, and one line is a signal while one per
+      event is a bill.
+    */
+    const verdict = (await answer.text()).trim();
+    if (verdict === "0" && !warnedRejected) {
+      warnedRejected = true;
+      console.error(
+        "[mx] Mixpanel answered 200 but REJECTED the batch (body `0`). " +
+          "Their 200 does not mean the project token is valid — check the token this runtime is stamping."
+      );
+    }
   } catch {
     /*
       Mixpanel being slow, down or refusing is not this request's problem and
