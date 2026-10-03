@@ -22,8 +22,13 @@ import { readFileSync } from "node:fs";
   So null means "not named here", never "nobody was paid".
 */
 
-const root = new URL("..", import.meta.url).pathname;
-const read = (path: string) => readFileSync(`${root}${path}`, "utf8");
+/*
+  THE URL OBJECT, NOT ITS `pathname` — `new URL("..", import.meta.url).pathname`
+  keeps a directory's space as `%20`, which `readFileSync` cannot open. On a
+  checkout whose path contains one, this file threw before asserting anything.
+*/
+const root = new URL("../", import.meta.url);
+const read = (path: string) => readFileSync(new URL(path, root), "utf8");
 const code = (path: string) =>
   read(path).replace(/\/\*[\s\S]*?\*\//gu, "").replace(/\/\/[^\n]*/gu, "").replace(/\{\/\*[\s\S]*?\*\/\}/gu, "");
 

@@ -22,16 +22,36 @@ import { readFileSync } from "node:fs";
   notifications change.
 */
 
-const root = new URL("..", import.meta.url).pathname;
-const types = readFileSync(`${root}features/notifications/lib/types.ts`, "utf8");
-const page = readFileSync(`${root}features/notifications/components/notifications-page.tsx`, "utf8");
+/*
+  THE URL OBJECT, NOT ITS `pathname`. `new URL("..", import.meta.url).pathname`
+  keeps a directory's space as `%20` and `readFileSync` cannot open it — so on
+  any checkout whose path contains a space this file threw before asserting
+  anything, and the suite reported it as one of a crowd of identical failures.
+
+  That is not cosmetic: this exact test caught a real defect in CI that could not
+  run locally, so the author pushed in good faith having seen it "pass". A test
+  that cannot run where the work happens is a test that only ever reports late.
+*/
+const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const types = read("features/notifications/lib/types.ts");
+const page = read("features/notifications/components/notifications-page.tsx");
 
 /** The kinds the enum lists, read out of the schema rather than re-typed. */
 function listedKinds(): string[] {
   const start = types.indexOf("NotificationKindSchema");
   assert.notEqual(start, -1, "NotificationKindSchema has been renamed");
   const block = types.slice(start, types.indexOf("])", start));
-  return [...new Set(block.match(/"[a-z_]+"/gu)?.map((q) => q.slice(1, -1)) ?? [])];
+  /*
+    COMMENTS STRIPPED FIRST. The enum is documented heavily — several notes
+    explain why a kind is listed, and one explains why a kind is deliberately
+    NOT. A quoted word in that prose was read as a member: a comment saying
+    'there is no "declined" counterpart' registered `declined` as a kind the
+    page had failed to draw, and failed CI for a kind that does not exist.
+
+    The test is about what the ENUM lists, so it reads the enum.
+  */
+  const code = block.replace(/\/\*[\s\S]*?\*\//gu, "").replace(/\/\/[^\n]*/gu, "");
+  return [...new Set(code.match(/"[a-z_]+"/gu)?.map((q) => q.slice(1, -1)) ?? [])];
 }
 
 test("every listed notification kind has its own words", () => {

@@ -25,8 +25,13 @@ import { readFileSync } from "node:fs";
   it produces a shell nobody sees and one more way for a build to fail.
 */
 
-const root = new URL("..", import.meta.url).pathname;
-const page = readFileSync(`${root}app/auth/callback/page.tsx`, "utf8");
+/*
+  THE URL OBJECT, NOT ITS `pathname` — `new URL("..", import.meta.url).pathname`
+  keeps a directory's space as `%20`, which `readFileSync` cannot open. On a
+  checkout whose path contains one, this file threw before asserting anything.
+*/
+const root = new URL("../", import.meta.url);
+const page = readFileSync(new URL("app/auth/callback/page.tsx", root), "utf8");
 
 test("the OAuth callback opts out of prerendering", () => {
   assert.match(
