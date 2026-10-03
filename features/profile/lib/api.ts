@@ -256,19 +256,26 @@ export async function renewVerification() {
   return RenewVerificationSchema.parse(await msApi.post("/me/verification/renew"));
 }
 
-/*
-  NO WINDOW IS SENT, deliberately. The board has always been an ALL-TIME tally
-  (the service's score only ever accumulates), and the two services on either
-  side of the next backend deploy agree on exactly one request that returns it:
-  none. Today's service knows only `weekly` and treats it as its default — the
-  same all-time numbers. The next one defaults to `all`, and turns `weekly`
-  into a REAL rolling 7 days that starts empty on deploy. Pinning `weekly` would
-  blank the board the day that ships; sending `all` would be refused by today's
-  service. When the window dropdown switches on This week and This month, the
-  chosen window is passed here, and only then.
-*/
-export async function fetchSpotlight() {
-  return SpotlightSchema.parse(await msApi.get("/spotlight"));
+/**
+ * THE SPOTLIGHT BOARD, FOR A STRETCH OF TIME.
+ *
+ * This used to send no window at all, and the comment here explained why: the
+ * board had always been an all-time tally, the service knew only `weekly` and
+ * treated it as a name rather than a period, and sending `all` would have been
+ * refused. Every word of that was true when written.
+ *
+ * It is not now. The service carries `weekly | monthly | all`, `all` is its
+ * documented default, and the two real windows are ROLLING — the last 7 and 30
+ * days, not calendar periods, because a calendar week has to start in some
+ * timezone and empties the board every Monday for the people in the others.
+ *
+ * So the window is passed, and the board can actually turn over. An all-time
+ * leaderboard rewards whoever was early and then stops being news: the same
+ * names sit at the top for ever, and there is nothing a newcomer can do about
+ * it that would show up in their lifetime.
+ */
+export async function fetchSpotlight(window: "weekly" | "monthly" | "all" = "weekly") {
+  return SpotlightSchema.parse(await msApi.get(`/spotlight?window=${window}`));
 }
 
 export async function fetchCreatorApplication() {
