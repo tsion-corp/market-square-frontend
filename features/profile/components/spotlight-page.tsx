@@ -66,15 +66,37 @@ const PODIUM_SIZE_BY_RANK = [96, 76, 64];
  */
 type SpotlightWindow = "weekly" | "monthly" | "all";
 
+/*
+  THE WEEK LEADS, AND IT IS THE DEFAULT.
+
+  All three are real now. They were drawn disabled because the service kept one
+  running total and nothing reset, decayed or windowed it — so "This week" was a
+  false claim about all-time numbers. The service keeps dated points now and
+  both windows are ROLLING (the last 7 and 30 days, not calendar periods, so
+  nobody's board empties at midnight in a timezone they do not live in).
+
+  The WEEK is first and default because an all-time board stops being news:
+  it rewards whoever was early, the same names sit at the top for ever, and a
+  newcomer has nothing they can do that would show up in their lifetime.
+  ogazboiz: "we dont want people to just be there it need to be resetting ...
+  we wont give other people a chance". All time is still there for anybody who
+  wants the total, it is just not what the page opens on.
+*/
 const WINDOWS: { value: SpotlightWindow; label: string; live: boolean }[] = [
+  { value: "weekly", label: "This week", live: true },
+  { value: "monthly", label: "This month", live: true },
   { value: "all", label: "All time", live: true },
-  { value: "weekly", label: "This week", live: false },
-  { value: "monthly", label: "This month", live: false },
 ];
 
-function SpotlightWindowMenu() {
+function SpotlightWindowMenu({
+  value,
+  onChange,
+}: {
+  value: SpotlightWindow;
+  onChange: (next: SpotlightWindow) => void;
+}) {
   const [open, setOpen] = useState(false);
-  const current = WINDOWS[0]!;
+  const current = WINDOWS.find((w) => w.value === value) ?? WINDOWS[0]!;
   return (
     <div
       className="relative shrink-0"
@@ -110,8 +132,10 @@ function SpotlightWindowMenu() {
                       <span aria-hidden className="block h-2 w-2 rounded-full bg-create" />
                     ) : undefined
                   }
-                  hint={window.live ? undefined : "Coming soon: weekly and monthly ranking needs a scoring history first"}
-                  onClick={window.live ? () => setOpen(false) : undefined}
+                  onClick={() => {
+                    onChange(window.value);
+                    setOpen(false);
+                  }}
                 />
               ))}
             </MenuPanel>
@@ -123,14 +147,21 @@ function SpotlightWindowMenu() {
 }
 
 export function SpotlightPage() {
-  const board = useSpotlight();
+  /*
+    THE WEEK, unless the reader asks for something longer. Held here rather than
+    in the URL because it is a way of looking at one page, not a different page
+    — and a shared Spotlight link should open on whatever the sharer meant by
+    "the spotlight", which is the current one.
+  */
+  const [window, setWindow] = useState<SpotlightWindow>("weekly");
+  const board = useSpotlight(window);
 
   return (
     <>
       <ColumnHeader
         title="Spotlight"
         subtitle="The square's most active voices, ranked"
-        action={<SpotlightWindowMenu />}
+        action={<SpotlightWindowMenu value={window} onChange={setWindow} />}
       />
 
       {board.isPending && (
