@@ -4,6 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { useGate } from "@/hooks/use-gate";
+import { cn } from "@/lib/cn";
+import {
+  STORY_BACKGROUNDS,
+  STORY_FONTS,
+  STORY_FONT_CLASS,
+  type StoryBackground,
+  type StoryFont,
+} from "@/lib/story-style";
 import { IconImage, IconSend, IconX } from "@/components/ui/icons";
 import {
   ensureUploadLimits,
@@ -50,6 +58,14 @@ export function StoryCreator({ onClose }: { onClose: () => void }) {
   const upload = useUploadPostMedia();
   const fileInput = useRef<HTMLInputElement>(null);
   const [stage, setStage] = useState<Stage>({ kind: "choose" });
+  /*
+    WHAT THE STORY LOOKS LIKE. Defaulted to the service's first colour and a
+    plain face, so somebody who touches nothing still sends a style rather than
+    null — null means "the old default gradient", which is a real state and not
+    the one a person who just opened a picker intends.
+  */
+  const [background, setBackground] = useState<StoryBackground>(STORY_BACKGROUNDS[0]);
+  const [font, setFont] = useState<StoryFont>("sans");
   const [caption, setCaption] = useState("");
   const [text, setText] = useState("");
   const busy = upload.isPending || create.isPending;
@@ -124,7 +140,20 @@ export function StoryCreator({ onClose }: { onClose: () => void }) {
         }
         // The post contract needs text; an invisible separator keeps a
         // picture-only story from showing a caption nobody wrote.
-        create.mutate({ kind: "story", text: body || "\u2063", mediaUrl }, { onSuccess: () => onClose() });
+        create.mutate(
+          {
+            kind: "story",
+            text: body || "\u2063",
+            mediaUrl,
+            /*
+              A TEXT STORY ONLY. The service refuses `storyStyle` on anything
+              else with a 400 rather than ignoring it, and a background behind a
+              photo would be invisible anyway — the picture fills the frame.
+            */
+            ...(stage.kind === "text" ? { storyStyle: { background, font } } : {}),
+          },
+          { onSuccess: () => onClose() }
+        );
       })()
     );
   };
@@ -241,7 +270,10 @@ export function StoryCreator({ onClose }: { onClose: () => void }) {
 
       {stage.kind === "text" && (
         <>
-          <div className={`mx-3 flex min-h-0 flex-1 items-center justify-center rounded-[28px] px-6 ${STORY_GRADIENT}`}>
+          <div
+            className="mx-3 flex min-h-0 flex-1 items-center justify-center rounded-[28px] px-6"
+            style={{ background }}
+          >
             <textarea
               value={text}
               onChange={(event) => setText(event.target.value)}
@@ -250,8 +282,54 @@ export function StoryCreator({ onClose }: { onClose: () => void }) {
               autoFocus
               placeholder="Type a status"
               aria-label="Story text"
-              className="w-full resize-none bg-transparent text-center text-[28px] font-bold leading-tight text-white outline-none placeholder:text-white/60"
+              className={cn(
+                "w-full resize-none bg-transparent text-center text-[28px] font-bold leading-tight text-white outline-none placeholder:text-white/60",
+                STORY_FONT_CLASS[font]
+              )}
             />
+          </div>
+          {/*
+            THE EIGHT, AND THE FOUR. Driven off the service's own lists rather
+            than a colour input: a ninth hex is a 400, so a free picker would
+            offer colours that cannot be saved.
+
+            Above the send row rather than beside it — the canvas is what they
+            change and the eye should not have to leave it.
+          */}
+          <div className="flex items-center gap-2 overflow-x-auto px-4 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {STORY_BACKGROUNDS.map((colour) => (
+              <button
+                key={colour}
+                type="button"
+                aria-label={`Background ${colour}`}
+                aria-pressed={background === colour}
+                onClick={() => setBackground(colour)}
+                style={{ background: colour }}
+                className={cn(
+                  "ws-press h-7 w-7 shrink-0 rounded-full border transition-transform",
+                  background === colour ? "scale-110 border-white" : "border-white/25"
+                )}
+              />
+            ))}
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto px-4 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {STORY_FONTS.map((token) => (
+              <button
+                key={token}
+                type="button"
+                aria-pressed={font === token}
+                onClick={() => setFont(token)}
+                className={cn(
+                  "ws-press shrink-0 rounded-full border px-3 py-1 text-[12px] capitalize transition-colors",
+                  STORY_FONT_CLASS[token],
+                  font === token
+                    ? "border-white bg-white text-black"
+                    : "border-white/25 text-white/80 hover:bg-white/10"
+                )}
+              >
+                {token}
+              </button>
+            ))}
           </div>
           <div className="flex items-center justify-between gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
             <span className="tnum text-[12px] text-white/40">

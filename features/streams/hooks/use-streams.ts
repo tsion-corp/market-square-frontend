@@ -41,6 +41,13 @@ import {
   updateActivity,
   createActivity,
   createStream,
+  fetchRoomGuests,
+  knockWithCode,
+  fetchMyKnock,
+  fetchWaitingKnocks,
+  resolveKnock,
+  inviteRoomGuest,
+  removeRoomGuest,
   endStream,
   fetchActivities,
   fetchMyTickets,
@@ -1058,4 +1065,143 @@ export function useMuteSpeaker(streamId: string) {
     },
   });
   return { ...mutation, unavailable: unavailable || muteMissing };
+}
+
+const roomGuestsKey = (streamId: string) => ["ms", "room-guests", streamId] as const;
+
+/**
+ * WHO MAY ENTER THIS PRIVATE ROOM — host only, and only for a room with no house.
+ *
+ * A room that belongs to a house answers 400: its audience is the group and
+ * there is no list. A guest asking answers 403, because a guest list names the
+ * people who were invited and is not something the invited get to read.
+ *
+ * So this is asked ONLY where both are already known to be true, rather than
+ * asked optimistically and the error swallowed — an error state that is the
+ * normal case for most callers is not an error state, it is a missing check.
+ */
+export function useRoomGuests(streamId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: roomGuestsKey(streamId),
+    queryFn: () => fetchRoomGuests(streamId),
+    enabled: enabled && Boolean(streamId),
+  });
+}
+
+/**
+ * Let somebody into a private room that is already running.
+ *
+ * THE PIECE THAT WAS MISSING. `guests` on create was the only way anybody was
+ * ever added, so a host who forgot somebody — or whose guest could not get in —
+ * had no move except closing the room and making another one. The route has
+ * been live the whole time and nothing called it.
+ */
+export function useInviteRoomGuest(streamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (profileId: string) => inviteRoomGuest(streamId, profileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: roomGuestsKey(streamId) });
+      toast.success("They can come in now");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't add them.")),
+  });
+}
+
+/** Take somebody back out. The guest list IS the membership, so this removes
+ *  their access rather than only their name — the door closes on their next read. */
+export function useRemoveRoomGuest(streamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (profileId: string) => removeRoomGuest(streamId, profileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: roomGuestsKey(streamId) });
+      toast.success("Removed from the room");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't remove them.")),
+  });
+}
+
+const knocksKey = (streamId: string) => ["ms", "room-knocks", streamId] as const;
+const myKnockKey = (streamId: string) => ["ms", "my-knock", streamId] as const;
+
+/**
+ * ASK TO COME IN, with the code somebody gave you.
+ *
+ * No optimistic anything: the whole point is that a human has to answer, so the
+ * only honest state after this succeeds is "asked".
+ */
+export function useKnockWithCode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => knockWithCode(code),
+    onSuccess: (knock) => {
+      queryClient.setQueryData(myKnockKey(knock.streamId), knock);
+      /*
+        ALREADY INSIDE IS AN IMMEDIATE `admitted` with nothing queued — the host,
+        a guest, anybody the three doors already admit. They asked to come in and
+        they are in, so this says so rather than "asked".
+      */
+      toast.success(knock.status === "admitted" ? "You're in" : "Asked to join");
+    },
+    onError: (error) => toast.error(errorMessage(error, "Couldn't ask to join.")),
+  });
+}
+
+/**
+ * MY OWN KNOCK, polled while the reader is waiting on it.
+ *
+ * `declined` is reported as `pending` here for ever, by design — so this poll
+ * can never turn into a refusal and nothing built on it may imply one is
+ * coming. It is watching for `admitted`, and for nothing else.
+ */
+export function useMyKnock(streamId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: myKnockKey(streamId),
+    queryFn: () => fetchMyKnock(streamId),
+    enabled: enabled && Boolean(streamId),
+    // Only while somebody is actually looking at a door they are waiting on.
+    refetchInterval: enabled ? 5_000 : false,
+    // A 404 is "you have not knocked", which is a state rather than a failure.
+    retry: false,
+  });
+}
+
+/**
+ * HOST: who is asking to come in.
+ *
+ * Polled, because a knock arrives while the host is doing something else and a
+ * queue nobody sees is a person standing outside a door nobody answers.
+ */
+export function useWaitingKnocks(streamId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: knocksKey(streamId),
+    queryFn: () => fetchWaitingKnocks(streamId),
+    enabled: enabled && Boolean(streamId),
+    refetchInterval: enabled ? 5_000 : false,
+  });
+}
+
+/**
+ * HOST: open the door, or do not.
+ *
+ * A DECLINE IS SILENT. The service tells the person nothing, their own knock
+ * still reads `pending`, and they cannot knock again — so the only signal that
+ * anything happened is this queue losing a row. The toast is therefore for the
+ * HOST's benefit alone and says what they did, not what the other person now
+ * knows.
+ */
+export function useResolveKnock(streamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ knockId, action }: { knockId: string; action: "admit" | "decline" }) =>
+      resolveKnock(streamId, knockId, action),
+    onSuccess: (_result, { action }) => {
+      queryClient.invalidateQueries({ queryKey: knocksKey(streamId) });
+      // Admitting writes a guest row, so the room's list changes with it.
+      queryClient.invalidateQueries({ queryKey: ["ms", "room-guests", streamId] });
+      toast.success(action === "admit" ? "They can come in" : "Declined");
+    },
+    onError: (error) => toast.error(errorMessage(error, "That didn't work.")),
+  });
 }

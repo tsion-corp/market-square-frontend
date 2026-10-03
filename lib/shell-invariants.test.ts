@@ -1355,7 +1355,10 @@ describe("Your Story works like WhatsApp's My status", () => {
   });
 
   it("posts a photo, video or text story through the ordinary upload and create path", () => {
-    assert.match(creator, /create\.mutate\(\{ kind: "story"/);
+    /* The call is multi-line now that a text story carries `storyStyle`; what
+       this is about is that stories go through the ORDINARY create path, not
+       how that call is spelled. */
+    assert.match(creator, /create\.mutate\(\s*\{\s*kind: "story"/u);
     assert.match(creator, /upload\.mutateAsync\(stage\.file\)/);
     assert.match(creator, /validateUpload\(file, "media"\)/);
     assert.match(creator, /createPortal\(/);
@@ -3771,23 +3774,44 @@ describe("QA round, 2026-09-15", () => {
     assert.match(choice, /router\.push\(sq\("\/gist-rooms\?open=1"\)\)/);
   });
 
-  it("9 · spotlight is a window dropdown that names the window the data actually is", () => {
-    assert.match(spotlight, /action=\{<SpotlightWindowMenu \/>\}/);
-    // The board accumulates forever (no reset, decay or window in the service),
-    // so the live window is All time, and "This week" is never claimed.
+  it("9 · spotlight's windows are all real, and the WEEK is what it opens on", () => {
+    /*
+      All three were drawn with two DISABLED, and that was honest: the service
+      kept one running total and nothing reset, decayed or windowed it, so
+      "This week" would have been a false claim about all-time numbers.
+
+      The service keeps dated points now — `weekly` is a rolling 7 days and
+      `monthly` a rolling 30 — so the control that said "coming soon" was
+      describing a capability that had arrived.
+
+      The WEEK leads because an all-time board stops being news: it rewards
+      whoever was early, the same names sit at the top for ever, and a newcomer
+      has nothing they can do that would show up in their lifetime.
+    */
+    assert.match(spotlight, /action=\{<SpotlightWindowMenu value=\{window\} onChange=\{setWindow\} \/>\}/);
+    assert.match(spotlight, /\{ value: "weekly", label: "This week", live: true \}/);
+    assert.match(spotlight, /\{ value: "monthly", label: "This month", live: true \}/);
     assert.match(spotlight, /\{ value: "all", label: "All time", live: true \}/);
-    assert.match(spotlight, /\{ value: "weekly", label: "This week", live: false \}/);
-    assert.match(spotlight, /\{ value: "monthly", label: "This month", live: false \}/);
-    assert.doesNotMatch(spotlight, /label: "This week", live: true/);
-    assert.match(spotlight, /hint=\{window\.live \? undefined : /);
+    // The "coming soon" hint described a capability that now exists.
+    assert.doesNotMatch(spotlight, /Coming soon: weekly and monthly ranking/);
+    assert.match(spotlight, /useState<SpotlightWindow>\("weekly"\)/);
   });
 
-  it("9b · spotlight asks for no window, so the board survives the backend's real weekly window", () => {
-    // Pinning "weekly" would blank the board once the service makes weekly a
-    // real rolling 7 days; sending "all" is refused by today's service.
+  it("9b · spotlight asks for a window, so the board can actually turn over", () => {
+    /*
+      This used to assert the OPPOSITE — that no window was sent — and it was
+      right at the time: the service knew only `weekly`, treated it as a name
+      rather than a period, and would have refused `all`. Pinning `weekly` then
+      would have blanked the board the day a real rolling week shipped.
+
+      It shipped. `weekly | monthly | all` are all live, `all` is the service's
+      documented default, and sending nothing is what kept every reader on an
+      all-time board for ever. The window is passed now, and it defaults to the
+      week.
+    */
     const api = stripComments(read("features/profile/lib/api.ts"));
-    assert.match(api, /msApi\.get\("\/spotlight"\)\);/);
-    assert.doesNotMatch(api, /window: "weekly"/);
+    assert.match(api, /window: "weekly" \| "monthly" \| "all" = "weekly"/);
+    assert.match(api, /msApi\.get\(`\/spotlight\?window=\$\{window\}`\)/);
   });
 
   it("8 · the story viewer reports a view, so an author's viewer list can have anyone in it", () => {

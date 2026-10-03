@@ -30,8 +30,13 @@ import { readFileSync } from "node:fs";
   exactly the readers it was built to recruit.
 */
 
-const root = new URL("..", import.meta.url).pathname;
-const source = readFileSync(`${root}features/messages/lib/discover-houses.ts`, "utf8");
+/*
+  THE URL OBJECT, NOT ITS `pathname` — `new URL("..", import.meta.url).pathname`
+  keeps a directory's space as `%20`, which `readFileSync` cannot open. On a
+  checkout whose path contains one, this file threw before asserting anything.
+*/
+const root = new URL("../", import.meta.url);
+const source = readFileSync(new URL("features/messages/lib/discover-houses.ts", root), "utf8");
 const code = source.replace(/\/\*[\s\S]*?\*\//gu, "").replace(/\/\/[^\n]*/gu, "");
 
 /** Each exported hook's body, so a gate on one cannot vouch for the other. */
@@ -75,7 +80,7 @@ test("the Home rail hides itself when there is nothing to join", () => {
     must take the heading and its link with it rather than leaving a door into
     an empty room.
   */
-  const rail = readFileSync(`${root}components/layout/popular-houses.tsx`, "utf8")
+  const rail = readFileSync(new URL("components/layout/popular-houses.tsx", root), "utf8")
     .replace(/\/\*[\s\S]*?\*\//gu, "");
   assert.match(
     rail,

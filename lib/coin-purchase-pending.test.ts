@@ -25,8 +25,13 @@ import { readFileSync } from "node:fs";
   notice says the balance will still read zero.
 */
 
-const root = new URL("..", import.meta.url).pathname;
-const sheet = readFileSync(`${root}features/gifts/components/coin-buy-sheet.tsx`, "utf8");
+/*
+  THE URL OBJECT, NOT ITS `pathname` — `new URL("..", import.meta.url).pathname`
+  keeps a directory's space as `%20`, which `readFileSync` cannot open. On a
+  checkout whose path contains one, this file threw before asserting anything.
+*/
+const root = new URL("../", import.meta.url);
+const sheet = readFileSync(new URL("features/gifts/components/coin-buy-sheet.tsx", root), "utf8");
 
 /** The source with comments stripped — a rule must be in the CODE, not near it. */
 function code(source: string): string {

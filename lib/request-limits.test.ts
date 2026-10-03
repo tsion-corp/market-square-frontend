@@ -19,9 +19,14 @@ import { readFileSync } from "node:fs";
   call sites are behind the `@/` alias.
 */
 
-const root = new URL("..", import.meta.url).pathname;
+/*
+  THE URL OBJECT, NOT ITS `pathname` — `new URL("..", import.meta.url).pathname`
+  keeps a directory's space as `%20`, which `readFileSync` cannot open. On a
+  checkout whose path contains one, this file threw before asserting anything.
+*/
+const root = new URL("../", import.meta.url);
 const code = (path: string) =>
-  readFileSync(`${root}${path}`, "utf8")
+  readFileSync(new URL(path, root), "utf8")
     .replace(/\/\*[\s\S]*?\*\//gu, "")
     .replace(/\/\/[^\n]*/gu, "");
 

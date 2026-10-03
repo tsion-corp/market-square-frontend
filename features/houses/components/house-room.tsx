@@ -143,6 +143,16 @@ interface SlotProps {
    * never import each other) and the grid is simply absent for a non-member,
    * while the name and the count are not.
    */
+  /**
+   * WHO MAY COME IN, for a private room that belongs to no house.
+   *
+   * A slot because the guest list is a STREAMS read and this is the houses
+   * slice; slices never import each other. Rendered in the share sheet, beside
+   * the code and the link, because that is where a host goes when they want
+   * somebody to join — and because the code and the link are not permission,
+   * which is the thing a host has to learn in the same place they find them.
+   */
+  guestsSlot?: (streamId: string) => React.ReactNode;
   houseSlot?: (
     conversationId: string,
     stage: {
@@ -244,6 +254,7 @@ export function HouseRoom({
   safetySlot,
   inviteGateSlot,
   houseSlot,
+  guestsSlot,
   personActionsSlot,
   tipSlot,
   joinHouse,
@@ -382,6 +393,7 @@ function HostScheduled({
   stream,
   followSlot,
   houseSlot,
+  guestsSlot,
   personActionsSlot,
   safetySlot,
   inviteGateSlot,
@@ -393,6 +405,7 @@ function HostScheduled({
   safetySlot: SlotProps["safetySlot"];
   inviteGateSlot?: SlotProps["inviteGateSlot"];
   houseSlot?: SlotProps["houseSlot"];
+  guestsSlot?: SlotProps["guestsSlot"];
   personActionsSlot?: SlotProps["personActionsSlot"];
   tipSlot?: SlotProps["tipSlot"];
   upcomingCardSlot?: SlotProps["upcomingCardSlot"];
@@ -625,6 +638,7 @@ function LiveHouse({
   safetySlot,
   inviteGateSlot,
   houseSlot,
+  guestsSlot,
   personActionsSlot,
   tipSlot,
   joinHouse,
@@ -1650,6 +1664,11 @@ function LiveHouse({
   }
   const unreadChat = chatSheet ? 0 : unreadRoomChat(chatItems, seenChat, me.data?.id);
   const [overflowSheet, setOverflowSheet] = useState(false);
+  /*
+    WHO MAY GET IN — the room's own `audience`, which decides whether every
+    share row below is a true sentence or the opposite of one.
+  */
+  const roomIsPrivate = stream?.audience === "private";
   const [person, setPerson] = useState<PersonTarget | null>(null);
 
   const openSlot = useCallback(
@@ -2774,6 +2793,20 @@ function LiveHouse({
       />
 
       <Sheet open={overflowSheet} onClose={() => setOverflowSheet(false)} title="This house">
+        {/*
+          A PRIVATE ROOM'S SHARE ROWS USED TO PROMISE THE OPPOSITE OF THE TRUTH.
+
+          Every hint below was written for a public room — "anyone can type it
+          in and walk in", "anyone with this can walk in and listen" — and was
+          shown unchanged on a private one. A host read them, shared the code in
+          good faith, and the person they sent it to was refused at the door.
+          The host then has no way to tell whether the product is broken or they
+          did something wrong, and the invitee has been told they are not wanted.
+
+          So the copy follows the room. The CONTROLS stay: a code and a link are
+          still how an invited person gets in quickly, and withholding them would
+          solve the lie by removing the feature.
+        */}
         {/* THE CODE GOES FIRST. It used to be host-only, as the conservative
             reading of "why cant they see the room code"; ogazboiz then ruled
             it: in a PUBLIC room everyone should see it ("they cant see it in
@@ -2786,13 +2819,21 @@ function LiveHouse({
         {roomCodeVisible(stream, isHost) && stream.roomCode && (
           <CopyCodeRow
             label="Room code"
-            hint="For reading down a phone. Anyone can type it in to walk in and listen."
+            hint={
+              roomIsPrivate
+                ? "For reading down a phone. Only the people you invited can use it."
+                : "For reading down a phone. Anyone can type it in to walk in and listen."
+            }
             code={stream.roomCode}
           />
         )}
         <CopyRow
           label="Listener link"
-          hint="Anyone with this can walk in and listen."
+          hint={
+            roomIsPrivate
+              ? "Only the people you invited can open this."
+              : "Anyone with this can walk in and listen."
+          }
           url={houseShareUrl(shareOrigin, stream.id)}
         />
         {/*
@@ -2807,6 +2848,17 @@ function LiveHouse({
           It reuses the composer's prefill contract, so there is one door into
           posting rather than a second one built for rooms.
         */}
+        {/*
+          NOT OFFERED ON A PRIVATE ROOM. Posting one to the feed puts a card in
+          front of everybody for a room that will refuse all of them — it
+          advertises a door that is locked, and every tap ends in "this room is
+          private". The host meant to invite people and instead published a
+          disappointment with their name on it.
+
+          Removed rather than disabled: a greyed row invites "why is this off?"
+          about something that is never going to be on for this room.
+        */}
+        {!roomIsPrivate && (
         <Link
           href={sq(
             "/?compose=1&text=" + encodeURIComponent(houseShareUrl(shareOrigin, stream.id))
@@ -2822,6 +2874,18 @@ function LiveHouse({
           </span>
           <IconChevronRight className="h-4 w-4 shrink-0 text-meta" />
         </Link>
+        )}
+        {/*
+          WHO CAN COME IN — only for the host of a PRIVATE room with no house.
+
+          That is the only shape with a guest list at all: a room belonging to a
+          house takes its audience from the group and the route answers 400,
+          and a guest asking gets a 403 because a list of who was invited is not
+          for the invited to read. So it is drawn exactly where the service will
+          answer, rather than drawn hopefully and the error hidden.
+        */}
+        {isHost && roomIsPrivate && !stream.houseConversationId && guestsSlot?.(stream.id)}
+
         {isHost && (
           <CopyRow
             label="Speaker link"

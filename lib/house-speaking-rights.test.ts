@@ -181,3 +181,68 @@ describe("the moderate mutation", () => {
     assert.match(body, /invalidateQueries\(\{ queryKey: \["ms", "messages", conversationId\] \}\)/u);
   });
 });
+
+describe("an invitation that has not been answered", () => {
+  const types = readFileSync(
+    new URL("../features/messages/lib/types.ts", import.meta.url),
+    "utf8"
+  );
+  const thread = readFileSync(
+    new URL("../features/messages/components/thread.tsx", import.meta.url),
+    "utf8"
+  );
+  const hooks = readFileSync(
+    new URL("../features/messages/hooks/use-messages.ts", import.meta.url),
+    "utf8"
+  );
+
+  it("is drawn, because an invisible one gets sent twice", () => {
+    /*
+      A leader adds somebody who does not follow them, it becomes a waiting seat
+      rather than a membership, and the roster does not change. With nothing on
+      screen the predictable next move is to add them again — the loop the
+      consent gate exists to prevent — and to conclude the product is broken.
+    */
+    assert.match(thread, /members\.data\.invited\.length > 0/u);
+    assert.ok(thread.includes("Invited · waiting to accept"));
+  });
+
+  it("is never counted as a member", () => {
+    /*
+      Separate array, not a flag on a member row. `items` means "people who are
+      in this group" and plenty of code leans on that; a waiting seat behind a
+      boolean makes every one of those callers correct only if it remembers to
+      check.
+    */
+    assert.match(types, /invited: z\.array\(ConversationInviteSchema\)/u);
+    assert.ok(
+      !/ConversationMemberSchema[\s\S]{0,400}invitedAt/u.test(types),
+      "an invitation must not become a member row"
+    );
+  });
+
+  it("defaults to empty, so it could land before the field shipped", () => {
+    assert.match(types, /invited: z\.array\(ConversationInviteSchema\)\.optional\(\)\.default\(\[\]\)/u);
+  });
+
+  it("asks the service who may withdraw, and the answer is wider than the ladder", () => {
+    /*
+      True for a leader AND for whoever SENT it, whatever their rank — any
+      member may invite, so without that a member who mistyped a name leaves a
+      seat only a leader can clear. Undoing your own act is not authority over
+      anybody, and it is the service's call, not a rule recomputed here.
+    */
+    assert.match(thread, /invite\.canManage &&/u);
+    assert.ok(
+      !/invite[\s\S]{0,200}viewerRole ===/u.test(thread),
+      "do not re-derive who may withdraw"
+    );
+  });
+
+  it("does not tell somebody they were removed from a house they were never in", () => {
+    // Same route as remove, different act. The toast is the sentence the person
+    // doing it reads to find out what they just did.
+    assert.ok(hooks.includes('"Invitation withdrawn"'));
+    assert.ok(hooks.includes('"Removed from the house"'), "removal keeps its own words");
+  });
+});

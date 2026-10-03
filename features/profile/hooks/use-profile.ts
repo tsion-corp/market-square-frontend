@@ -524,10 +524,24 @@ export function useRenewVerification() {
   });
 }
 
-export function useSpotlight() {
+/**
+ * THE BOARD, AND WHICH STRETCH OF TIME IT COVERS.
+ *
+ * Defaults to the ROLLING WEEK rather than all time, which is the point of
+ * having windows at all: an all-time board rewards whoever was early and then
+ * stops being news — the same names sit at the top for ever and a newcomer has
+ * nothing they can do about it. A week turns over.
+ *
+ * The window is IN THE KEY, so switching it is a new list rather than the old
+ * one relabelled — the mistake that made "This week" a false claim about
+ * all-time numbers for as long as it was drawn.
+ */
+export type SpotlightWindow = "weekly" | "monthly" | "all";
+
+export function useSpotlight(window: SpotlightWindow = "weekly") {
   return useQuery({
-    queryKey: ["ms", "spotlight", "all"],
-    queryFn: fetchSpotlight,
+    queryKey: ["ms", "spotlight", window],
+    queryFn: () => fetchSpotlight(window),
   });
 }
 

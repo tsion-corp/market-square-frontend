@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { STORY_BACKGROUNDS, STORY_FONTS } from "../story-style.ts";
 import { accountIdTail } from "../account-id.ts";
 
 // Shapes shared across slices, mirroring the backend contract
@@ -600,6 +601,29 @@ export type PostMediaItem = z.infer<typeof PostMediaSchema>;
 // likedByMe comes from the backend on authed reads; the optimistic like
 // cache is an overlay on that truth, reconciled on every refetch.
 export const PostSchema = z.object({
+  /**
+   * A TEXT STORY'S BACKGROUND AND FACE, or null for the one every story had
+   * before this existed.
+   *
+   * Returned by the service for weeks and read by nothing, so every story
+   * played on one hard-coded gradient whatever its author chose. Both fields
+   * are required together when the object is present — it is all-or-nothing —
+   * and `.catch(null)` is what keeps a story that somehow carries a background
+   * outside the eight from failing the whole post: it plays on the default
+   * instead of vanishing from the feed.
+   *
+   * See `lib/story-style.ts` for the palette, the font tokens and why the
+   * typeface each token means is ours to decide.
+   */
+  storyStyle: z
+    .object({
+      background: z.enum(STORY_BACKGROUNDS),
+      font: z.enum(STORY_FONTS),
+    })
+    .nullable()
+    .optional()
+    .default(null)
+    .catch(null),
   id: z.string(),
   authorId: z.string().optional().default(""),
   kind: z.enum(["update", "story"]).catch("update"),
