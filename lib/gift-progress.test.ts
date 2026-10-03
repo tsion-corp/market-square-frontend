@@ -17,13 +17,18 @@ import { GIFT_PHASE_SAYS } from "../features/tips/lib/availability.ts";
   into that question, on a state the client already knew and never said.
 */
 
-const root = new URL("..", import.meta.url).pathname;
+/*
+  THE URL OBJECT, NOT ITS `pathname` — `new URL("..", import.meta.url).pathname`
+  keeps a directory's space as `%20`, which `readFileSync` cannot open. On a
+  checkout whose path contains one, this file threw before asserting anything.
+*/
+const root = new URL("../", import.meta.url);
 const rooms = [
   "features/houses/components/house-room.tsx",
   "features/streams/components/stream-room.tsx",
 ] as const;
 const code = (p: string) =>
-  readFileSync(`${root}${p}`, "utf8").replace(/\/\*[\s\S]*?\*\//gu, "").replace(/\/\/[^\n]*/gu, "");
+  readFileSync(new URL(p, root), "utf8").replace(/\/\*[\s\S]*?\*\//gu, "").replace(/\/\/[^\n]*/gu, "");
 
 test("both gift surfaces report the phase they are in", () => {
   for (const rel of rooms) {

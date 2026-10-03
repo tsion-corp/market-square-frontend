@@ -16,6 +16,7 @@ import { PersonQuickActions as QuickActions } from "@/features/profile";
 import { HideIfBlocked, PersonFollow, PersonQuickActions, PersonSafetyRows } from "@/features/profile";
 import { TipButton } from "@/features/tips";
 import { UpcomingRoomCard } from "@/components/layout/upcoming-room-card";
+import { RoomGuestsPanel } from "@/components/layout/room-guests-panel";
 
 export function HouseRoomScreen({ houseId }: { houseId: string }) {
   const join = useJoinGroup();
@@ -25,6 +26,10 @@ export function HouseRoomScreen({ houseId }: { houseId: string }) {
       followSlot={(username) => <PersonFollow username={username} />}
       safetySlot={(username, mute) => <PersonSafetyRows username={username} mute={mute} />}
       inviteGateSlot={(handle, row) => <HideIfBlocked handle={handle}>{row}</HideIfBlocked>}
+      /* Who may enter a private room with no house. A streams read, composed
+         here because the room is the houses slice and slices never import each
+         other. */
+      guestsSlot={(streamId) => <RoomGuestsPanel streamId={streamId} />}
       // The wink + follow pair on every person card in the room (169:13368).
       personActionsSlot={(username, variant) => (
         <PersonQuickActions username={username} variant={variant} />

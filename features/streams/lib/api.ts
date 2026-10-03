@@ -1,8 +1,9 @@
 "use client";
 
+import { z } from "zod";
 import { msApi } from "@/lib/api/service";
 import { errorCode } from "@/lib/api/envelope";
-import type { DeepLink } from "@/lib/api/schemas";
+import { ProfileSchema, type DeepLink } from "@/lib/api/schemas";
 import {
   ActivityListSchema,
   ActivitySchema,
@@ -504,4 +505,136 @@ export async function muteSpeaker(streamId: string, userId: string) {
   return msApi.post<{ userId: string; muted: boolean; reached: boolean; tracksMuted: number }>(
     `/streams/${streamId}/speakers/${encodeURIComponent(userId)}/mute`
   );
+}
+
+/**
+ * WHO MAY ENTER A PRIVATE ROOM THAT BELONGS TO NO HOUSE — the guest list, which
+ * IS that room's membership: the host, whoever they invited, and nobody else.
+ *
+ * HOST ONLY, and that is not an oversight: a guest list names the people who
+ * were invited, so it is not something the invited get to read. A guest asking
+ * gets a 403. A room WITH a house has no guest list — its audience is the group
+ * — and answers 400.
+ */
+export const RoomGuestsSchema = z.object({
+  /*
+    `ProfileSummary` upstream, which `ProfileSchema` is a superset of — parsing
+    with the fuller shape costs nothing here (every field it adds is optional
+    and defaulted) and means a guest row renders with the same component as a
+    person anywhere else.
+  */
+  guests: z.array(ProfileSchema).optional().default([]),
+});
+
+export async function fetchRoomGuests(streamId: string) {
+  return RoomGuestsSchema.parse(await msApi.get(`/streams/${streamId}/guests`));
+}
+
+/**
+ * Let somebody in — `POST /streams/:id/guests`.
+ *
+ * HOST ONLY, deliberately: a guest who could invite would turn the list into a
+ * chain anybody on it can extend, which is the one way a small room stops being
+ * small without its host doing anything.
+ *
+ * Idempotent — inviting somebody already on the list keeps the FIRST
+ * invitation, so the record of who let them in is not rewritten by a later one.
+ */
+export async function inviteRoomGuest(streamId: string, profileId: string) {
+  return msApi.post<unknown>(`/streams/${streamId}/guests`, { profileId });
+}
+
+/**
+ * Take somebody back out — `DELETE /streams/:id/guests/:profileId`.
+ *
+ * The door closes on their next read. The guest list IS the membership here, so
+ * this removes their ACCESS rather than only their name.
+ */
+export async function removeRoomGuest(streamId: string, profileId: string) {
+  return msApi.del<unknown>(`/streams/${streamId}/guests/${profileId}`);
+}
+
+/**
+ * ASKING TO COME INTO A PRIVATE ROOM — knock-to-join.
+ *
+ * THE CODE LETS YOU ASK, NOT IN. That is the whole model: a host can share a
+ * code freely because holding it is not permission, and the person who wants in
+ * announces themselves rather than the host having to know in advance exactly
+ * who will turn up.
+ *
+ * FOUR STATES, and the two unobvious ones carry the meaning:
+ *
+ *  · `declined` is PERMANENT — it is what stops a knock being looped, and a
+ *    host who declines once should not have to decline forty times — but the
+ *    knocker NEVER SEES IT. `GET /knocks/me` reports it as `pending` for ever,
+ *    because a decline somebody can detect is one they can retry against, and
+ *    it reports a decision that is not theirs to know.
+ *  · `expired` is what an outstanding knock becomes when the ROOM ENDS, and is
+ *    deliberately not `declined`: "the room ended" is not about them.
+ *
+ * So nothing here should ever render "you were declined". The state does not
+ * exist from this side.
+ */
+export const StreamKnockSchema = z.object({
+  id: z.string(),
+  streamId: z.string().optional().default(""),
+  profileId: z.string().optional().default(""),
+  status: z.enum(["pending", "admitted", "declined", "expired"]).optional().default("pending").catch("pending"),
+  createdAt: z.string().optional().default(""),
+  resolvedAt: z.string().nullable().optional().default(null),
+  /** Who opened the door. Null until somebody does, and on every other outcome. */
+  admittedBy: z.string().nullable().optional().default(null),
+});
+
+/**
+ * A row of the HOST's queue — the knock plus WHO is asking.
+ *
+ * Its own type rather than a widened knock, because the knocker's own read has
+ * no use for the profile: they know who they are. The service hydrates it in
+ * ONE read; a profile fetch per row would be an N+1 on a list whose only
+ * purpose is to be looked at.
+ *
+ * A knock whose profile has gone is DROPPED by the service rather than returned
+ * blank, which is the right call and means this never has to render a nameless
+ * row: an unidentifiable person is not somebody a host can decide about.
+ */
+export const WaitingKnockSchema = StreamKnockSchema.extend({
+  profile: ProfileSchema.nullable().optional().default(null),
+});
+
+export const WaitingKnocksSchema = z.object({
+  items: z.array(WaitingKnockSchema).optional().default([]),
+});
+
+export type StreamKnock = z.infer<typeof StreamKnockSchema>;
+export type WaitingKnock = z.infer<typeof WaitingKnockSchema>;
+
+/** Ask to come in, with the code somebody gave you. */
+export async function knockWithCode(code: string) {
+  return StreamKnockSchema.parse(await msApi.post("/streams/knocks", { code }));
+}
+
+/**
+ * What became of my own knock.
+ *
+ * Remember that `declined` is reported as `pending` here, permanently. There is
+ * no polling schedule that will ever turn it into a refusal, and a UI that
+ * implies one is promising an answer that is not coming.
+ */
+export async function fetchMyKnock(streamId: string) {
+  return StreamKnockSchema.parse(await msApi.get(`/streams/${streamId}/knocks/me`));
+}
+
+/** HOST: who is asking to come in, newest first, with their profiles. */
+export async function fetchWaitingKnocks(streamId: string) {
+  return WaitingKnocksSchema.parse(await msApi.get(`/streams/${streamId}/knocks`));
+}
+
+/** HOST: open the door, or do not. A decline tells the person nothing. */
+export async function resolveKnock(
+  streamId: string,
+  knockId: string,
+  action: "admit" | "decline"
+) {
+  return msApi.post<unknown>(`/streams/${streamId}/knocks/${knockId}/${action}`);
 }

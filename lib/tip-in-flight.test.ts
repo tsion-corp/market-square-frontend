@@ -37,7 +37,12 @@ test("anything that is not a coded error is not this", () => {
   }
 });
 
-const root = new URL("..", import.meta.url).pathname;
+/*
+  THE URL OBJECT, NOT ITS `pathname` — `new URL("..", import.meta.url).pathname`
+  keeps a directory's space as `%20`, which `readFileSync` cannot open. On a
+  checkout whose path contains one, this file threw before asserting anything.
+*/
+const root = new URL("../", import.meta.url);
 const rooms = [
   "features/houses/components/house-room.tsx",
   "features/streams/components/stream-room.tsx",
@@ -45,7 +50,7 @@ const rooms = [
 
 test("both gift surfaces say it, rather than showing the raw body", () => {
   for (const rel of rooms) {
-    const source = readFileSync(`${root}${rel}`, "utf8");
+    const source = readFileSync(new URL(rel, root), "utf8");
     assert.match(source, /tipAlreadyInFlight\(error\)/u, `${rel} must handle the conflict`);
     assert.match(
       source,
@@ -63,7 +68,7 @@ test("it never tells the sender to pay again", () => {
     instruction to retry is the worst copy available.
   */
   for (const rel of rooms) {
-    const source = readFileSync(`${root}${rel}`, "utf8").replace(/\/\*[\s\S]*?\*\//gu, "");
+    const source = readFileSync(new URL(rel, root), "utf8").replace(/\/\*[\s\S]*?\*\//gu, "");
     const branch = source.slice(source.indexOf("tipAlreadyInFlight(error)"));
     const message = /toast\.error\(\s*([\s\S]*?)\);/u.exec(branch);
     assert.ok(message, `${rel}: no message in the branch`);
@@ -99,7 +104,7 @@ test("the refusal is worded for the sender, and never blames them", () => {
     problem it is, and says nothing was charged.
   */
   for (const rel of rooms) {
-    const source = readFileSync(`${root}${rel}`, "utf8").replace(/\/\*[\s\S]*?\*\//gu, "");
+    const source = readFileSync(new URL(rel, root), "utf8").replace(/\/\*[\s\S]*?\*\//gu, "");
     assert.match(source, /recipientCannotHoldKash\(error\)/u, `${rel} must handle it`);
     const branch = source.slice(source.indexOf("recipientCannotHoldKash(error)"));
     const message = /toast\.error\(\s*([\s\S]*?)\);/u.exec(branch);
@@ -114,7 +119,7 @@ test("the guard that produces it still exists in account-batch", () => {
   // The predicate matches on that module's message. If the message changes,
   // this branch silently stops firing and the sender sees raw text again.
   assert.match(
-    readFileSync(`${root}lib/account-batch.ts`, "utf8"),
+    readFileSync(new URL("lib/account-batch.ts", root), "utf8"),
     /throw new Error\(`not an EVM address: \$\{leg\.toWallet\}`\)/u,
     "the leg guard and the predicate that reads it must stay in step"
   );

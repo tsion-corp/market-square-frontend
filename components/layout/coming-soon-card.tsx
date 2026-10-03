@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useMe } from "@/hooks/use-me";
 import { Avatar } from "@/components/ui/avatar";
 import { TOPIC_ICONS } from "@/components/ui/topic-tags-field";
 import { IconSpark } from "@/components/ui/icons";
@@ -61,6 +62,13 @@ export const COMING_SOON_CARD_WIDTH = 342;
 export function ComingSoonCard({ stream }: { stream: Stream }) {
   const topics = useTopics();
   const [sharing, setSharing] = useState(false);
+  /*
+    IS THIS THE READER'S OWN ROOM? The card is addressed to somebody waiting for
+    it to start, and for the HOST that is the wrong audience — they are the
+    person being waited on, and the only one who can do anything about it.
+  */
+  const me = useMe();
+  const mine = Boolean(me.data && stream.ownerId === me.data.id);
 
   const href = housePath(stream.id);
   const startsAt = stream.scheduledAt;
@@ -114,12 +122,38 @@ export function ComingSoonCard({ stream }: { stream: Stream }) {
       lost its: they have no child that reaches their edges.
     */
     <div className="relative h-[106px] w-full overflow-hidden rounded-[16px] bg-[rgba(16,16,18,0.62)] shadow-[inset_0_0_0_0.552px_rgba(255,255,255,0.18)] backdrop-blur-[7.726px]">
+      {/*
+        THE WHOLE CARD OPENS THE ROOM, not just the title.
+
+        The only tap target used to be the title text — a two-line string in the
+        middle of a 106px card — so the card read as inert everywhere else and
+        a reader who tapped the cover, the host's name or the empty space got
+        nothing. ogazboiz reported exactly that: "why cant i not click on the
+        card".
+
+        A SPREAD LINK rather than wrapping the card, because the card already
+        contains a Share BUTTON and a title link, and an anchor inside an anchor
+        is invalid markup that browsers resolve by dropping one of them. This
+        sits UNDER the interactive children (they are later in the DOM and
+        positioned) and over everything else, so a tap on the cover opens the
+        room and a tap on Share still shares.
+
+        `aria-hidden` and not focusable: the title link above is the accessible
+        name for this destination and a second tab stop to the same place is
+        noise to anybody using a keyboard.
+      */}
+      <Link
+        href={href}
+        aria-hidden
+        tabIndex={-1}
+        className="absolute inset-0 z-0"
+      />
       {/* `image 64` — 144.507 wide, full bleed to the card's left edge and
           under everything else. STRETCH in the file; `object-cover` here, so a
           real photograph of any ratio fills the box without distorting. */}
       <span
         aria-hidden
-        className="absolute inset-y-0 left-0 w-[144.507px] overflow-hidden"
+        className="pointer-events-none absolute inset-y-0 left-0 w-[144.507px] overflow-hidden"
       >
         {stream.thumbnailUrl ? (
           /* eslint-disable-next-line @next/next/no-img-element -- media hosts are unknown at build time */
@@ -145,7 +179,7 @@ export function ComingSoonCard({ stream }: { stream: Stream }) {
           OVER the image (it is the later sibling in the file). */}
       <span
         aria-hidden
-        className="absolute inset-y-0 left-0 w-[7px] bg-[#7E3BEB]"
+        className="pointer-events-none absolute inset-y-0 left-0 w-[7px] bg-[#7E3BEB]"
       />
 
       {/*
@@ -177,7 +211,7 @@ export function ComingSoonCard({ stream }: { stream: Stream }) {
       */}
       <span
         aria-hidden
-        className="absolute inset-0"
+        className="pointer-events-none absolute inset-0"
         style={{
           background:
             "linear-gradient(to right, rgba(16,16,18,0) 0px, rgba(16,16,18,0.18) 28px, rgba(16,16,18,0.72) 72px, #101012 120px)",
@@ -201,13 +235,29 @@ export function ComingSoonCard({ stream }: { stream: Stream }) {
         rather than the node's 160, because the countdown pill beside it is
         drawn at 8px rather than the file's unreadable 5 and needs the width.
       */}
-      <div className="relative flex h-full items-start gap-[35px] pl-[64px] pr-[16px]">
+      {/* `z-10` puts the text column, its title link and the Share button ABOVE
+          the card-wide link below, so each keeps its own target. The decorative
+          layers between them are `pointer-events-none`, so a tap on the cover
+          falls through to the card link rather than landing on an image. */}
+      {/*
+        POINTER-EVENTS-NONE ON THE COLUMN, AUTO ON WHAT IS ACTUALLY PRESSABLE.
+
+        This div fills the whole card and sits above the card-wide link, so with
+        pointer events it swallowed EVERY click and had no handler of its own —
+        which is why lifting it to `z-10` fixed the paint order and left the card
+        exactly as dead as before. The layers it was lifted over were already
+        transparent to clicks; this one was the only thing in the way.
+
+        So the column passes clicks through and the two things that are really
+        controls — the title link and Share — take them back.
+      */}
+      <div className="pointer-events-none relative z-10 flex h-full items-start gap-[35px] pl-[64px] pr-[16px]">
         {/* `Frame 2147230720` — 16 down, 12 gap; the column that flexes. */}
         <div className="mt-[16px] flex min-w-0 flex-1 flex-col gap-[12px]">
           <div className="flex flex-col gap-[8px]">
             <Link
               href={href}
-              className="ws-press line-clamp-2 text-[14px] font-semibold leading-[16px] text-white"
+              className="ws-press pointer-events-auto line-clamp-2 text-[14px] font-semibold leading-[16px] text-white"
             >
               {stream.title}
             </Link>
@@ -284,8 +334,20 @@ export function ComingSoonCard({ stream }: { stream: Stream }) {
               /* `Frame 2147230649` — 2/4 padding on a full radius, #9F5AFF at 9%.
                Its label is 5px in the file; see the note at the top of this
                file for why it is drawn at 8. */
+              /*
+                "WAITING FOR HOST" IS NOT SAID TO THE HOST.
+
+                Past its time and unopened, the countdown stops promising and
+                says the room is waiting on somebody — which is true, and
+                addressed to the wrong person when that somebody is reading it.
+                ogazboiz hit exactly this: his own scheduled room telling him it
+                was waiting for a host, with nothing on the card to act on.
+
+                So the host is told what to DO instead. The countdown itself is
+                unchanged for everybody else.
+              */
               <span className="whitespace-nowrap rounded-full bg-[rgba(159,90,255,0.09)] px-[4px] py-[2px] text-[8px] font-medium leading-[10.4px] text-[#9F65FD]">
-                {startsInLabel(startsAt)}
+                {mine ? "Yours to open" : startsInLabel(startsAt)}
               </span>
             )}
           </div>
@@ -306,7 +368,7 @@ export function ComingSoonCard({ stream }: { stream: Stream }) {
           <button
             type="button"
             onClick={() => setSharing(true)}
-            className="ws-press flex h-[19px] items-center gap-[4px] rounded-full bg-[linear-gradient(180deg,#9f65fd_0%,#5b05e6_100%)] px-[8.83px] text-[8px] font-medium leading-[10.4px] text-white transition-opacity hover:opacity-90"
+            className="ws-press pointer-events-auto flex h-[19px] items-center gap-[4px] rounded-full bg-[linear-gradient(180deg,#9f65fd_0%,#5b05e6_100%)] px-[8.83px] text-[8px] font-medium leading-[10.4px] text-white transition-opacity hover:opacity-90"
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- the node's own export */}
             <img
