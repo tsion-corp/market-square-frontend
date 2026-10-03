@@ -52,6 +52,9 @@ const INGEST = "https://api.mixpanel.com/track";
  */
 const TOKEN = process.env.NEXT_PUBLIC_MIXPANEL_TOKEN ?? "";
 
+/** So a missing token is said once per instance rather than once per event. */
+let warnedNoToken = false;
+
 /**
  * Generous for a batch of events and far below anything worth relaying.
  * A payload over this is not an event, so it is dropped rather than forwarded.
@@ -119,6 +122,30 @@ export async function POST(request: Request) {
     everything else this route declines.
   */
   if (!TOKEN) {
+    /*
+      SAY IT ONCE, SERVER-SIDE. Dropping is right — forwarding with the caller's
+      own token is the relay the stamping exists to prevent — but dropping
+      SILENTLY is how this becomes undiagnosable.
+
+      `NEXT_PUBLIC_*` is inlined into the browser bundle at BUILD time, and that
+      is a different thing from being present in the server RUNTIME environment.
+      So this route can be running in a deployment whose bundle carries the
+      token while `process.env` here does not, and every event is discarded
+      while the browser, the network tab and this response all look perfect. The
+      symptom reaching anybody is "analytics is not recording", with nothing
+      anywhere to contradict it.
+
+      Latched, because this is per-request and the condition is a deployment
+      fact that will not change until somebody redeploys — one line in the log
+      is a signal, one per event is a bill.
+    */
+    if (!warnedNoToken) {
+      warnedNoToken = true;
+      console.error(
+        "[mx] NEXT_PUBLIC_MIXPANEL_TOKEN is not set in this runtime — every event is being dropped. " +
+          "It is inlined into the browser bundle at build time; it must ALSO be set for the server runtime."
+      );
+    }
     return new NextResponse(null, { status: 204 });
   }
 
