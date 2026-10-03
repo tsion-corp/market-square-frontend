@@ -54,6 +54,8 @@ const TOKEN = process.env.NEXT_PUBLIC_MIXPANEL_TOKEN ?? "";
 
 /** So a missing token is said once per instance rather than once per event. */
 let warnedNoToken = false;
+/** Likewise for a batch Mixpanel refuses while answering 200. */
+let warnedRejected = false;
 
 /**
  * Generous for a batch of events and far below anything worth relaying.
@@ -161,12 +163,41 @@ export async function POST(request: Request) {
   );
 
   try {
-    await fetch(INGEST, {
+    /*
+      THE RESPONSE IS READ, and this is the part that was missing.
+
+      Mixpanel answers HTTP 200 WHETHER OR NOT IT ACCEPTED THE EVENTS. The body
+      is the whole signal: `1` means at least one event was taken, `0` means
+      none were — and their own spec is explicit that a 200 "does not signify a
+      valid project token or secret". So a wrong token, a malformed payload or a
+      rejected batch all look identical to success from the status line.
+
+      This route was fire-and-forget, so every one of those was invisible. That
+      is the same shape as the silent drop above, one layer further out: the
+      thing reporting success is not the thing that decides.
+    */
+    const answer = await fetch(INGEST, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: stamped,
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+
+    /*
+      `0` is a refusal wearing a 200. Latched like the missing token, because
+      the realistic causes — a bad project token, a project that has been
+      deleted, a payload shape they stopped accepting — are deployment facts
+      rather than per-request accidents, and one line is a signal while one per
+      event is a bill.
+    */
+    const verdict = (await answer.text()).trim();
+    if (verdict === "0" && !warnedRejected) {
+      warnedRejected = true;
+      console.error(
+        "[mx] Mixpanel answered 200 but REJECTED the batch (body `0`). " +
+          "Their 200 does not mean the project token is valid — check the token this runtime is stamping."
+      );
+    }
   } catch {
     /*
       Mixpanel being slow, down or refusing is not this request's problem and
