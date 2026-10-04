@@ -1,6 +1,7 @@
 "use client";
 
 import { NotificationsPage } from "@/features/notifications";
+import { PushPrompt } from "@/components/layout/push-prompt";
 import type { MarketNotification } from "@/features/notifications/lib/types";
 import { useFollow, useWink } from "@/features/profile";
 import { useIsFollowing } from "@/features/profile";
@@ -111,5 +112,5 @@ function rowAction(item: MarketNotification) {
 }
 
 export function NotificationsScreen() {
-  return <NotificationsPage actionSlot={rowAction} />;
+  return <NotificationsPage actionSlot={rowAction} promptSlot={<PushPrompt />} />;
 }

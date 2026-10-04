@@ -1299,7 +1299,14 @@ function TopBar({ showBrand, wide }: { showBrand: boolean; wide: boolean }) {
   return (
     <div
       className={cn(
-        "sticky top-0 z-30 hidden h-[76px] shrink-0 items-start bg-chrome backdrop-blur-[6px] md:flex",
+        /*
+          The height is `--ws-crumb-h` (76 plus the status-bar inset) rather
+          than a literal 76, and the padding is that inset — the same pairing
+          the phone's strip uses, for the same reason: an installed iPad draws
+          its status bar over this bar. The inner 76 boxes below are the
+          CONTENT's and stay literal; they sit inside the padding.
+        */
+        "sticky top-0 z-30 hidden h-[var(--ws-crumb-h)] shrink-0 items-start bg-chrome pt-[env(safe-area-inset-top,0px)] backdrop-blur-[6px] md:flex",
         "after:pointer-events-none after:absolute after:bottom-0 after:left-1/2 after:h-px after:w-[200vw] after:-translate-x-1/2 after:bg-white/10",
         (!showBrand || wide) && "px-6"
       )}
@@ -2088,7 +2095,17 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
           under the logo, directly above the bar's own full-width bottom
           border. Only that full-width border stays.
         */}
-        <div className="ws-head fixed inset-x-0 top-0 z-40 flex h-[var(--ws-topbar-h)] items-center justify-between border-b border-white/10 px-6 md:hidden">
+        {/*
+          `pt-` IS THE STATUS BAR, and `--ws-topbar-h` already includes it.
+          Border-box sizing means the two together leave exactly the 56 of
+          content this bar has always had, centred against the 56 rather than
+          against the inset. Installed to the Home Screen without it, iOS draws
+          its clock and battery straight over this strip — and on a notched
+          iPhone the inset is TALLER than the bar, so the logo and the
+          notification bell were behind the status bar with no way to reach
+          them. See `--ws-topbar-h` in globals.css.
+        */}
+        <div className="ws-head fixed inset-x-0 top-0 z-40 flex h-[var(--ws-topbar-h)] items-center justify-between border-b border-white/10 px-6 pt-[env(safe-area-inset-top,0px)] md:hidden">
           {/*
             `flex` belongs on the LOCKUP, not on this box. BrandLockup renders
             a bare span carrying `items-center` and nothing else — the caller
