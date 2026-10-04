@@ -647,7 +647,9 @@ describe("a feed item that owns an open popover", () => {
       "Ark Ecosystem / Market Square" and the search field.
     */
     const shell = read("components/layout/app-shell.tsx");
-    const crumb = shell.match(/sticky top-0 z-(\d+)[^"]*h-\[76px\]|h-\[76px\][^"]*sticky top-0 z-(\d+)/);
+    const crumb = shell.match(
+      /sticky top-0 z-(\d+)[^"]*h-\[var\(--ws-crumb-h\)\]|h-\[var\(--ws-crumb-h\)\][^"]*sticky top-0 z-(\d+)/
+    );
     const crumbZ = Number(crumb?.[1] ?? crumb?.[2] ?? 0);
     assert.ok(crumbZ > 0, "could not find the breadcrumb bar's z-index in the shell");
 
@@ -3299,8 +3301,8 @@ describe("Gist rooms can be scheduled, and upcoming ones look like open ones", (
     // 72 = 16 + the node's 40 row + 16. It was 48 with the account on the
     // LEFT and the mark floated to the middle; the node puts the lockup left
     // and the account right, so the phone finally agrees with the desktop bar.
-    assert.match(shell, /fixed inset-x-0 top-0 z-40 flex h-\[var\(--ws-topbar-h\)\] items-center justify-between border-b border-white\/10 px-6 md:hidden/);
-    assert.match(read("app/globals.css"), /--ws-topbar-h: 56px;/);
+    assert.match(shell, /fixed inset-x-0 top-0 z-40 flex h-\[var\(--ws-topbar-h\)\] items-center justify-between border-b border-white\/10 px-6 pt-\[env\(safe-area-inset-top,0px\)\] md:hidden/);
+    assert.match(read("app/globals.css"), /--ws-topbar-h: calc\(env\(safe-area-inset-top, 0px\) \+ 56px\);/);
     // The node's own 100 x 40 lockup box — WITHOUT the node's 0.53 hairline
     // under it (ogazboiz, 2026-09-16): on a phone it read as a stray short
     // line under the logo. The bar's full-width border-b above is the only one.
