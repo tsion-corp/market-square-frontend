@@ -989,8 +989,32 @@ body {
   /* The phone's top logo bar: an 8 + 40 row + 8 = 56 strip (tightened from the
      node's 16/40/16 = 72, which read as too tall on a phone). The fixed strip
      below reads this same variable, and the column pads by it, so they stay in
-     sync. */
-  --ws-topbar-h: 56px;
+     sync.
+
+     ─── THE INSET IS PART OF THE BAR, NOT PADDING SOMEBODY ADDS LATER ────────
+     INSTALLED TO THE HOME SCREEN, THIS BAR WAS COMPLETELY UNREACHABLE. The app
+     declares `viewport-fit=cover` (for the keyboard) and
+     `apple-mobile-web-app-capable` + `black-translucent` (for push, and for the
+     black wash) — and those three together mean iOS draws its own status bar ON
+     TOP of the page in a Home Screen app rather than above it. The bar was a
+     flat 56 pinned to `top: 0`, and the status bar on any notched iPhone is
+     ~59: TALLER THAN THE WHOLE BAR. So the logo, the live pill and the
+     notification bell were not merely clipped, they were 100% behind the clock
+     and the battery, with nothing to scroll and no way to reach them. In a
+     browser tab the same build is fine, because Safari's chrome is what reserves
+     that space — which is exactly why it survived every test on this machine.
+
+     The inset lives in the VARIABLE rather than at the one call site because
+     everything that reserves room under this bar reads this variable — `main`'s
+     top padding, the house chip, the room mini-player's offset. Fold it in once
+     and all of them are right; add it at the bar alone and all of them are
+     wrong by the height of a status bar. The strip pads its own top by the same
+     amount, so its 56 of CONTENT is unchanged and `items-center` still centres
+     against the 56, not against the inset.
+
+     `env()` is 0 everywhere that has no inset — every browser tab, every
+     desktop — so this is only ever load-bearing in the installed app. */
+  --ws-topbar-h: calc(env(safe-area-inset-top, 0px) + 56px);
   /* The desktop breadcrumb bar's height — 76px in node 15:1302, and 0 on a
      phone where the bar is `hidden md:flex`.
      Published because one surface has to subtract it: Messages is the only
@@ -1028,8 +1052,16 @@ body {
 @media (min-width: 768px) {
   :root {
     --ws-home-reels-chrome: 134px;
+    /* Zero because the phone's strip is `md:hidden` — the bar at this width is
+       `TopBar`, whose height is `--ws-crumb-h` below. */
     --ws-topbar-h: 0px;
-    --ws-crumb-h: 76px;
+    /* THE SAME INSET, FOR THE SAME REASON — see `--ws-topbar-h` above. An
+       installed iPad lands at this width, not the phone one, so leaving it out
+       here would fix the iPhone and leave the tablet's lockup under the clock.
+       The overlap is smaller there (~24 against a 76 bar, so it clips rather
+       than swallows), which is worse than useless as a reason to skip it: it is
+       the version nobody reports and nobody fixes. */
+    --ws-crumb-h: calc(env(safe-area-inset-top, 0px) + 76px);
     /* ROOM FOR THE DOCK. This was 0 because desktop had no bottom chrome — the
        nav was a sidebar. `BottomDock` (748:15721) floats over the foot of every
        page now, so without this the last post on a scrolled page sits

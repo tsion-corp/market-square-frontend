@@ -137,6 +137,13 @@ export function usePushNotifications() {
   };
 
   return {
+    /*
+      PUBLISHED so the prompt card can tell the two asks apart — "turn this on"
+      and iOS's "add it to your Home Screen first" are different cards, and only
+      this answer separates them. The Settings row still reads `description`,
+      which is this same state put into a sentence.
+    */
+    availability,
     checked: availability === "ready" && subscribed && pushOn,
     disabled: availability !== "ready" || busy,
     description: PUSH_COPY[availability],

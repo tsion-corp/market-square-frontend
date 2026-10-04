@@ -493,7 +493,14 @@ function Row({
 
 export function NotificationsPage({
   actionSlot,
+  promptSlot,
 }: {
+  /**
+   * The "turn on notifications" card. It is the SETTINGS slice's switch, and
+   * slices never import each other, so it is composed in
+   * `components/layout/notifications-screen.tsx` like `actionSlot` below.
+   */
+  promptSlot?: React.ReactNode;
   /**
    * The per-row action — "Wink back" (742:15885) and "Follow back"
    * (742:15901). Both are the PROFILE slice's mutations, and slices never
@@ -715,6 +722,21 @@ export function NotificationsPage({
 
       {authenticated && (
         <>
+          {/*
+            "TURN ON NOTIFICATIONS" — the offer, where the offer is relevant.
+
+            The switch itself has always been in Settings, which means the only
+            people ever offered it are the ones who went looking for a
+            notification setting. This is that same switch at the head of this
+            list. It arrives as a SLOT because it belongs to the settings slice
+            and slices never import each other — the same route-slot pattern as
+            `actionSlot` below.
+
+            Above the loading skeletons on purpose: it does not depend on the
+            list, and a card that appears only after four rows have loaded is a
+            card that moves the list under the reader's thumb.
+          */}
+          {promptSlot && <div className="px-8 pb-2">{promptSlot}</div>}
           {notifications.isPending && [0, 1, 2, 3].map((i) => <RowSkeleton key={i} />)}
           {notifications.isError && (
             <div className="p-4">
