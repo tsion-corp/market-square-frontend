@@ -34,6 +34,7 @@ import {
 import { BadgesPanel, BadgesSection } from "@/features/profile/components/badges";
 import { isHttpUrl } from "@/lib/http-url";
 import { EditProfileSheet } from "@/features/profile/components/edit-profile-sheet";
+import { ProfileViewersPill } from "@/features/profile/components/profile-viewers-pill";
 import { PersonMoreMenu } from "@/features/profile/components/person-more-menu";
 import { WinkButton } from "@/features/profile/components/wink-button";
 import { useCanonicalProfileAddress } from "@/features/profile/hooks/use-canonical-profile-address";
@@ -548,10 +549,30 @@ export function ProfilePage({
       <div className="px-4 pt-6 md:px-8">
         <ProfileCover
           profile={data}
-          /* 435:27521 — the row beside the handle. The balance chip is the
-             kash slice's and arrives as a slot; "Who viewed my profile" is not
-             drawn, see the note on `ProfileCover`. */
-          meta={isMe ? kashSlot : null}
+          /* 2179:19188 — the row beside the handle: the balance chip (the kash
+             slice's, so it arrives as a slot) and "Who viewed my profile".
+
+             The pill was absent for a long time and the reason has gone. It
+             needed somewhere to record a view and somewhere to list them back,
+             and the service now has both — the writer has been firing on dwell
+             for weeks and `GET /me/profile-views` answers. It opens the panel
+             on this same page rather than navigating, because that is where the
+             list lives. */
+          meta={
+            isMe ? (
+              <>
+                {kashSlot}
+                <ProfileViewersPill
+                  // `profileViewCount` is PRIVATE and on `/me`, so it is read
+                  // from the viewer's own record rather than from the profile
+                  // being displayed — they are the same person here, but only
+                  // one of the two payloads carries the field.
+                  count={me.data?.profileViewCount ?? null}
+                  onOpen={() => setAccountTab("viewers")}
+                />
+              </>
+            ) : null
+          }
           onChangePhoto={isMe ? () => setEditOpen(true) : undefined}
           actions={
             isMe ? (

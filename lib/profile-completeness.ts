@@ -1,4 +1,5 @@
 import type { Profile } from "./api/schemas.ts";
+import { decodeAvatarCover } from "./profile-backgrounds.ts";
 
 /**
  * HOW FINISHED SOMEBODY'S PROFILE IS, and what is still missing.
@@ -63,7 +64,19 @@ export function completenessSteps(profile: Profile | null | undefined): Complete
       id: "cover",
       label: "Add a cover photo",
       hint: "The banner behind your name.",
-      done: filled(profile?.coverUrl),
+      /*
+        A CHARACTER IS ALREADY A COVER, and a better one.
+
+        `coverPictureUrl` resolves the cover from the avatar character FIRST and
+        only falls back to an uploaded picture — so somebody with a character
+        has a cover, and a photo they uploaded would not even be the thing on
+        screen. Counting this as missing told them to fix something that was not
+        broken, by an action that would have changed nothing they could see.
+
+        That is the exact failure this product calls out everywhere else: a
+        prompt has to be true, and a reader can check this one in a glance.
+      */
+      done: Boolean(decodeAvatarCover(profile?.avatarConfig).code) || filled(profile?.coverUrl),
     },
     {
       id: "displayName",

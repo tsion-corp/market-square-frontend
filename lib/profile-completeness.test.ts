@@ -58,6 +58,30 @@ describe("what counts", () => {
     assert.equal(byId(chosen), true);
   });
 
+  it("counts an avatar CHARACTER as a cover, because it is one", () => {
+    /*
+      THE BUG THIS EXISTS TO STOP COMING BACK.
+
+      `coverPictureUrl` resolves a cover from the character FIRST and only falls
+      back to an uploaded picture, so somebody with a character already has a
+      cover — and a photo they uploaded would not even be the thing on screen.
+      The first version counted this as missing and told them to "add a cover
+      photo": a prompt to fix something that was not broken, by an action that
+      would have changed nothing they could see.
+
+      Reported from a real screen (ogazboiz, 2026-10-09): "the cover photo is
+      the avatar character so if they have the avatar that is better".
+    */
+    const byId = (p: Profile) => completenessSteps(p).find((s) => s.id === "cover")?.done;
+    // A real share code's shape: 32+ URL-safe characters, which is what
+    // `decodeAvatarCover` will accept as a character.
+    const code = "A".repeat(40);
+    const withCharacter = { ...bare, avatarConfig: code } as unknown as Profile;
+    assert.equal(byId(withCharacter), true, "a character IS the cover");
+    assert.equal(byId({ ...bare, coverUrl: "https://example.test/c.png" } as unknown as Profile), true);
+    assert.equal(byId(bare), false, "neither one is genuinely missing");
+  });
+
   it("accepts a city OR a country for place", () => {
     // A country alone is enough to be findable; demanding both would hold the
     // bar above what the people filters actually use.

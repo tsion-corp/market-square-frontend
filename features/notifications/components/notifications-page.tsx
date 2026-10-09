@@ -354,7 +354,17 @@ function Row({
 
       {/* 742:15858 — 8 between the headline and the line under it. */}
       <span className="flex min-w-0 flex-1 flex-col gap-2">
-        <span className="truncate text-[16px] font-bold leading-4 text-white">
+        {/*
+          THE HEADLINE WRAPS ON A PHONE RATHER THAN TRUNCATING.
+
+          It was `truncate` at every width. On a 393 screen the row's other
+          columns — a 48 glyph, a Follow-back pill, a stamp and a dot — left the
+          text about eighty pixels, so every row read "New Fol…" and the one
+          word that says what happened was the word thrown away. A headline is
+          four or five words; letting it take a second line costs less than
+          making every row identical.
+        */}
+        <span className="text-[16px] font-bold leading-5 text-white sm:truncate sm:leading-4">
           {headline(item)}
         </span>
         <span className="line-clamp-2 text-[14px] leading-[16.5px] text-white/50">
@@ -387,8 +397,25 @@ function Row({
           The stamp is `inboxTime`, not `relativeTime`: the file shows "11:39",
           "Yesterday", "2d", "3d" — a clock inside today and an age past it,
           which is exactly what that helper already produces for the inbox. */}
-      <span className="flex shrink-0 items-center gap-4">
-        {action}
+      {/*
+        THE ACTION TAKES ITS OWN LINE ON A PHONE.
+
+        It used to sit in the right-hand cluster at every width, so a fixed
+        ~110px pill ate the middle of a 393 screen and squeezed the text into
+        nothing. It is ONE node that WRAPS rather than two rendered at two
+        breakpoints: a duplicated Follow-back is two mutation hooks for one
+        button, and the pair drift the moment one of them is pressed.
+
+        Indented past the glyph so it reads as belonging to this row's text
+        rather than floating under the avatar.
+      */}
+      {action && (
+        <span className="order-last w-full pl-[60px] sm:order-none sm:w-auto sm:pl-0">
+          {action}
+        </span>
+      )}
+
+      <span className="flex shrink-0 items-center gap-2 sm:gap-4">
         {item.createdAt && (
           <time
             dateTime={item.createdAt}
@@ -422,7 +449,14 @@ function Row({
      NO divider: the rows are separated by an unread wash and nothing else. An
      unread row is `#FFFFFF` at 3%; a read one has no fill at all. */
   const className = cn(
-    "flex min-h-[97px] items-center gap-4 px-8 py-6 transition-colors",
+    /*
+      `flex-wrap` is what lets the action drop to its own line on a phone, and
+      the gutters are the file's 32 only from `sm` — at 393 wide, 32 a side
+      spends a sixth of the screen on nothing while the headline truncates.
+      `items-start` because a wrapped headline makes the text column taller
+      than the glyph, and centring then floats the glyph into the middle of it.
+    */
+    "flex min-h-[97px] flex-wrap items-start gap-x-4 gap-y-3 px-4 py-5 transition-colors sm:flex-nowrap sm:items-center sm:gap-4 sm:px-8 sm:py-6",
     unread ? "bg-white/[0.03] hover:bg-white/[0.06]" : "hover:bg-white/[0.03]"
   );
 
@@ -583,7 +617,16 @@ export function NotificationsPage({
         SPACE_BETWEEN row carrying the title at Geist 500 24/31.2 and a filter
         pill opposite it, and nothing else. The subtitle was ours.
       */}
-      <div className="flex items-center justify-between gap-4 px-8 pb-2 pt-6">
+      {/*
+        THE HEAD WRAPS, AND THE FILTER IS NOT CUT OFF.
+
+        Title, "Mark all read (N)" and a 145-wide filter pill do not fit across
+        393px, and the row did not wrap — so the pill ran off the right edge and
+        the one control that changes what you are looking at was unreachable.
+        The title keeps its own line on a phone and the two controls share the
+        next one; from `sm` it is the file's single space-between row again.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 pb-2 pt-6 sm:flex-nowrap sm:px-8">
         <h1 className="text-[24px] font-medium leading-[31.2px] text-white">Notifications</h1>
 
         {/*
@@ -684,7 +727,7 @@ export function NotificationsPage({
         the title, the Mark-all-read count and the group pill already there.
       */}
       {authenticated && (
-        <div className="flex items-center gap-1 px-8 pb-2">
+        <div className="flex items-center gap-1 px-4 pb-2 sm:px-8">
           {(["all", "unread", "read"] as const).map((value) => (
             <button
               key={value}
