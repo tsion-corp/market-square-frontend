@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/button";
 import { errorCode } from "@/lib/api/envelope";
 import { cn } from "@/lib/cn";
 import { useMe } from "@/hooks/use-me";
+import { useImageUpload } from "@/components/ui/use-image-upload";
 import { usePeople } from "@/features/discovery";
 import { useMigrationLinked } from "@/features/migrate";
 import { PersonQuickActions, useUpdateMe } from "@/features/profile";
@@ -67,7 +68,7 @@ import { fetchVapidPublicKey, pushSupported, subscribeThisBrowser } from "@/lib/
 
 const DONE_KEY = "ms:onboarding:done";
 const STEP_KEY = "ms:onboarding:step";
-const STEPS = 3;
+const STEPS = 4;
 
 /** Every storage access is guarded: a browser refusing it must not trap
     somebody in a flow, and must not repeat one they finished. */
@@ -224,7 +225,8 @@ export function OnboardingFlow() {
                 onDone={() => (profile.hasOnboarded ? finish() : go(3))}
               />
             )}
-            {current === 3 && <PeopleStep onDone={finish} />}
+            {current === 3 && <PhotosStep onDone={() => go(4)} />}
+            {current === 4 && <PeopleStep onDone={finish} />}
           </div>
         </div>
       )}
@@ -730,6 +732,126 @@ function PermissionRow({
  * The wink and follow badges are the profile slice's own `PersonQuickActions`,
  * unchanged: one wink path, one follow path, in the app.
  */
+/**
+ * A FACE AND A COVER, before anybody is asked to decide about them.
+ *
+ * It sits after the permissions and before the people, deliberately: the next
+ * screen offers somebody a deck of strangers to follow and wink at, and a few
+ * of those strangers will look back. Arriving at that moment as a grey circle
+ * is the worst first impression the product can make, and it is the one thing
+ * here that cannot be fixed later by somebody who never returns.
+ *
+ * ─── IT IS SKIPPABLE, AND THAT IS NOT A CONTRADICTION ───────────────────────
+ * Blocking onboarding on an upload would lose the people who do not have a
+ * picture to hand, which is a worse trade than an empty avatar. Home's
+ * completeness prompt is the second ask, and it is why skipping here is safe:
+ * the request comes back, at a moment of their choosing, rather than once.
+ *
+ * ─── IT SAVES EACH PICTURE AS IT LANDS ──────────────────────────────────────
+ * Not on Continue. Somebody who uploads a photo and then closes the tab has
+ * still set their photo — the upload already finished, and holding it behind a
+ * button would throw away work they watched complete.
+ */
+function PhotosStep({ onDone }: { onDone: () => void }) {
+  const me = useMe();
+  const update = useUpdateMe();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(me.data?.avatarUrl ?? null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(me.data?.coverUrl ?? null);
+
+  const avatar = useImageUpload(avatarUrl, (url) => {
+    setAvatarUrl(url);
+    if (url) update.mutate({ avatarUrl: url });
+  });
+  const cover = useImageUpload(coverUrl, (url) => {
+    setCoverUrl(url);
+    if (url) update.mutate({ coverUrl: url });
+  });
+
+  const busy = avatar.progress !== null || cover.progress !== null;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-[22px] font-semibold leading-7 text-white">Add your photos</h2>
+        <p className="mt-1 text-[14px] leading-5 text-white/60">
+          A face and a cover. People are about to decide whether to say hello.
+        </p>
+      </div>
+
+      {/* The cover is the ground and the avatar sits on it, the same
+          arrangement the profile draws, so what is being set is obvious
+          without a label explaining which is which. */}
+      <div className="relative h-[132px] w-full overflow-hidden rounded-[22px] bg-white/[0.06]">
+        {cover.shown && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover.shown} alt="" aria-hidden className="absolute inset-0 size-full object-cover" />
+        )}
+        <button
+          type="button"
+          onClick={cover.open}
+          disabled={busy}
+          aria-label={coverUrl ? "Change cover photo" : "Add a cover photo"}
+          className="ws-press ws-btn-sm absolute right-3 top-3 rounded-full bg-black/55 px-3 text-[11px] font-semibold text-white backdrop-blur disabled:opacity-60"
+        >
+          {cover.progress !== null
+            ? `${Math.round(cover.progress * 100)}%`
+            : coverUrl
+              ? "Change cover"
+              : "Add cover"}
+        </button>
+        <input {...cover.inputProps} />
+
+        <div className="absolute bottom-3 left-4 flex items-end gap-3">
+          <button
+            type="button"
+            onClick={avatar.open}
+            disabled={busy}
+            aria-label={avatarUrl ? "Change profile photo" : "Add a profile photo"}
+            className="ws-press relative size-[72px] overflow-hidden rounded-[22px] border-2 border-grey-900 bg-white/10 disabled:opacity-60"
+          >
+            {avatar.shown ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatar.shown} alt="" aria-hidden className="absolute inset-0 size-full object-cover" />
+            ) : (
+              <span className="grid size-full place-items-center text-[11px] font-semibold text-white/70">
+                {avatar.progress !== null ? `${Math.round(avatar.progress * 100)}%` : "Add photo"}
+              </span>
+            )}
+          </button>
+          <input {...avatar.inputProps} />
+        </div>
+      </div>
+
+      {/* Upload failures are the person's to act on — a silent one looks like a
+          broken button. */}
+      {(avatar.error || cover.error) && (
+        <p role="alert" className="text-[13px] leading-5 text-danger">
+          {avatar.error ?? cover.error}
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onDone}
+          disabled={busy}
+          className="ws-btn-create ws-btn-md ws-press flex-1 rounded-full font-semibold text-white disabled:opacity-60"
+        >
+          Continue
+        </button>
+        <button
+          type="button"
+          onClick={onDone}
+          disabled={busy}
+          className="ws-btn-md ws-press rounded-full px-4 text-[14px] text-white/60 transition-colors hover:text-white"
+        >
+          Skip
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PeopleStep({ onDone }: { onDone: () => void }) {
   const me = useMe();
   const people = usePeople("", "followers", true);

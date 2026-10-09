@@ -5,7 +5,8 @@ import { useRecordProfileView } from "@/features/profile/hooks/use-profile-view"
 import { PostText } from "@/components/ui/post-text";
 import { placeLine } from "@/lib/countries";
 import { profileHref } from "@/lib/profile-href";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryParam } from "@/hooks/use-query-param";
 import Link from "next/link";
 import { IconProfileGlobePin, IconProfileLink } from "@/components/ui/profile-icons";
 import { IconMsEdit } from "@/components/ui/design-icons";
@@ -451,11 +452,31 @@ export function ProfilePage({
    */
   const [accountTab, setAccountTab] = useState<AccountTab>("posts");
   const [sharing, setSharing] = useState(false);
+  /*
+    `?edit=1` opens the sheet on arrival, so a surface that asks somebody to
+    finish their profile can land them ON the fields rather than on the page
+    above them. Read through `useQueryParam` rather than `useSearchParams`,
+    which forces a Suspense boundary and delays hydration of this subtree.
+
+    It is seeded ONCE, not derived every render: the reader must be able to
+    close the sheet and stay on their profile, and a derived value would
+    reopen it on the next render while the parameter was still in the URL.
+  */
+  const editParam = useQueryParam("edit");
   const [editOpen, setEditOpen] = useState(false);
+  const seededEdit = useRef(false);
   // The backend has no isMe flag — ownership is the viewer's id matching.
   const isMe = Boolean(
     profile.data && me.data && profile.data.id === me.data.id,
   );
+  // Seeded here rather than beside the state, because it needs `isMe`: the
+  // parameter opens the sheet only on the reader's OWN profile, so a link
+  // somebody is sent cannot pop an editor over a stranger's page.
+  useEffect(() => {
+    if (seededEdit.current || editParam !== "1" || !isMe) return;
+    seededEdit.current = true;
+    setEditOpen(true);
+  }, [editParam, isMe]);
   // Asked once the profile is known; a 404 is "not deployed" and keeps both
   // badge surfaces absent — see `useProfileBadges`.
   const badges = useProfileBadges(username, Boolean(profile.data));
