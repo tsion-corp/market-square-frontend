@@ -40,7 +40,22 @@ import type { Profile } from "@/lib/api/schemas";
  * Neither control navigates. The photo and the name do, to the person's
  * profile, so a tap on a face goes where a tap on a face goes everywhere else.
  */
-export function HouseMemberTile({ profile }: { profile: Profile }) {
+export function HouseMemberTile({
+  profile,
+  meta,
+}: {
+  profile: Profile;
+  /**
+   * One quiet line under the name, for a surface where the tile answers a
+   * question the house's own roster does not ask — "who viewed your profile"
+   * adds WHEN they did.
+   *
+   * Optional, and absent on the house itself, because a member list has nothing
+   * to say here and an empty line would change the tile's height on the one
+   * surface this geometry was measured against.
+   */
+  meta?: React.ReactNode;
+}) {
   const wink = useWink(profile);
   const follow = useFollow(profile);
   const isFollowing = useIsFollowing(profile);
@@ -135,6 +150,14 @@ export function HouseMemberTile({ profile }: { profile: Profile }) {
       >
         {name}
       </Link>
+
+      {/* Under the name, never beside it: the tile is 104 wide and the name
+          already truncates there. */}
+      {meta && (
+        <span className="-mt-1 truncate text-center text-[12px] leading-4 text-white/50">
+          {meta}
+        </span>
+      )}
     </li>
   );
 }

@@ -60,6 +60,23 @@ export function EditProfileSheet({
 
   const avatar = useImageUpload(avatarUrl, setAvatarUrl);
 
+  /*
+    A COVER PHOTO YOU UPLOAD, beside the character you build.
+
+    The cover was the avatar studio's ground and nothing else, so somebody who
+    wanted their own picture behind their name had no way to put one there —
+    which is half of "let people finish their profile". Both still exist and
+    they do not fight: the studio sets the ground under a character, and this
+    sets a photograph. `coverUrl` wins where it is set, which is what the
+    profile cover already reads.
+
+    The service runs it through `verifyAttachment`, so only a picture this
+    person uploaded through our own flow is accepted — the same shared upload
+    path every other image here uses, not a URL anybody can type.
+  */
+  const [coverUrl, setCoverUrl] = useState<string | null>(me.coverUrl ?? null);
+  const cover = useImageUpload(coverUrl, setCoverUrl);
+
   const save = async () => {
     /*
       RESOLVED AT SAVE, because this field has no picker.
@@ -82,6 +99,13 @@ export function EditProfileSheet({
         bio,
         bioMentions,
         avatarUrl: avatarUrl ?? undefined,
+        /*
+          `null` CLEARS, `undefined` LEAVES IT — and the two are different acts
+          here. Somebody who removed their cover meant to remove it, so the
+          null travels; somebody who never touched it must not have the
+          studio's ground wiped by opening this sheet and saving a bio.
+        */
+        coverUrl: coverUrl === (me.coverUrl ?? null) ? undefined : coverUrl,
         // Sent as typed, blank included: an omitted field means "leave it" and
         // somebody who emptied the box meant "clear it". The service reads a
         // blank string as a clear.
@@ -137,8 +161,13 @@ export function EditProfileSheet({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             /* The COVER, not the ground under it — one resolver, so this can
-               never drift from the card it is a thumbnail of. */
-            src={coverPictureUrl(me.avatarConfig, me.coverUrl).src}
+               never drift from the card it is a thumbnail of.
+
+               Read from the LOCAL state, not the saved profile: a photo just
+               picked shows immediately (`shown` is the local preview while it
+               uploads), and removing one falls back to the character's ground
+               rather than redrawing the picture that was just taken away. */
+            src={cover.shown ?? coverPictureUrl(me.avatarConfig, coverUrl).src}
             alt=""
             aria-hidden
             className="absolute inset-0 h-full w-full object-cover"
@@ -156,6 +185,47 @@ export function EditProfileSheet({
             The whole card is the target, not just the 38 disc: it is the
             biggest thing on the sheet and it is what somebody is looking at.
           */}
+          {/*
+            UPLOAD A COVER PHOTO — top-right, clear of the character control.
+
+            Two different acts, so two different targets: the card's middle
+            still opens the studio (a character on a ground), and this corner
+            puts a photograph behind the name instead. The old single target
+            meant the obvious gesture — tapping a cover to change it — only
+            ever did the character half, and there was no way at all to upload
+            one's own picture.
+          */}
+          <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={cover.open}
+              disabled={cover.progress !== null}
+              aria-label={coverUrl ? "Change cover photo" : "Upload a cover photo"}
+              className="ws-press ws-btn-sm rounded-full bg-black/55 px-3 text-[11px] font-semibold text-white backdrop-blur disabled:opacity-60"
+            >
+              {cover.progress !== null
+                ? `${Math.round(cover.progress * 100)}%`
+                : coverUrl
+                  ? "Change photo"
+                  : "Upload photo"}
+            </button>
+            {/* Removing it falls back to the character's ground rather than to
+                nothing, so the cover is never empty. */}
+            {coverUrl && cover.progress === null && (
+              <button
+                type="button"
+                onClick={() => setCoverUrl(null)}
+                aria-label="Remove cover photo"
+                className="ws-press ws-iconbtn-sm grid place-items-center rounded-full bg-black/55 text-white backdrop-blur"
+              >
+                <span aria-hidden className="text-[13px] leading-none">
+                  ×
+                </span>
+              </button>
+            )}
+            <input {...cover.inputProps} />
+          </div>
+
           <Link
             href={sq("/avatar")}
             aria-label={characterCode ? "Edit your character" : "Build a character"}

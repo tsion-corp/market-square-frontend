@@ -7,6 +7,7 @@ import { ProfilePage } from "@/features/profile";
 import { ProfileHouses } from "@/components/layout/profile-houses";
 import { ProfileKashChip } from "@/components/layout/profile-kash-chip";
 import { ProfileEarnings } from "@/components/layout/profile-earnings";
+import { ProfileViewers } from "@/components/layout/profile-viewers";
 import { PostCard, VideoViewer } from "@/features/feed";
 import { useOpenConversation } from "@/features/messages";
 import { ComposeSheet } from "@/components/layout/compose-sheet";
@@ -118,6 +119,7 @@ export function ProfileScreen({ username }: { username: string }) {
       housesOfSlot={(profile) => <ProfileHousesOf username={profile.username} />}
       replaysSlot={(profile) => <ProfileReplays username={profile.username} />}
       earningsSlot={<ProfileEarnings />}
+      viewersSlot={<ProfileViewers isMe />}
       /* 435:27523 — the balance chip on the cover. The kash slice's, and the
          profile may not import it. */
       kashSlot={<ProfileKashChip />}

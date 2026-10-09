@@ -164,6 +164,30 @@ const RawProfileSchema = z.object({
    * somebody's screen". A missing field must never produce an onboarding flow.
    */
   hasOnboarded: z.boolean().optional().default(true),
+  /**
+   * WHO VIEWED MY PROFILE — the two private fields behind it.
+   *
+   * Both are on `GET /me` and deliberately absent from `PublicProfile`: how
+   * many people looked at you, and whether you are looking at them quietly, are
+   * nobody else's business. They were on the contract and **not declared here**,
+   * which means zod stripped them on every parse — silently, with no warning,
+   * no test failure and no typecheck error. The capability read as missing from
+   * the client while the service had been answering all along.
+   *
+   * ─── NULL IS A STATE, NOT A ZERO ────────────────────────────────────────────
+   * `profileViewCount` is the number of PEOPLE in a rolling 90-day window, and
+   * it is **null while `privateBrowsing` is on** — the reciprocal rule, not an
+   * absence of viewers. Rendering null as `0` would tell somebody nobody had
+   * looked at them, which is a different and false claim. It is the same number
+   * as `total` on `GET /me/profile-views`.
+   *
+   * `privateBrowsing` is off by default and set with `PATCH /me`. While it is
+   * on: this person is never recorded as a viewer anywhere, AND their own list
+   * is refused. Both halves, which is what makes it a fair trade rather than a
+   * way to watch people for free.
+   */
+  profileViewCount: z.number().nullable().optional().default(null),
+  privateBrowsing: z.boolean().optional().default(false),
   /*
     Self-declared place and gender — Explore's people filters.
 

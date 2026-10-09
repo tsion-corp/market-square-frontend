@@ -1074,9 +1074,17 @@ describe("Home's banner is the three 2026-09-16 slides", () => {
     // than throwing the reader into Explore. The banner is part of the
     // RESTING page, so it steps aside with the sections while a search is
     // open instead of sitting on top of a list of results.
+    /*
+      The completeness prompt sits between the row and the banner, and that
+      order is the assertion rather than an accident: a reader's own unfinished
+      profile outranks anything we want to tell them. It is inside the same
+      `!searching` branch, so it steps aside with the rest of the resting page
+      instead of sitting on top of a list of results — and it draws nothing at
+      100%, signed out, or once dismissed, so most readers never see it.
+    */
     assert.match(
       home,
-      /headSlot=\{\s*<>\s*<HomeTopRow value=\{query\} onChange=\{setQuery\} \/>\s*\{!searching && \(\s*<div className="mt-4">\s*<HomeBanner \/>/
+      /headSlot=\{\s*<>\s*<HomeTopRow value=\{query\} onChange=\{setQuery\} \/>\s*\{!searching && \(\s*<>[\s\S]*?<div className="mt-4">\s*<ProfileCompletenessBanner \/>\s*<\/div>\s*<div className="mt-4">\s*<HomeBanner \/>/
     );
     assert.match(feed, /\{headSlot && <div className="mb-10 flex flex-col gap-\[11px\]">\{headSlot\}<\/div>\}/);
     const head = feed.indexOf("{headSlot && ");
@@ -1719,7 +1727,15 @@ describe("Settings controls never pretend to save", () => {
     assert.match(screen, /onMessagesFromChange=\{\(value\) => saveHouse\.mutate\(\{ messages: value \}\)\}/);
     assert.match(screen, /onGistroomsFromChange=\{\(value\) => saveHouse\.mutate\(\{ rooms: value \}\)\}/);
     assert.match(screen, /disabled=\{!houseSettings\.isSuccess\}/);
-    assert.equal((screen.match(/<Toggle\s+disabled=\{(personalizeDisabled|visibilityDisabled)\}/g) ?? []).length, (screen.match(/<Toggle\b/g) ?? []).length);
+    /*
+      EVERY toggle on this screen carries a disabled state — that is the
+      invariant, and the three names are the three gates it can be:
+      `personalizeDisabled` and `visibilityDisabled` wait on the settings
+      payload's later stages, while `privateBrowsingDisabled` waits on `/me`,
+      because private browsing is saved with `PATCH /me` beside the country
+      rather than through `/me/settings` like everything else here.
+    */
+    assert.equal((screen.match(/<Toggle\s+disabled=\{(personalizeDisabled|visibilityDisabled|privateBrowsingDisabled)\}/g) ?? []).length, (screen.match(/<Toggle\b/g) ?? []).length);
     for (const file of ["chat-view", "house-notifications-view", "notifications-view"]) {
       const source = read(`components/layout/${file}.tsx`);
       // `row.disabled` is the per-bucket push switch: off while the master
