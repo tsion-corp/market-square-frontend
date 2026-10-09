@@ -55,7 +55,7 @@ export function ProfileViewersPill({
           ? `Who viewed my profile, ${count} in the last 90 days`
           : "Who viewed my profile"
       }
-      className="ws-press inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-[linear-gradient(90deg,var(--color-create)_0%,var(--color-create-deep)_100%)] px-3 text-[11px] font-semibold leading-4 text-white shadow-[0px_1px_2px_-1px_rgba(0,0,0,0.1),0px_1px_3px_0px_rgba(0,0,0,0.1)] transition-opacity hover:opacity-90"
+      className="ws-press inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-[linear-gradient(90deg,var(--color-create)_0%,var(--color-create-deep)_100%)] px-1.5 text-[11px] font-semibold leading-4 text-white shadow-[0px_1px_2px_-1px_rgba(0,0,0,0.1),0px_1px_3px_0px_rgba(0,0,0,0.1)] transition-opacity hover:opacity-90 md:px-3"
     >
       {/* The file's own exported glyph, not an icon-library eye. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -65,11 +65,20 @@ export function ProfileViewersPill({
         aria-hidden
         className="size-4 shrink-0"
       />
-      <span className="whitespace-nowrap">Who viewed my profile</span>
       {/*
-        The count rides the pill when there is one, because a number is the
-        reason to press it. It is absent rather than zero while the reader
-        browses privately — see the prop.
+        THE LABEL IS DESKTOP-ONLY — the glyph carries it on a phone.
+
+        At 393 the full pill is wider than what is left of the handle row, so it
+        wrapped onto a line of its own and lay across the character on the
+        cover. An eye is already the convention for "who looked", the button
+        keeps its full name for assistive technology through `aria-label`, and
+        the count stays visible at both sizes because the number is the reason
+        to press it.
+      */}
+      <span className="hidden whitespace-nowrap md:inline">Who viewed my profile</span>
+      {/*
+        Absent rather than zero while the reader browses privately — see the
+        prop. On a phone this is the only text, so it keeps its own padding.
       */}
       {typeof count === "number" && count > 0 && (
         <span className="tnum rounded-full bg-white/20 px-1.5 leading-4">{count}</span>
