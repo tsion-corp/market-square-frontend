@@ -29,6 +29,16 @@ const IDENTITY_SURFACES: string[][] = [
   ["ms", "spotlight"],
   ["ms", "conversations"],
   ["ms", "discovery"],
+  /*
+    "Viewed you" draws a tile per viewer, so it carries identity like the rest.
+
+    It earns its place twice over: `privateBrowsing` is saved through the same
+    `PATCH /me` that lands here, and that flag decides whether this list is a
+    list at all — on, the service refuses it; off, it comes back whole. Without
+    this key a reader could turn private browsing off and still be looking at
+    the screen telling them they cannot see their viewers.
+  */
+  ["ms", "profile-views"],
 ];
 
 export function invalidateIdentitySurfaces(queryClient: QueryClient) {

@@ -9,6 +9,7 @@ import { TipButton } from "@/features/tips";
 import { HomeTopRow } from "@/components/layout/home-top-row";
 import { HomeSearch } from "@/components/layout/home-search";
 import { HomeBanner } from "@/components/layout/home-banner";
+import { ProfileCompletenessBanner } from "@/components/layout/profile-completeness-banner";
 import { LiveGistRooms } from "@/components/layout/live-gist-rooms";
 import { FriendsDeck } from "@/components/layout/friends-deck";
 import { ComingSoonRooms } from "@/components/layout/coming-soon-rooms";
@@ -124,9 +125,21 @@ export function HomeScreen() {
         <>
           <HomeTopRow value={query} onChange={setQuery} />
           {!searching && (
-            <div className="mt-4">
-              <HomeBanner />
-            </div>
+            <>
+              {/*
+                ABOVE the marketing banner, and that order is the point: a
+                reader's own unfinished profile outranks anything we want to
+                tell them. It renders nothing at 100%, for a signed-out
+                visitor, or once dismissed, so most readers never see it and
+                the row below keeps its place.
+              */}
+              <div className="mt-4">
+                <ProfileCompletenessBanner />
+              </div>
+              <div className="mt-4">
+                <HomeBanner />
+              </div>
+            </>
           )}
         </>
       }

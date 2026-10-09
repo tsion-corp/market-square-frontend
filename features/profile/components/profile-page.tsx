@@ -5,7 +5,8 @@ import { useRecordProfileView } from "@/features/profile/hooks/use-profile-view"
 import { PostText } from "@/components/ui/post-text";
 import { placeLine } from "@/lib/countries";
 import { profileHref } from "@/lib/profile-href";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryParam } from "@/hooks/use-query-param";
 import Link from "next/link";
 import { IconProfileGlobePin, IconProfileLink } from "@/components/ui/profile-icons";
 import { IconMsEdit } from "@/components/ui/design-icons";
@@ -33,6 +34,7 @@ import {
 import { BadgesPanel, BadgesSection } from "@/features/profile/components/badges";
 import { isHttpUrl } from "@/lib/http-url";
 import { EditProfileSheet } from "@/features/profile/components/edit-profile-sheet";
+import { ProfileViewersPill } from "@/features/profile/components/profile-viewers-pill";
 import { PersonMoreMenu } from "@/features/profile/components/person-more-menu";
 import { WinkButton } from "@/features/profile/components/wink-button";
 import { useCanonicalProfileAddress } from "@/features/profile/hooks/use-canonical-profile-address";
@@ -386,6 +388,7 @@ export function ProfilePage({
   housesOfSlot,
   replaysSlot,
   earningsSlot,
+  viewersSlot,
   composeSlot,
   postSlot,
   mediaViewerSlot,
@@ -413,6 +416,13 @@ export function ProfilePage({
    * not import, so it arrives as a slot like the rest.
    */
   earningsSlot?: React.ReactNode;
+  /**
+   * "Viewed you" — node 1285:36433's people row, drawn with the houses slice's
+   * member tile, so it cannot be imported here either. Own profile only: the
+   * route is `GET /me/profile-views` and there is no equivalent for anybody
+   * else's viewers, nor should there be.
+   */
+  viewersSlot?: React.ReactNode;
   /** The balance chip on the cover (435:27523) — the kash slice's, own profile
    *  only, because there is no route for anybody else's balance and there
    *  should not be. */
@@ -443,11 +453,31 @@ export function ProfilePage({
    */
   const [accountTab, setAccountTab] = useState<AccountTab>("posts");
   const [sharing, setSharing] = useState(false);
+  /*
+    `?edit=1` opens the sheet on arrival, so a surface that asks somebody to
+    finish their profile can land them ON the fields rather than on the page
+    above them. Read through `useQueryParam` rather than `useSearchParams`,
+    which forces a Suspense boundary and delays hydration of this subtree.
+
+    It is seeded ONCE, not derived every render: the reader must be able to
+    close the sheet and stay on their profile, and a derived value would
+    reopen it on the next render while the parameter was still in the URL.
+  */
+  const editParam = useQueryParam("edit");
   const [editOpen, setEditOpen] = useState(false);
+  const seededEdit = useRef(false);
   // The backend has no isMe flag — ownership is the viewer's id matching.
   const isMe = Boolean(
     profile.data && me.data && profile.data.id === me.data.id,
   );
+  // Seeded here rather than beside the state, because it needs `isMe`: the
+  // parameter opens the sheet only on the reader's OWN profile, so a link
+  // somebody is sent cannot pop an editor over a stranger's page.
+  useEffect(() => {
+    if (seededEdit.current || editParam !== "1" || !isMe) return;
+    seededEdit.current = true;
+    setEditOpen(true);
+  }, [editParam, isMe]);
   // Asked once the profile is known; a 404 is "not deployed" and keeps both
   // badge surfaces absent — see `useProfileBadges`.
   const badges = useProfileBadges(username, Boolean(profile.data));
@@ -519,10 +549,30 @@ export function ProfilePage({
       <div className="px-4 pt-6 md:px-8">
         <ProfileCover
           profile={data}
-          /* 435:27521 — the row beside the handle. The balance chip is the
-             kash slice's and arrives as a slot; "Who viewed my profile" is not
-             drawn, see the note on `ProfileCover`. */
-          meta={isMe ? kashSlot : null}
+          /* 2179:19188 — the row beside the handle: the balance chip (the kash
+             slice's, so it arrives as a slot) and "Who viewed my profile".
+
+             The pill was absent for a long time and the reason has gone. It
+             needed somewhere to record a view and somewhere to list them back,
+             and the service now has both — the writer has been firing on dwell
+             for weeks and `GET /me/profile-views` answers. It opens the panel
+             on this same page rather than navigating, because that is where the
+             list lives. */
+          meta={
+            isMe ? (
+              <>
+                {kashSlot}
+                <ProfileViewersPill
+                  // `profileViewCount` is PRIVATE and on `/me`, so it is read
+                  // from the viewer's own record rather than from the profile
+                  // being displayed — they are the same person here, but only
+                  // one of the two payloads carries the field.
+                  count={me.data?.profileViewCount ?? null}
+                  onOpen={() => setAccountTab("viewers")}
+                />
+              </>
+            ) : null
+          }
           onChangePhoto={isMe ? () => setEditOpen(true) : undefined}
           actions={
             isMe ? (
@@ -871,6 +921,18 @@ export function ProfilePage({
                 label: "Replays",
                 disabledReason: MARKET_FLAGS.replays ? undefined : "Soon",
               },
+              /*
+                WHO VIEWED YOUR PROFILE — own-profile only, like every tab
+                beside it, and never disabled.
+
+                Both halves of this capability are live: the writer has been
+                recording on dwell, and `GET /me/profile-views` answers. The
+                three states it can be in — a list, private browsing, and a
+                route that is not deployed — are the panel's own and are
+                handled there, so this tab never has to guess which one it is
+                about to show.
+              */
+              { value: "viewers", label: "Viewed you" },
                   ] satisfies AccountTabDef[])
                 : []),
             ]}
@@ -892,6 +954,10 @@ export function ProfilePage({
             <>
               {accountTab === "earnings" && earningsSlot}
               {accountTab === "badges" && badges.data && <BadgesPanel badges={badges.data.items} />}
+              {/* The viewers panel belongs to this slice's hook but draws the
+                  houses slice's member tile, so it is composed in through a
+                  slot like every other cross-slice surface. */}
+              {accountTab === "viewers" && viewersSlot}
             </>
           )}
         </div>

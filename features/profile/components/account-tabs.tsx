@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/cn";
 
-export type AccountTab = "posts" | "earnings" | "badges" | "gifts" | "replays";
+export type AccountTab = "posts" | "earnings" | "badges" | "gifts" | "replays" | "viewers";
 
 export interface AccountTabDef {
   value: AccountTab;
