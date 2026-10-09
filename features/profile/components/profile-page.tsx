@@ -386,6 +386,7 @@ export function ProfilePage({
   housesOfSlot,
   replaysSlot,
   earningsSlot,
+  viewersSlot,
   composeSlot,
   postSlot,
   mediaViewerSlot,
@@ -413,6 +414,13 @@ export function ProfilePage({
    * not import, so it arrives as a slot like the rest.
    */
   earningsSlot?: React.ReactNode;
+  /**
+   * "Viewed you" — node 1285:36433's people row, drawn with the houses slice's
+   * member tile, so it cannot be imported here either. Own profile only: the
+   * route is `GET /me/profile-views` and there is no equivalent for anybody
+   * else's viewers, nor should there be.
+   */
+  viewersSlot?: React.ReactNode;
   /** The balance chip on the cover (435:27523) — the kash slice's, own profile
    *  only, because there is no route for anybody else's balance and there
    *  should not be. */
@@ -871,6 +879,18 @@ export function ProfilePage({
                 label: "Replays",
                 disabledReason: MARKET_FLAGS.replays ? undefined : "Soon",
               },
+              /*
+                WHO VIEWED YOUR PROFILE — own-profile only, like every tab
+                beside it, and never disabled.
+
+                Both halves of this capability are live: the writer has been
+                recording on dwell, and `GET /me/profile-views` answers. The
+                three states it can be in — a list, private browsing, and a
+                route that is not deployed — are the panel's own and are
+                handled there, so this tab never has to guess which one it is
+                about to show.
+              */
+              { value: "viewers", label: "Viewed you" },
                   ] satisfies AccountTabDef[])
                 : []),
             ]}
@@ -892,6 +912,10 @@ export function ProfilePage({
             <>
               {accountTab === "earnings" && earningsSlot}
               {accountTab === "badges" && badges.data && <BadgesPanel badges={badges.data.items} />}
+              {/* The viewers panel belongs to this slice's hook but draws the
+                  houses slice's member tile, so it is composed in through a
+                  slot like every other cross-slice surface. */}
+              {accountTab === "viewers" && viewersSlot}
             </>
           )}
         </div>

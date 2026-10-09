@@ -1719,7 +1719,15 @@ describe("Settings controls never pretend to save", () => {
     assert.match(screen, /onMessagesFromChange=\{\(value\) => saveHouse\.mutate\(\{ messages: value \}\)\}/);
     assert.match(screen, /onGistroomsFromChange=\{\(value\) => saveHouse\.mutate\(\{ rooms: value \}\)\}/);
     assert.match(screen, /disabled=\{!houseSettings\.isSuccess\}/);
-    assert.equal((screen.match(/<Toggle\s+disabled=\{(personalizeDisabled|visibilityDisabled)\}/g) ?? []).length, (screen.match(/<Toggle\b/g) ?? []).length);
+    /*
+      EVERY toggle on this screen carries a disabled state — that is the
+      invariant, and the three names are the three gates it can be:
+      `personalizeDisabled` and `visibilityDisabled` wait on the settings
+      payload's later stages, while `privateBrowsingDisabled` waits on `/me`,
+      because private browsing is saved with `PATCH /me` beside the country
+      rather than through `/me/settings` like everything else here.
+    */
+    assert.equal((screen.match(/<Toggle\s+disabled=\{(personalizeDisabled|visibilityDisabled|privateBrowsingDisabled)\}/g) ?? []).length, (screen.match(/<Toggle\b/g) ?? []).length);
     for (const file of ["chat-view", "house-notifications-view", "notifications-view"]) {
       const source = read(`components/layout/${file}.tsx`);
       // `row.disabled` is the per-bucket push switch: off while the master

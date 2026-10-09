@@ -221,6 +221,18 @@ export async function updateMe(input: {
   country?: string | null;
   gender?: string | null;
   /**
+   * BROWSE PROFILES WITHOUT BEING LISTED — and without seeing your own list.
+   *
+   * Reciprocal on purpose: while this is on, nothing records the caller as a
+   * viewer anywhere, `GET /me/profile-views` is refused with 403, and
+   * `profileViewCount` is null. It is a trade rather than a one-way mirror, and
+   * any copy that offers it must say both halves.
+   *
+   * Nothing is destroyed by turning it on: views recorded before are kept and
+   * the list returns whole when it goes off.
+   */
+  privateBrowsing?: boolean;
+  /**
    * Marks onboarding complete. `true` ONLY.
    *
    * The service answers 400 to `false` on purpose: finishing onboarding cannot
@@ -381,4 +393,57 @@ export async function reverseGeocode(input: { latitude: number; longitude: numbe
  */
 export async function recordProfileView(profileId: string) {
   await msApi.post(`/profiles/${profileId}/views`);
+}
+
+/**
+ * ONE PERSON WHO LOOKED AT YOU, and when they last did.
+ *
+ * `viewedAt` moves **at most once per UTC day** — the service records one line
+ * per person, not one per visit, so this is "the last day they came by" rather
+ * than a hit log. Nothing here is a count of how many times somebody looked,
+ * and the UI must not imply one.
+ */
+export const ProfileViewEntrySchema = z.object({
+  viewer: ProfileSchema,
+  viewedAt: z.string(),
+});
+export type ProfileViewEntry = z.infer<typeof ProfileViewEntrySchema>;
+
+/**
+ * `total` IS ON EVERY PAGE, and it is people rather than rows loaded.
+ *
+ * So the heading can say how many people without waiting for the last page, and
+ * must never be derived by counting what happens to be loaded — the rule every
+ * count in this product follows.
+ */
+export const ProfileViewPageSchema = z.object({
+  items: z.array(ProfileViewEntrySchema),
+  nextCursor: z.string().nullable(),
+  total: z.number(),
+});
+export type ProfileViewPage = z.infer<typeof ProfileViewPageSchema>;
+
+/**
+ * WHO VIEWED MY PROFILE — `GET /me/profile-views`, last 90 days, newest first.
+ *
+ * ─── THE LIST IS LIVE, NOT A LEDGER ─────────────────────────────────────────
+ * It reflects the rules **as they stand now**: somebody who has since turned on
+ * private browsing, or where a block now exists in either direction, is left out
+ * of the rows *and* out of `total`. So the number can fall without anybody
+ * un-viewing anything, and the UI must never present it as a running tally.
+ *
+ * ─── RECIPROCAL, AND THE 403 IS THE PRODUCT ─────────────────────────────────
+ * While the CALLER has `privateBrowsing` on this is refused with 403, and
+ * `GET /me` reports `profileViewCount: null`. That refusal is not an error to
+ * swallow or retry — it is the feature saying "you chose this", and it has its
+ * own screen with the way back. Views recorded before were never lost, so
+ * turning it off shows the whole list again.
+ *
+ * The service caps `limit` at 50 and 400s above it; 30 keeps a page inside the
+ * shared paging ceiling and fills the grid.
+ */
+export async function fetchProfileViews(cursor?: string) {
+  return ProfileViewPageSchema.parse(
+    await msApi.authedGet("/me/profile-views", { cursor, limit: 30 })
+  );
 }

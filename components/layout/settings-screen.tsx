@@ -239,6 +239,9 @@ function PrivacyMain({
   visibilityOnSpace,
   onVisibilityOnSpaceChange,
   visibilityDisabled,
+  privateBrowsing,
+  onPrivateBrowsingChange,
+  privateBrowsingDisabled,
   onOpenLocation,
   onOpenChat,
 }: {
@@ -248,6 +251,9 @@ function PrivacyMain({
   visibilityOnSpace: boolean;
   onVisibilityOnSpaceChange: (v: boolean) => void;
   visibilityDisabled: boolean;
+  privateBrowsing: boolean;
+  onPrivateBrowsingChange: (v: boolean) => void;
+  privateBrowsingDisabled: boolean;
   onOpenLocation: () => void;
   onOpenChat: () => void;
 }) {
@@ -282,6 +288,32 @@ function PrivacyMain({
         onClick={onOpenChat}
         trailing={
           <IconSettingsChevron className="size-6 shrink-0 text-white/50" />
+        }
+      />
+      {/*
+        PRIVATE BROWSING — and the description carries BOTH halves on purpose.
+
+        It is reciprocal: while it is on you are never recorded as a viewer on
+        anybody's profile, AND your own "Viewed you" list is refused, with
+        `profileViewCount` null. Describing only the first half would read as a
+        free one-way mirror, which is exactly what it is not, and somebody would
+        turn it on and then report the empty list as a bug.
+
+        Nothing is lost either way — views recorded before are kept and the list
+        returns in full when it goes off — so the copy says that too, because
+        the fear of losing the list is the reason people leave it off.
+      */}
+      <DetailRow
+        title="Browse profiles privately"
+        description="You won't be listed as a viewer on anyone's profile — and you won't see who viewed yours while this is on. Nothing is lost: turn it off and your list comes back in full."
+        trailing={
+          <Toggle
+            disabled={privateBrowsingDisabled}
+            title={privateBrowsingDisabled ? SAVING_SOON : undefined}
+            checked={privateBrowsing}
+            onChange={onPrivateBrowsingChange}
+            label="Browse profiles privately"
+          />
         }
       />
       <DetailRow
@@ -960,6 +992,15 @@ export function SettingsScreen({ username }: { username: string }) {
                 visibilityOnSpace={privacy?.showListening ?? true}
                 onVisibilityOnSpaceChange={(value) => save.mutate({ privacy: { showListening: value } })}
                 visibilityDisabled={!stage4}
+                /*
+                  `privateBrowsing` lives on the PROFILE, not in settings — it
+                  is `PATCH /me`, the same route the country uses, so it saves
+                  through `updateMe` and is gated on `/me` having answered
+                  rather than on the settings payload's stages.
+                */
+                privateBrowsing={me.data?.privateBrowsing ?? false}
+                onPrivateBrowsingChange={(value) => updateMe.mutate({ privateBrowsing: value })}
+                privateBrowsingDisabled={!me.data || updateMe.isPending}
                 onOpenLocation={() => setPrivacyView("location")}
                 onOpenChat={() => setPrivacyView("chat")}
               />
